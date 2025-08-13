@@ -55,19 +55,16 @@ RUN apt-get update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install PDF and document processing tools (minimal approach)
+# Install PDF and document processing tools (core only)
+# Cache buster: 2025-08-13-v2
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     poppler-utils \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Try to install wkhtmltopdf, but don't fail if it's not available
-RUN apt-get update && \
-    (apt-get install -y --no-install-recommends wkhtmltopdf 2>/dev/null || \
-     echo "⚠️ wkhtmltopdf not available, PDF generation may be limited") \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* 2>/dev/null || true
+# Note: wkhtmltopdf installation skipped due to compatibility issues
+# Alternative PDF generation methods will be used via Playwright/Chrome
 
 # Install fonts and display tools
 RUN apt-get update && \
