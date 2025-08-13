@@ -35,16 +35,13 @@ jobs:
       with:
         images: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}
         tags: |
-          # 为分支生成标签
-          type=ref,event=branch
-          # 为标签生成版本号
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}.{{minor}}
-          type=semver,pattern={{major}}
           # 为main分支生成latest标签
           type=raw,value=latest,enable={{is_default_branch}}
-          # 生成时间戳标签
+          # 生成时间戳标签（可选）
           type=raw,value={{date 'YYYYMMDD'}}-{{sha}}
+          # 版本标签（当有git tag时）
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
         labels: |
           org.opencontainers.image.title=LandPPT
           org.opencontainers.image.description=AI-Powered Presentation Generator with PostgreSQL monitoring
