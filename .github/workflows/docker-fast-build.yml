@@ -1,0 +1,63 @@
+# Docker Hub 快速构建配置
+# 用于开发环境的优化构建配置
+
+name: Docker Hub Fast Build
+
+on:
+  push:
+    branches: [ develop, feature/* ]
+  workflow_dispatch:
+
+env:
+  DOCKER_HUB_REGISTRY: docker.io
+  IMAGE_NAME: land-ppt
+
+jobs:
+  fast-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 🔄 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🐳 Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: 🔐 Log in to Docker Hub
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_TOKEN }}
+        
+    - name: 📝 Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}
+        tags: |
+          # 开发分支快速标签
+          type=ref,event=branch,suffix=-dev
+          type=raw,value=latest-dev,enable={{is_default_branch}}
+          type=sha,prefix={{branch}}-
+          
+    - name: 🏗️ Fast build (AMD64 only)
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64  # 仅AMD64，减少构建时间
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          BUILDKIT_INLINE_CACHE=1
+          # 快速构建优化
+          SKIP_PLAYWRIGHT_INSTALL=true
+          
+    - name: 📊 Build summary
+      run: |
+        echo "✅ Fast build completed"
+        echo "🏷️ Tags: ${{ steps.meta.outputs.tags }}"
+        echo "⏱️ Build time optimized for development"

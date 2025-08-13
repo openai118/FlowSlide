@@ -44,28 +44,37 @@ jobs:
       
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to Docker Hub (optional for testing)
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_TOKEN }}
         
     - name: Extract metadata
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        images: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          ${{ secrets.DOCKER_HUB_USERNAME }}/land-ppt
         tags: |
-          type=ref,event=branch
-          type=ref,event=pr
-          type=sha,prefix={{branch}}-
-          type=raw,value=latest,enable={{is_default_branch}}
+          type=ref,event=branch,suffix=-test
+          type=ref,event=pr,suffix=-pr
+          type=sha,prefix={{branch}}-test-
           
-    - name: Build Docker image
+    - name: Build and optionally push Docker image
       uses: docker/build-push-action@v5
       with:
         context: .
         platforms: linux/amd64
-        push: false  # 只构建不推送，避免权限问题
+        push: ${{ github.event_name != 'pull_request' }}  # PR时只构建，推送时构建+推送
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        # 临时禁用缓存以避免认证过期问题
+        # cache-from: type=gha
+        # cache-to: type=gha,mode=max
         
     - name: Test Docker build
       run: |

@@ -7,6 +7,15 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Build platforms (default: amd64 only for speed)'
+        required: false
+        default: 'linux/amd64'
+        type: choice
+        options:
+        - 'linux/amd64'
+        - 'linux/amd64,linux/arm64'
 
 env:
   DOCKER_HUB_REGISTRY: docker.io
@@ -51,12 +60,13 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        platforms: linux/amd64,linux/arm64
+        platforms: ${{ github.event.inputs.platforms || (startsWith(github.ref, 'refs/tags/') && 'linux/amd64,linux/arm64' || 'linux/amd64') }}
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        # 临时禁用缓存以避免认证过期问题
+        # cache-from: type=gha
+        # cache-to: type=gha,mode=max
         build-args: |
           BUILDKIT_INLINE_CACHE=1
           
