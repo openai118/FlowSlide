@@ -234,10 +234,10 @@ jobs:
 docker pull YOUR_USERNAME/land-ppt:latest
 
 # Run with basic configuration
-docker run -d \
-  --name land-ppt \
-  -p 8000:8000 \
-  -e DATABASE_URL="postgresql://user:pass@host:port/db" \
+docker run -d \\
+  --name land-ppt \\
+  -p 8000:8000 \\
+  -e DATABASE_URL="postgresql://user:pass@host:port/db" \\
   YOUR_USERNAME/land-ppt:latest</pre>
                     
                     <p style="margin-top: 40px; text-align: center; color: #666;">
