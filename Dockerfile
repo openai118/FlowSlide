@@ -137,9 +137,10 @@ RUN cp docker-healthcheck.sh docker-healthcheck-enhanced.sh && \
 RUN chmod +x docker-healthcheck*.sh docker-entrypoint*.sh backup_to_r2*.sh 2>/dev/null || true && \
     chmod +x tools/*.py 2>/dev/null || true && \
     mkdir -p temp/ai_responses_cache temp/style_genes_cache temp/summeryanyfile_cache temp/templates_cache \
-             research_reports lib/Linux lib/MacOS lib/Windows uploads data tools logs && \
+             research_reports lib/Linux lib/MacOS lib/Windows uploads data tools logs db && \
     chown -R landppt:landppt /app /home/landppt && \
     chmod -R 755 /app /home/landppt && \
+    chmod 777 /app/db && \
     chmod 666 /app/.env && \
     # Create smart script selection
     if [ -f "docker-healthcheck-enhanced.sh" ]; then \

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-from ..core.config import app_config
+from ..core.simple_config import app_config
 
 # Create database URL
 DATABASE_URL = app_config.database_url
