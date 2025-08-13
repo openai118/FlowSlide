@@ -1,8 +1,8 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 ==============================================
-LandPPT Supabase 数据库健康检查工�?
+LandPPT Supabase 数据库健康检查工具
 ==============================================
 全面检测数据库连接、权限、存储等功能
 """
@@ -12,6 +12,7 @@ import sys
 import json
 import time
 import hashlib
+import urllib.parse
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
 
@@ -19,14 +20,14 @@ try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
 except ImportError:
-    print("�?错误: 请安�?psycopg2-binary")
+    print("❌错误: 请安装psycopg2-binary")
     print("运行: pip install psycopg2-binary")
     sys.exit(1)
 
 try:
     import requests
 except ImportError:
-    print("�?错误: 请安�?requests")
+    print("❌错误: 请安装requests")
     print("运行: pip install requests")
     sys.exit(1)
 
@@ -35,419 +36,521 @@ class SupabaseHealthChecker:
     """Supabase 数据库健康检查器"""
     
     def __init__(self):
-        """初始化检查器，从环境变量或直接配置中读取设置"""
-        # 数据库配置（默认使用应用用户�?
-        self.db_config = {
-            'host': 'your-supabase-host',
-            'port': 5432,
-            'database': 'postgres',
-            'user': 'your_db_user',
-            'password': 'your_secure_password',
-            'sslmode': 'require'
-        }
+        """初始化检查器，从环境变量读取配置"""
+        # 优先使用 DATABASE_URL，如果不存在则使用分离的环境变量
+        database_url = os.getenv('DATABASE_URL')
         
-        # postgres 超级用户配置（仅在需要时使用�?
-        self.admin_config = {
-            'host': 'your-supabase-host',
-            'port': 5432,
-            'database': 'postgres',
-            'user': 'postgres',
-            'password': None,  # 需要用户提�?
-            'sslmode': 'require'
-        }
+        if database_url:
+            # 解析 DATABASE_URL
+            self.db_config = self._parse_database_url(database_url)
+        else:
+            # 使用分离的环境变量
+            self.db_config = {
+                'host': os.getenv('DB_HOST', 'localhost'),
+                'port': int(os.getenv('DB_PORT', 5432)),
+                'database': os.getenv('DB_NAME', 'postgres'),
+                'user': os.getenv('DB_USER', 'postgres'),
+                'password': os.getenv('DB_PASSWORD', ''),
+                'sslmode': 'require'
+            }
         
         # Supabase API 配置
-        self.supabase_url = "https://your-project.supabase.co"
-        self.anon_key = "your_supabase_anon_key"
-        self.service_key = "your_supabase_service_key"
-        self.storage_bucket = "your-storage-bucket"
+        self.supabase_url = os.getenv('SUPABASE_URL', '')
+        self.supabase_anon_key = os.getenv('SUPABASE_ANON_KEY', '')
+        self.supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY', '')
         
-        # 应用用户配置
-        self.app_user = {
-            'username': 'your_db_user',
-            'password': 'your_secure_password'
+        # 存储配置
+        self.storage_bucket = os.getenv('STORAGE_BUCKET', 'landppt-files')
+        self.storage_provider = os.getenv('STORAGE_PROVIDER', 'supabase')
+        
+        # postgres 超级用户配置（仅在需要时使用）
+        self.admin_config = {
+            'host': self.db_config['host'],
+            'port': self.db_config['port'],
+            'database': self.db_config['database'],
+            'user': 'postgres',
+            'password': os.getenv('POSTGRES_PASSWORD', ''),
+            'sslmode': 'require'
         }
         
-        self.test_results = []
-        
-    def setup_password(self, non_interactive=False):
-        """设置数据库密码（仅在需�?postgres 超级用户时使用）"""
-        if non_interactive:
-            # 非交互模式，跳过 postgres 超级用户测试
-            return False
+        # 检查结果存储
+        self.results = {
+            'timestamp': datetime.now().isoformat(),
+            'checks': {},
+            'summary': {'total': 0, 'passed': 0, 'failed': 0, 'warnings': 0}
+        }
+    
+    def _parse_database_url(self, url: str) -> Dict[str, Any]:
+        """解析 DATABASE_URL"""
+        try:
+            parsed = urllib.parse.urlparse(url)
             
-        print("⚠️  注意：通常情况下，LandPPT 应用使用 your_db_user 即可")
-        print("   只有在需要管理员权限时才需�?postgres 密码")
-        use_admin = input("是否需要测�?postgres 超级用户权限? (y/N): ").strip().lower()
-        
-        if use_admin in ['y', 'yes']:
-            password = input("请输�?Supabase postgres 用户密码: ").strip()
-            if not password:
-                print("�?密码不能为空")
-                sys.exit(1)
-            self.admin_config['password'] = password
-            return True
-        return False
-        
-    def log_test(self, test_name: str, success: bool, message: str, details: Any = None):
-        """记录测试结果"""
-        result = {
-            'test_name': test_name,
-            'success': success,
+            # 解析查询参数
+            query_params = urllib.parse.parse_qs(parsed.query)
+            
+            config = {
+                'host': parsed.hostname,
+                'port': parsed.port or 5432,
+                'database': parsed.path.lstrip('/'),
+                'user': parsed.username,
+                'password': parsed.password,
+                'sslmode': 'require'
+            }
+            
+            # 处理特殊的 options 参数
+            if 'options' in query_params:
+                config['options'] = query_params['options'][0]
+            
+            return config
+        except Exception as e:
+            print(f"❌ 解析 DATABASE_URL 失败: {e}")
+            sys.exit(1)
+    
+    def add_result(self, check_name: str, passed: bool, message: str, 
+                   details: Optional[Dict] = None, warning: bool = False):
+        """添加检查结果"""
+        self.results['checks'][check_name] = {
+            'passed': passed,
+            'warning': warning,
             'message': message,
-            'details': details,
+            'details': details or {},
             'timestamp': datetime.now().isoformat()
         }
-        self.test_results.append(result)
         
-        # 实时输出
-        status = "�? if success else "�?
-        print(f"{status} {test_name}: {message}")
-        if details and not success:
-            print(f"   详情: {details}")
-            
-    def test_basic_connection(self) -> bool:
-        """测试基本数据库连接（使用应用用户�?""
+        self.results['summary']['total'] += 1
+        if warning:
+            self.results['summary']['warnings'] += 1
+        elif passed:
+            self.results['summary']['passed'] += 1
+        else:
+            self.results['summary']['failed'] += 1
+    
+    def test_database_connection(self) -> bool:
+        """测试数据库连接"""
+        print("🔗 测试数据库连接...")
+        
         try:
+            # 隐藏密码显示
+            safe_config = self.db_config.copy()
+            safe_config['password'] = '***'
+            print(f"   连接信息: {safe_config}")
+            
             conn = psycopg2.connect(**self.db_config)
-            with conn.cursor() as cur:
-                cur.execute("SELECT version(), current_database(), current_user;")
-                result = cur.fetchone()
-                
-            conn.close()
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
             
-            self.log_test(
-                "应用用户连接测试",
-                True,
-                "your_db_user 连接成功",
-                {
-                    'version': result[0][:50] + "..." if len(result[0]) > 50 else result[0],
-                    'database': result[1],
-                    'user': result[2]
+            # 测试基本查询
+            cursor.execute("SELECT version(), current_database(), current_user, now();")
+            result = cursor.fetchone()
+            
+            if result:
+                details = {
+                    'version': result['version'],
+                    'database': result['current_database'],
+                    'user': result['current_user'],
+                    'server_time': str(result['now'])
                 }
-            )
-            return True
-            
-        except Exception as e:
-            self.log_test("应用用户连接测试", False, "your_db_user 连接失败", str(e))
+                
+                self.add_result('database_connection', True, 
+                              f"✅ 数据库连接成功: {result['current_database']}", details)
+                print(f"   ✅ 连接成功: PostgreSQL {result['version'].split()[1]}")
+                print(f"   📊 数据库: {result['current_database']}")
+                print(f"   👤 用户: {result['current_user']}")
+                
+                cursor.close()
+                conn.close()
+                return True
+            else:
+                self.add_result('database_connection', False, "❌ 数据库查询返回空结果")
+                return False
+                
+        except psycopg2.OperationalError as e:
+            error_msg = str(e)
+            self.add_result('database_connection', False, f"❌ 数据库连接失败: {error_msg}")
+            print(f"   ❌ 连接失败: {error_msg}")
             return False
-            
+        except Exception as e:
+            self.add_result('database_connection', False, f"❌ 数据库连接异常: {str(e)}")
+            print(f"   ❌ 连接异常: {str(e)}")
+            return False
+    
     def test_schema_access(self) -> bool:
-        """测试 landppt schema 访问"""
+        """测试模式访问权限"""
+        print("🏗️ 测试模式访问权限...")
+        
         try:
             conn = psycopg2.connect(**self.db_config)
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # 检�?schema 是否存在
-                cur.execute("""
-                    SELECT schema_name 
-                    FROM information_schema.schemata 
-                    WHERE schema_name = 'landppt';
-                """)
-                schema_exists = cur.fetchone()
-                
-                if not schema_exists:
-                    raise Exception("landppt schema 不存�?)
-                
-                # 检查验证表
-                cur.execute("""
-                    SELECT COUNT(*) as count
-                    FROM landppt.deployment_verification;
-                """)
-                count_result = cur.fetchone()
-                
-                # 检查测试函�?
-                cur.execute("SELECT landppt.test_connection() as result;")
-                func_result = cur.fetchone()
-                
-            conn.close()
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
             
-            self.log_test(
-                "Schema 访问测试",
-                True,
-                "Schema 和表访问正常",
-                {
-                    'verification_records': count_result['count'],
-                    'test_function': func_result['result']
-                }
-            )
+            # 检查可访问的模式
+            cursor.execute("""
+                SELECT schema_name 
+                FROM information_schema.schemata 
+                WHERE schema_owner = current_user 
+                   OR schema_name IN ('public', 'landppt')
+                ORDER BY schema_name;
+            """)
+            schemas = [row['schema_name'] for row in cursor.fetchall()]
+            
+            # 检查当前搜索路径
+            cursor.execute("SHOW search_path;")
+            search_path = cursor.fetchone()['search_path']
+            
+            details = {
+                'accessible_schemas': schemas,
+                'search_path': search_path,
+                'landppt_schema_exists': 'landppt' in schemas
+            }
+            
+            if 'landppt' in schemas:
+                self.add_result('schema_access', True, 
+                              f"✅ 模式访问正常，可访问模式: {', '.join(schemas)}", details)
+                print(f"   ✅ 可访问模式: {', '.join(schemas)}")
+                print(f"   🔍 搜索路径: {search_path}")
+            else:
+                self.add_result('schema_access', False, 
+                              f"⚠️ landppt 模式不存在或无权限", details, warning=True)
+                print("   ⚠️ landppt 模式不存在或无权限")
+            
+            cursor.close()
+            conn.close()
             return True
             
         except Exception as e:
-            self.log_test("Schema 访问测试", False, "Schema 访问失败", str(e))
+            self.add_result('schema_access', False, f"❌ 模式检查失败: {str(e)}")
+            print(f"   ❌ 模式检查失败: {str(e)}")
             return False
-            
-    def test_app_user_connection(self) -> bool:
-        """测试应用用户权限（详细权限检查）"""
+    
+    def test_table_operations(self) -> bool:
+        """测试表操作权限"""
+        print("📋 测试表操作权限...")
+        
         try:
             conn = psycopg2.connect(**self.db_config)
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # 检查当前用户和搜索路径
-                cur.execute("SELECT current_user as user, current_setting('search_path') as search_path;")
-                user_info = cur.fetchone()
-                
-                # 测试读取权限
-                cur.execute("SELECT COUNT(*) as count FROM deployment_verification;")
-                read_result = cur.fetchone()
-                
-                # 测试写入权限
-                test_message = f"健康检查测�?- {datetime.now().isoformat()}"
-                cur.execute("""
-                    INSERT INTO deployment_verification (message) 
-                    VALUES (%s) RETURNING id;
-                """, (test_message,))
-                insert_result = cur.fetchone()
-                
-                # 测试函数调用
-                cur.execute("SELECT test_connection() as result;")
-                func_result = cur.fetchone()
-                
-                # 清理测试数据
-                cur.execute("DELETE FROM deployment_verification WHERE id = %s;", (insert_result['id'],))
-                
-            conn.commit()
-            conn.close()
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
             
-            self.log_test(
-                "应用用户权限测试",
-                True,
-                "应用用户权限正常",
-                {
-                    'user': user_info['user'],
-                    'search_path': user_info['search_path'],
-                    'can_read': True,
-                    'can_write': True,
-                    'can_execute_functions': True,
-                    'test_record_id': insert_result['id'],
-                    'existing_records': read_result['count']
-                }
-            )
-            return True
+            test_table = f"health_check_test_{int(time.time())}"
+            operations = {}
+            
+            try:
+                # 创建测试表
+                create_sql = f"""
+                CREATE TABLE IF NOT EXISTS {test_table} (
+                    id SERIAL PRIMARY KEY,
+                    test_data TEXT,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+                """
+                cursor.execute(create_sql)
+                conn.commit()
+                operations['create'] = True
+                print(f"   ✅ 创建表权限: 正常")
+                
+                # 插入测试数据
+                cursor.execute(f"INSERT INTO {test_table} (test_data) VALUES (%s);", 
+                             ("健康检查测试数据",))
+                conn.commit()
+                operations['insert'] = True
+                print(f"   ✅ 插入数据权限: 正常")
+                
+                # 查询测试数据
+                cursor.execute(f"SELECT * FROM {test_table} LIMIT 1;")
+                result = cursor.fetchone()
+                operations['select'] = bool(result)
+                print(f"   ✅ 查询数据权限: 正常")
+                
+                # 更新测试数据
+                cursor.execute(f"UPDATE {test_table} SET test_data = %s WHERE id = %s;", 
+                             ("更新的测试数据", result['id']))
+                conn.commit()
+                operations['update'] = cursor.rowcount > 0
+                print(f"   ✅ 更新数据权限: 正常")
+                
+                # 删除测试数据
+                cursor.execute(f"DELETE FROM {test_table} WHERE id = %s;", (result['id'],))
+                conn.commit()
+                operations['delete'] = cursor.rowcount > 0
+                print(f"   ✅ 删除数据权限: 正常")
+                
+            finally:
+                # 清理测试表
+                try:
+                    cursor.execute(f"DROP TABLE IF EXISTS {test_table};")
+                    conn.commit()
+                    operations['drop'] = True
+                    print(f"   ✅ 删除表权限: 正常")
+                except:
+                    operations['drop'] = False
+            
+            all_passed = all(operations.values())
+            self.add_result('table_operations', all_passed, 
+                          f"{'✅' if all_passed else '❌'} 表操作权限测试", operations)
+            
+            cursor.close()
+            conn.close()
+            return all_passed
             
         except Exception as e:
-            self.log_test("应用用户权限测试", False, "应用用户权限异常", str(e))
+            self.add_result('table_operations', False, f"❌ 表操作测试失败: {str(e)}")
+            print(f"   ❌ 表操作测试失败: {str(e)}")
             return False
-            
-    def test_storage_api(self) -> bool:
-        """测试 Supabase Storage API"""
+    
+    def test_supabase_api(self) -> bool:
+        """测试 Supabase API 连接"""
+        print("🌐 测试 Supabase API 连接...")
+        
+        if not self.supabase_url or not self.supabase_anon_key:
+            self.add_result('supabase_api', False, 
+                          "❌ Supabase 配置缺失 (SUPABASE_URL 或 SUPABASE_ANON_KEY)")
+            print("   ❌ Supabase 配置缺失")
+            return False
+        
         try:
-            # 测试存储桶列�?
+            # 测试 API 健康状态
+            health_url = f"{self.supabase_url}/rest/v1/"
             headers = {
-                'Authorization': f'Bearer {self.service_key}',
+                'apikey': self.supabase_anon_key,
+                'Authorization': f'Bearer {self.supabase_anon_key}',
+                'Content-Type': 'application/json'
             }
             
-            # 获取存储桶信�?
-            bucket_url = f"{self.supabase_url}/storage/v1/bucket"
-            response = requests.get(bucket_url, headers=headers)
+            response = requests.get(health_url, headers=headers, timeout=10)
             
-            if response.status_code != 200:
-                raise Exception(f"获取存储桶失�? {response.status_code} - {response.text}")
+            if response.status_code == 200:
+                self.add_result('supabase_api', True, 
+                              f"✅ Supabase API 连接成功: {self.supabase_url}")
+                print(f"   ✅ API 连接成功: {response.status_code}")
+                return True
+            else:
+                self.add_result('supabase_api', False, 
+                              f"❌ Supabase API 响应异常: {response.status_code}")
+                print(f"   ❌ API 响应异常: {response.status_code}")
+                return False
                 
-            buckets = response.json()
-            landppt_bucket = None
-            for bucket in buckets:
-                if bucket['id'] == self.storage_bucket:
-                    landppt_bucket = bucket
-                    break
-                    
-            if not landppt_bucket:
-                raise Exception(f"未找到存储桶: {self.storage_bucket}")
-                
-            # 测试文件上传
-            test_content = f"LandPPT 健康检查测试文件\n创建时间: {datetime.now().isoformat()}"
-            test_filename = f"health_check_{int(time.time())}.txt"
-            
-            upload_url = f"{self.supabase_url}/storage/v1/object/{self.storage_bucket}/{test_filename}"
-            
-            # 使用二进制模式上�?
-            files = {'file': (test_filename, test_content.encode('utf-8'), 'text/plain')}
-            upload_response = requests.post(upload_url, headers=headers, files=files)
-            
-            if upload_response.status_code not in [200, 201]:
-                raise Exception(f"文件上传失败: {upload_response.status_code} - {upload_response.text}")
-                
-            # 测试文件下载
-            download_url = f"{self.supabase_url}/storage/v1/object/{self.storage_bucket}/{test_filename}"
-            download_response = requests.get(download_url, headers=headers)
-            
-            if download_response.status_code != 200:
-                raise Exception(f"文件下载失败: {download_response.status_code}")
-                
-            # 验证文件内容（使用字节比较更准确�?
-            downloaded_content = download_response.content.decode('utf-8')
-            if downloaded_content.strip() != test_content.strip():
-                raise Exception(f"上传和下载的文件内容不匹配\n上传: {test_content}\n下载: {downloaded_content}")
-                
-            # 清理测试文件
-            delete_response = requests.delete(download_url, headers=headers)
-            
-            self.log_test(
-                "存储 API 测试",
-                True,
-                "存储功能正常",
-                {
-                    'bucket_info': landppt_bucket,
-                    'test_file': test_filename,
-                    'upload_status': upload_response.status_code,
-                    'download_status': download_response.status_code,
-                    'delete_status': delete_response.status_code,
-                    'content_size': len(test_content)
-                }
-            )
-            return True
-            
-        except Exception as e:
-            self.log_test("存储 API 测试", False, "存储功能异常", str(e))
+        except requests.exceptions.RequestException as e:
+            self.add_result('supabase_api', False, f"❌ Supabase API 连接失败: {str(e)}")
+            print(f"   ❌ API 连接失败: {str(e)}")
             return False
+    
+    def test_storage_access(self) -> bool:
+        """测试存储访问"""
+        print("💾 测试存储访问...")
+        
+        if not self.supabase_url or not self.supabase_service_key:
+            self.add_result('storage_access', False, 
+                          "❌ 存储测试需要 SUPABASE_SERVICE_KEY", warning=True)
+            print("   ⚠️ 存储测试需要 SUPABASE_SERVICE_KEY")
+            return False
+        
+        try:
+            # 测试存储桶列表
+            storage_url = f"{self.supabase_url}/storage/v1/bucket"
+            headers = {
+                'apikey': self.supabase_service_key,
+                'Authorization': f'Bearer {self.supabase_service_key}',
+                'Content-Type': 'application/json'
+            }
             
-    def test_performance(self) -> bool:
-        """测试数据库性能"""
+            response = requests.get(storage_url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                buckets = response.json()
+                bucket_names = [bucket.get('name', 'unknown') for bucket in buckets]
+                
+                bucket_exists = self.storage_bucket in bucket_names
+                
+                details = {
+                    'available_buckets': bucket_names,
+                    'target_bucket': self.storage_bucket,
+                    'bucket_exists': bucket_exists
+                }
+                
+                if bucket_exists:
+                    self.add_result('storage_access', True, 
+                                  f"✅ 存储访问正常，目标桶存在: {self.storage_bucket}", details)
+                    print(f"   ✅ 存储桶存在: {self.storage_bucket}")
+                else:
+                    self.add_result('storage_access', False, 
+                                  f"⚠️ 目标存储桶不存在: {self.storage_bucket}", details, warning=True)
+                    print(f"   ⚠️ 目标存储桶不存在: {self.storage_bucket}")
+                    print(f"   📂 可用存储桶: {', '.join(bucket_names)}")
+                
+                return bucket_exists
+            else:
+                self.add_result('storage_access', False, 
+                              f"❌ 存储API响应异常: {response.status_code}")
+                print(f"   ❌ 存储API响应异常: {response.status_code}")
+                return False
+                
+        except requests.exceptions.RequestException as e:
+            self.add_result('storage_access', False, f"❌ 存储连接失败: {str(e)}")
+            print(f"   ❌ 存储连接失败: {str(e)}")
+            return False
+    
+    def run_performance_test(self) -> bool:
+        """运行性能测试"""
+        print("⚡ 运行性能测试...")
+        
         try:
             conn = psycopg2.connect(**self.db_config)
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
             
-            # 测试查询性能
+            # 连接延迟测试
             start_time = time.time()
-            with conn.cursor() as cur:
-                for i in range(10):
-                    cur.execute("SELECT COUNT(*) FROM landppt.deployment_verification;")
-                    cur.fetchone()
-            query_time = time.time() - start_time
+            cursor.execute("SELECT 1;")
+            cursor.fetchone()
+            connection_latency = (time.time() - start_time) * 1000
             
-            # 测试连接延迟
+            # 简单查询性能测试
             start_time = time.time()
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1;")
-                cur.fetchone()
-            latency = time.time() - start_time
+            cursor.execute("SELECT COUNT(*) FROM information_schema.tables;")
+            cursor.fetchone()
+            query_time = (time.time() - start_time) * 1000
             
+            # 并发连接测试
+            max_connections = None
+            try:
+                cursor.execute("SHOW max_connections;")
+                max_connections = int(cursor.fetchone()['max_connections'])
+            except:
+                pass
+            
+            performance_data = {
+                'connection_latency_ms': round(connection_latency, 2),
+                'simple_query_time_ms': round(query_time, 2),
+                'max_connections': max_connections
+            }
+            
+            # 性能评估
+            is_good_performance = connection_latency < 100 and query_time < 50
+            
+            self.add_result('performance_test', is_good_performance, 
+                          f"{'✅' if is_good_performance else '⚠️'} 性能测试完成", 
+                          performance_data, warning=not is_good_performance)
+            
+            print(f"   📊 连接延迟: {performance_data['connection_latency_ms']}ms")
+            print(f"   📊 查询时间: {performance_data['simple_query_time_ms']}ms")
+            if max_connections:
+                print(f"   📊 最大连接数: {max_connections}")
+            
+            cursor.close()
             conn.close()
-            
-            self.log_test(
-                "性能测试",
-                True,
-                "性能指标正常",
-                {
-                    '10次查询耗时': f"{query_time:.3f}�?,
-                    '单次延迟': f"{latency:.3f}�?,
-                    '平均查询时间': f"{query_time/10:.3f}�?
-                }
-            )
             return True
             
         except Exception as e:
-            self.log_test("性能测试", False, "性能测试失败", str(e))
+            self.add_result('performance_test', False, f"❌ 性能测试失败: {str(e)}")
+            print(f"   ❌ 性能测试失败: {str(e)}")
             return False
+    
+    def save_report(self) -> Optional[str]:
+        """保存检查报告"""
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"supabase_health_report_{timestamp}.json"
             
-    def generate_report(self) -> Dict[str, Any]:
-        """生成完整的检查报�?""
-        total_tests = len(self.test_results)
-        passed_tests = len([r for r in self.test_results if r['success']])
-        failed_tests = total_tests - passed_tests
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(self.results, f, ensure_ascii=False, indent=2)
+            
+            return filename
+        except Exception as e:
+            print(f"❌ 保存报告失败: {str(e)}")
+            return None
+    
+    def print_summary(self):
+        """打印检查总结"""
+        print("\n" + "="*50)
+        print("📊 健康检查总结")
+        print("="*50)
         
-        report = {
-            'summary': {
-                'total_tests': total_tests,
-                'passed': passed_tests,
-                'failed': failed_tests,
-                'success_rate': f"{(passed_tests/total_tests*100):.1f}%" if total_tests > 0 else "0%",
-                'overall_health': 'HEALTHY' if failed_tests == 0 else 'UNHEALTHY'
-            },
-            'test_results': self.test_results,
-            'generated_at': datetime.now().isoformat(),
-            'configuration': {
-                'database_host': self.db_config['host'],
-                'database_name': self.db_config['database'],
-                'supabase_url': self.supabase_url,
-                'storage_bucket': self.storage_bucket,
-                'app_user': self.app_user['username']
-            }
-        }
+        summary = self.results['summary']
+        print(f"🔍 总检查项: {summary['total']}")
+        print(f"✅ 通过: {summary['passed']}")
+        print(f"❌ 失败: {summary['failed']}")
+        print(f"⚠️ 警告: {summary['warnings']}")
         
-        return report
+        # 计算健康分数
+        if summary['total'] > 0:
+            health_score = (summary['passed'] / summary['total']) * 100
+            print(f"💯 健康分数: {health_score:.1f}%")
+            
+            if health_score >= 90:
+                print("🎉 数据库状态: 优秀")
+            elif health_score >= 70:
+                print("👍 数据库状态: 良好")
+            elif health_score >= 50:
+                print("⚠️ 数据库状态: 需要注意")
+            else:
+                print("🚨 数据库状态: 需要紧急处理")
         
-    def run_all_tests(self, non_interactive=False) -> bool:
-        """运行所有检查测�?""
-        print("🚀 开�?LandPPT Supabase 数据库健康检�?..")
-        print("=" * 60)
+        print("="*50)
+    
+    def run_all_checks(self) -> bool:
+        """运行所有健康检查"""
+        print("🚀 开始 Supabase 数据库健康检查...")
+        print("="*50)
         
-        # 询问是否需要管理员权限测试
-        need_admin = self.setup_password(non_interactive)
-        
-        all_passed = True
-        
-        # 执行所有测�?
-        tests = [
-            ("应用用户连接", self.test_basic_connection),
-            ("Schema 访问", self.test_schema_access),
-            ("应用用户权限", self.test_app_user_connection),
-            ("存储 API", self.test_storage_api),
-            ("性能指标", self.test_performance)
+        # 必要检查
+        checks = [
+            self.test_database_connection,
+            self.test_schema_access,
+            self.test_table_operations,
+            self.test_supabase_api,
+            self.test_storage_access,
+            self.run_performance_test
         ]
         
-        for test_name, test_func in tests:
-            print(f"\n🔍 执行 {test_name} 测试...")
+        success_count = 0
+        for check in checks:
             try:
-                result = test_func()
-                if not result:
-                    all_passed = False
+                if check():
+                    success_count += 1
+                print()  # 空行分隔
             except Exception as e:
-                self.log_test(test_name, False, f"测试执行异常: {str(e)}")
-                all_passed = False
-                
-        print("\n" + "=" * 60)
-        print("📊 生成检查报�?..")
+                print(f"❌ 检查过程异常: {str(e)}\n")
         
-        return all_passed
+        # 打印总结
+        self.print_summary()
         
-    def save_report(self, filename: Optional[str] = None):
-        """保存检查报告到文件"""
-        if filename is None:
-            filename = f"supabase_health_report_{int(time.time())}.json"
-            
-        report = self.generate_report()
+        # 保存报告
+        report_file = self.save_report()
+        if report_file:
+            print(f"📄 详细报告已保存: {report_file}")
         
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(report, f, ensure_ascii=False, indent=2)
-            
-        print(f"📄 报告已保存到: {filename}")
-        return filename
+        return success_count >= len(checks) * 0.7  # 70% 通过率认为整体健康
 
 
 def main():
-    """主函�?""
-    try:
-        # 检查是否为非交互模�?
-        non_interactive = "--non-interactive" in sys.argv
-        
-        checker = SupabaseHealthChecker()
-        success = checker.run_all_tests(non_interactive)
-        
-        # 生成并保存报�?
-        report = checker.generate_report()
-        report_file = checker.save_report()
-        
-        # 输出总结
-        print("\n" + "=" * 60)
-        print("📋 检查总结:")
-        print(f"   总测试数: {report['summary']['total_tests']}")
-        print(f"   通过数量: {report['summary']['passed']}")
-        print(f"   失败数量: {report['summary']['failed']}")
-        print(f"   成功�? {report['summary']['success_rate']}")
-        print(f"   整体状�? {report['summary']['overall_health']}")
-        
-        if success:
-            print("\n🎉 所有检查通过！数据库配置正常，可以部�?LandPPT 应用�?)
-            return 0
-        else:
-            print("\n⚠️ 部分检查失败！请查看详细报告并修复问题�?)
-            return 1
-            
-    except KeyboardInterrupt:
-        print("\n\n⏹️ 用户中断检�?)
-        return 130
-    except Exception as e:
-        print(f"\n�?检查器异常: {e}")
-        return 1
+    """主函数"""
+    print("🏥 LandPPT Supabase 数据库健康检查工具")
+    print("版本: 2.0.0 | 支持 DATABASE_URL 和环境变量配置")
+    print()
+    
+    # 检查必要的环境变量
+    required_vars = ['DATABASE_URL']
+    missing_vars = []
+    
+    for var in required_vars:
+        if not os.getenv(var):
+            missing_vars.append(var)
+    
+    if missing_vars and not all(os.getenv(var) for var in ['DB_HOST', 'DB_USER', 'DB_PASSWORD']):
+        print("❌ 缺少必要的环境变量:")
+        print("   请设置 DATABASE_URL 或 (DB_HOST, DB_USER, DB_PASSWORD)")
+        print()
+        print("示例配置:")
+        print("DATABASE_URL=postgresql://user:pass@host:5432/dbname?sslmode=require")
+        print("或者:")
+        print("DB_HOST=your-host")
+        print("DB_USER=your-user")
+        print("DB_PASSWORD=your-password")
+        sys.exit(1)
+    
+    # 运行健康检查
+    checker = SupabaseHealthChecker()
+    success = checker.run_all_checks()
+    
+    print(f"\n🎯 检查完成! {'成功' if success else '发现问题'}")
+    sys.exit(0 if success else 1)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

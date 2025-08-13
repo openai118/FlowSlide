@@ -16,17 +16,24 @@ services:
       - PYTHONPATH=/app/src:/opt/venv
       - PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
       
-      # Database settings
-      - DB_HOST=your-supabase-host
+      # Database settings (DATABASE_URL takes priority)
+      - DATABASE_URL=postgresql://username:password@host:port/database?sslmode=require&options=-c%20search_path%3Dschema,public
+      
+      # Alternative: Separate database variables (if DATABASE_URL not set)
+      - DB_HOST=${DB_HOST:-your-supabase-host}
       - DB_PORT=${DB_PORT:-5432}
       - DB_NAME=${DB_NAME:-postgres}
-      - DB_USER=your_db_user
-      - DB_PASSWORD=your_secure_password
+      - DB_USER=${DB_USER:-your_db_user}
+      - DB_PASSWORD=${DB_PASSWORD:-your_secure_password}
       
       # Supabase settings
-      - SUPABASE_URL=https://your-project.supabase.co
-      - SUPABASE_ANON_KEY=your_supabase_anon_key
-      - SUPABASE_SERVICE_KEY=your_supabase_service_key
+      - SUPABASE_URL=${SUPABASE_URL:-https://your-project-id.supabase.co}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your-anon-key}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your-service-key}
+      
+      # Storage settings
+      - STORAGE_BUCKET=${STORAGE_BUCKET:-landppt-files}
+      - STORAGE_PROVIDER=${STORAGE_PROVIDER:-supabase}
       
       # Storage settings
       - STORAGE_BUCKET=your-storage-bucket
