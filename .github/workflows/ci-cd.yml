@@ -109,50 +109,143 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Setup Pages
-      uses: actions/configure-pages@v3
+      uses: actions/configure-pages@v4
       
     - name: Build documentation
       run: |
         mkdir -p docs/_site
         cp README.md docs/_site/index.md
-        cp DEPLOYMENT_GUIDE.md docs/_site/
-        cp DATABASE_MONITORING_GUIDE.md docs/_site/
-        cp INTEGRATION_GUIDE.md docs/_site/
         
         # 创建简单的 index.html
         cat > docs/_site/index.html << 'EOF'
         <!DOCTYPE html>
         <html>
         <head>
-            <title>LandPPT Integrated</title>
+            <title>LandPPT - AI-Powered Presentation Generator</title>
             <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
-                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 40px; }
-                .header { text-align: center; margin-bottom: 40px; }
-                .nav { background: #f6f8fa; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
-                .nav a { margin-right: 20px; color: #0366d6; text-decoration: none; }
-                .nav a:hover { text-decoration: underline; }
+                body { 
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+                    margin: 0; 
+                    padding: 40px;
+                    line-height: 1.6;
+                    color: #333;
+                    background: #f8f9fa;
+                }
+                .container { 
+                    max-width: 1200px; 
+                    margin: 0 auto; 
+                    background: white;
+                    border-radius: 12px;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                    overflow: hidden;
+                }
+                .header { 
+                    text-align: center; 
+                    padding: 60px 40px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                }
+                .header h1 { margin: 0; font-size: 3em; font-weight: 700; }
+                .header p { margin: 20px 0 0; font-size: 1.2em; opacity: 0.9; }
+                .nav { 
+                    background: #fff; 
+                    padding: 30px 40px; 
+                    border-bottom: 1px solid #eee;
+                }
+                .nav a { 
+                    display: inline-block;
+                    margin-right: 30px; 
+                    color: #0366d6; 
+                    text-decoration: none;
+                    font-weight: 500;
+                    padding: 10px 20px;
+                    border-radius: 6px;
+                    transition: all 0.2s;
+                }
+                .nav a:hover { 
+                    background: #f6f8fa;
+                    text-decoration: none; 
+                }
+                .content { padding: 40px; }
+                .features { 
+                    display: grid; 
+                    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+                    gap: 30px; 
+                    margin-top: 30px;
+                }
+                .feature { 
+                    padding: 30px; 
+                    border: 1px solid #e1e4e8; 
+                    border-radius: 8px;
+                    background: #fafbfc;
+                }
+                .feature h3 { margin-top: 0; color: #0366d6; }
+                .badge { 
+                    display: inline-block; 
+                    background: #28a745; 
+                    color: white; 
+                    padding: 4px 8px; 
+                    border-radius: 4px; 
+                    font-size: 0.8em; 
+                    font-weight: 500;
+                }
             </style>
         </head>
         <body>
-            <div class="header">
-                <h1>🚀 LandPPT Integrated</h1>
-                <p>AI-powered presentation generator with enterprise monitoring and backup</p>
+            <div class="container">
+                <div class="header">
+                    <h1>🚀 LandPPT</h1>
+                    <p>AI-powered presentation generator with enterprise monitoring and backup</p>
+                    <span class="badge">v2.0.0</span>
+                </div>
+                
+                <div class="nav">
+                    <a href="https://github.com/openai118/landppt-integrated">📂 GitHub Repository</a>
+                    <a href="https://hub.docker.com/r/YOUR_USERNAME/land-ppt">🐳 Docker Hub</a>
+                    <a href="https://github.com/openai118/landppt-integrated/actions">⚡ GitHub Actions</a>
+                </div>
+                
+                <div class="content">
+                    <h2>✨ Features</h2>
+                    <div class="features">
+                        <div class="feature">
+                            <h3>🎯 AI PPT Generation</h3>
+                            <p>Multi-AI model support including OpenAI GPT-4, Anthropic Claude, Google Gemini, and Ollama local models.</p>
+                        </div>
+                        <div class="feature">
+                            <h3>🛡️ Database Monitoring</h3>
+                            <p>Universal PostgreSQL health checking system compatible with Supabase, Neon, AWS RDS, and more.</p>
+                        </div>
+                        <div class="feature">
+                            <h3>💾 Automated Backup</h3>
+                            <p>Cloudflare R2 integration with scheduled backups and one-click restore functionality.</p>
+                        </div>
+                        <div class="feature">
+                            <h3>🐳 Docker Deployment</h3>
+                            <p>Enterprise-ready containerization with multi-platform support and automated publishing to Docker Hub.</p>
+                        </div>
+                    </div>
+                    
+                    <h2>🚀 Quick Start</h2>
+                    <pre style="background: #f6f8fa; padding: 20px; border-radius: 6px; overflow-x: auto;">
+# Pull and run the latest image
+docker pull YOUR_USERNAME/land-ppt:latest
+
+# Run with basic configuration
+docker run -d \
+  --name land-ppt \
+  -p 8000:8000 \
+  -e DATABASE_URL="postgresql://user:pass@host:port/db" \
+  YOUR_USERNAME/land-ppt:latest</pre>
+                    
+                    <p style="margin-top: 40px; text-align: center; color: #666;">
+                        Built with ❤️ by the LandPPT Team | 
+                        <a href="https://github.com/openai118/landppt-integrated/blob/main/LICENSE">MIT License</a>
+                    </p>
+                </div>
             </div>
-            <div class="nav">
-                <a href="https://github.com/openai118/landppt-integrated">📂 GitHub Repository</a>
-                <a href="./DEPLOYMENT_GUIDE.md">🚀 Deployment Guide</a>
-                <a href="./DATABASE_MONITORING_GUIDE.md">🛡️ Monitoring Guide</a>
-                <a href="./INTEGRATION_GUIDE.md">🔧 Integration Guide</a>
-            </div>
-            <h2>✨ Features</h2>
-            <ul>
-                <li>🎯 <strong>AI PPT Generation</strong>: Multi-AI model support (OpenAI, Anthropic, Google, Ollama)</li>
-                <li>🛡️ <strong>Database Monitoring</strong>: Complete Supabase health checking system</li>
-                <li>💾 <strong>R2 Backup</strong>: Automated Cloudflare R2 backup and restore</li>
-                <li>🐳 <strong>Docker Deployment</strong>: Enterprise-ready containerization</li>
-                <li>📚 <strong>Complete Documentation</strong>: Detailed guides and API docs</li>
-            </ul>
         </body>
         </html>
         EOF
