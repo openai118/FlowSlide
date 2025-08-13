@@ -2,8 +2,8 @@
 AI modules for LandPPT
 """
 
+from .base import AIMessage, AIProvider, AIResponse, MessageRole
 from .providers import AIProviderFactory, get_ai_provider
-from .base import AIProvider, AIMessage, AIResponse, MessageRole
 
 __all__ = [
     "AIProviderFactory",
@@ -11,5 +11,5 @@ __all__ = [
     "AIProvider",
     "AIMessage",
     "AIResponse",
-    "MessageRole"
+    "MessageRole",
 ]

@@ -3,8 +3,8 @@ PPT设计基因和视觉指导相关提示词
 包含所有用于设计分析和视觉指导的提示词模板
 """
 
-from typing import Dict, Any
 import logging
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +14,7 @@ def _is_image_service_enabled() -> bool:
     try:
         # 尝试获取图片服务实例
         from ..service_instances import get_ppt_service
+
         ppt_service = get_ppt_service()
 
         # 检查图片服务是否存在且已初始化
@@ -28,7 +29,9 @@ def _is_image_service_enabled() -> bool:
         from ..image.providers.base import provider_registry
 
         # 检查是否有AI生成提供者
-        generation_providers = provider_registry.get_generation_providers(enabled_only=True)
+        generation_providers = provider_registry.get_generation_providers(
+            enabled_only=True
+        )
 
         # 检查是否有网络搜索提供者
         search_providers = provider_registry.get_search_providers(enabled_only=True)
@@ -37,12 +40,18 @@ def _is_image_service_enabled() -> bool:
         storage_providers = provider_registry.get_storage_providers(enabled_only=True)
 
         # 如果有任何可用的提供者（AI生成、网络搜索或本地存储），则认为服务可用
-        has_providers = len(generation_providers) > 0 or len(search_providers) > 0 or len(storage_providers) > 0
+        has_providers = (
+            len(generation_providers) > 0
+            or len(search_providers) > 0
+            or len(storage_providers) > 0
+        )
 
-        logger.debug(f"Image service status: initialized={ppt_service.image_service.initialized}, "
-                    f"generation_providers={len(generation_providers)}, "
-                    f"search_providers={len(search_providers)}, "
-                    f"storage_providers={len(storage_providers)}")
+        logger.debug(
+            f"Image service status: initialized={ppt_service.image_service.initialized}, "
+            f"generation_providers={len(generation_providers)}, "
+            f"search_providers={len(search_providers)}, "
+            f"storage_providers={len(storage_providers)}"
+        )
 
         return has_providers
 
@@ -53,7 +62,7 @@ def _is_image_service_enabled() -> bool:
 
 class DesignPrompts:
     """PPT设计基因和视觉指导相关的提示词集合"""
-    
+
     @staticmethod
     def get_style_gene_extraction_prompt(template_code: str) -> str:
         """获取设计基因提取提示词"""
@@ -82,12 +91,14 @@ class DesignPrompts:
 - 突出关键的视觉特征"""
 
     @staticmethod
-    def get_unified_design_guide_prompt(slide_data: Dict[str, Any], page_number: int, total_pages: int) -> str:
+    def get_unified_design_guide_prompt(
+        slide_data: Dict[str, Any], page_number: int, total_pages: int
+    ) -> str:
         """获取统一设计指导提示词"""
 
         # 处理图片信息 - 只有在图片服务启用且有图片信息时才包含
         images_context = ""
-        if _is_image_service_enabled() and 'images_summary' in slide_data:
+        if _is_image_service_enabled() and "images_summary" in slide_data:
             images_context = f"""
 
 
@@ -139,7 +150,9 @@ class DesignPrompts:
 请提供具体、可操作的设计指导，帮助生成高质量的PPT页面。"""
 
     @staticmethod
-    def get_creative_variation_prompt(slide_data: Dict[str, Any], page_number: int, total_pages: int) -> str:
+    def get_creative_variation_prompt(
+        slide_data: Dict[str, Any], page_number: int, total_pages: int
+    ) -> str:
         """获取创意变化指导提示词"""
         return f"""作为创意设计专家，请为以下幻灯片提供创意变化指导：
 
@@ -173,7 +186,9 @@ class DesignPrompts:
 请提供具体的创意实施建议。"""
 
     @staticmethod
-    def get_content_driven_design_prompt(slide_data: Dict[str, Any], page_number: int, total_pages: int) -> str:
+    def get_content_driven_design_prompt(
+        slide_data: Dict[str, Any], page_number: int, total_pages: int
+    ) -> str:
         """获取内容驱动设计建议提示词"""
         return f"""作为内容驱动设计专家，请为以下幻灯片提供基于内容的设计建议：
 
@@ -246,16 +261,26 @@ class DesignPrompts:
 请提供详细的设计基因分析报告，确保后续页面能够保持一致的设计风格。"""
 
     @staticmethod
-    def get_creative_template_context_prompt(slide_data: Dict[str, Any], template_html: str,
-                                           slide_title: str, slide_type: str, page_number: int,
-                                           total_pages: int, context_info: str, style_genes: str,
-                                           unified_design_guide: str, project_topic: str,
-                                           project_type: str, project_audience: str, project_style: str) -> str:
+    def get_creative_template_context_prompt(
+        slide_data: Dict[str, Any],
+        template_html: str,
+        slide_title: str,
+        slide_type: str,
+        page_number: int,
+        total_pages: int,
+        context_info: str,
+        style_genes: str,
+        unified_design_guide: str,
+        project_topic: str,
+        project_type: str,
+        project_audience: str,
+        project_style: str,
+    ) -> str:
         """获取创意模板上下文提示词"""
 
         # 处理图片信息 - 只有在图片服务启用且有图片信息时才包含
         images_info = ""
-        if _is_image_service_enabled() and 'images_summary' in slide_data:
+        if _is_image_service_enabled() and "images_summary" in slide_data:
             images_info = f"""
 
 
@@ -390,14 +415,21 @@ class DesignPrompts:
 """
 
     @staticmethod
-    def get_single_slide_html_prompt(slide_data: Dict[str, Any], confirmed_requirements: Dict[str, Any],
-                                   page_number: int, total_pages: int, context_info: str,
-                                   style_genes: str, unified_design_guide: str, template_html: str) -> str:
+    def get_single_slide_html_prompt(
+        slide_data: Dict[str, Any],
+        confirmed_requirements: Dict[str, Any],
+        page_number: int,
+        total_pages: int,
+        context_info: str,
+        style_genes: str,
+        unified_design_guide: str,
+        template_html: str,
+    ) -> str:
         """获取单页HTML生成提示词"""
 
         # 处理图片信息 - 只有在图片服务启用且有图片信息时才包含
         images_info = ""
-        if _is_image_service_enabled() and 'images_summary' in slide_data:
+        if _is_image_service_enabled() and "images_summary" in slide_data:
             images_info = f"""
 
 **图片使用要求：**
@@ -550,29 +582,33 @@ class DesignPrompts:
             context_parts.append("**🌟 特殊页面设计要求 🌟**")
 
             if page_number == 1:
-                context_parts.extend([
-                    "这是首页，需要在保持原模板风格基础上创造强烈的第一印象。设计原则：",
-                    "- **风格一致性**：严格遵循原模板的设计风格、色彩体系、字体选择和布局特征",
-                    "- **主题呼应**：确保首页设计与演示主题高度契合，体现专业性和主题相关性",
-                    "- **视觉层次**：在原模板框架内运用对比、大小、颜色等手段突出主题标题",
-                    "- **背景处理**：基于原模板的背景风格进行适度增强，可考虑渐变、纹理等元素",
-                    "- **标题强化**：在保持原模板字体风格的基础上，通过大小、颜色、位置等方式增强表现力",
-                    "- **装饰协调**：使用与原模板风格一致的装饰元素，丰富视觉层次但不破坏整体和谐",
-                    "- **色彩延续**：严格使用原模板的主色调体系，可适度增加饱和度或亮度来增强吸引力",
-                    "- **品牌统一**：确保首页设计与整体演示保持品牌和视觉的统一性"
-                ])
+                context_parts.extend(
+                    [
+                        "这是首页，需要在保持原模板风格基础上创造强烈的第一印象。设计原则：",
+                        "- **风格一致性**：严格遵循原模板的设计风格、色彩体系、字体选择和布局特征",
+                        "- **主题呼应**：确保首页设计与演示主题高度契合，体现专业性和主题相关性",
+                        "- **视觉层次**：在原模板框架内运用对比、大小、颜色等手段突出主题标题",
+                        "- **背景处理**：基于原模板的背景风格进行适度增强，可考虑渐变、纹理等元素",
+                        "- **标题强化**：在保持原模板字体风格的基础上，通过大小、颜色、位置等方式增强表现力",
+                        "- **装饰协调**：使用与原模板风格一致的装饰元素，丰富视觉层次但不破坏整体和谐",
+                        "- **色彩延续**：严格使用原模板的主色调体系，可适度增加饱和度或亮度来增强吸引力",
+                        "- **品牌统一**：确保首页设计与整体演示保持品牌和视觉的统一性",
+                    ]
+                )
             elif page_number == total_pages:
-                context_parts.extend([
-                    "这是结尾页，需要在保持原模板风格基础上营造完整的收尾感。设计原则：",
-                    "- **风格延续**：严格保持与原模板和首页一致的设计风格、色彩和字体体系",
-                    "- **主题收尾**：确保结尾页设计与演示主题形成完整呼应，体现主题的完整性",
-                    "- **视觉呼应**：与首页和中间页面形成视觉连贯性，保持整体演示的统一感",
-                    "- **重点突出**：在原模板框架内突出核心总结信息，确保关键信息得到强调",
-                    "- **背景协调**：基于原模板背景风格进行适度处理，营造收尾感但不破坏整体风格",
-                    "- **布局平衡**：遵循原模板的布局原则，通过留白和元素分布增强页面的完整感",
-                    "- **色彩统一**：严格使用原模板的色彩体系，可适度调整明度来营造收尾氛围",
-                    "- **品牌闭环**：确保结尾页与整体演示形成完整的品牌和视觉闭环"
-                ])
+                context_parts.extend(
+                    [
+                        "这是结尾页，需要在保持原模板风格基础上营造完整的收尾感。设计原则：",
+                        "- **风格延续**：严格保持与原模板和首页一致的设计风格、色彩和字体体系",
+                        "- **主题收尾**：确保结尾页设计与演示主题形成完整呼应，体现主题的完整性",
+                        "- **视觉呼应**：与首页和中间页面形成视觉连贯性，保持整体演示的统一感",
+                        "- **重点突出**：在原模板框架内突出核心总结信息，确保关键信息得到强调",
+                        "- **背景协调**：基于原模板背景风格进行适度处理，营造收尾感但不破坏整体风格",
+                        "- **布局平衡**：遵循原模板的布局原则，通过留白和元素分布增强页面的完整感",
+                        "- **色彩统一**：严格使用原模板的色彩体系，可适度调整明度来营造收尾氛围",
+                        "- **品牌闭环**：确保结尾页与整体演示形成完整的品牌和视觉闭环",
+                    ]
+                )
 
             context_parts.append("")
 
@@ -618,16 +654,26 @@ class DesignPrompts:
 请提供详细的设计基因分析报告，确保后续页面能够保持一致的设计风格。"""
 
     @staticmethod
-    def get_creative_template_context_prompt(slide_data: Dict[str, Any], template_html: str,
-                                           slide_title: str, slide_type: str, page_number: int,
-                                           total_pages: int, context_info: str, style_genes: str,
-                                           unified_design_guide: str, project_topic: str,
-                                           project_type: str, project_audience: str, project_style: str) -> str:
+    def get_creative_template_context_prompt(
+        slide_data: Dict[str, Any],
+        template_html: str,
+        slide_title: str,
+        slide_type: str,
+        page_number: int,
+        total_pages: int,
+        context_info: str,
+        style_genes: str,
+        unified_design_guide: str,
+        project_topic: str,
+        project_type: str,
+        project_audience: str,
+        project_style: str,
+    ) -> str:
         """获取创意模板上下文提示词"""
 
         # 处理图片信息 - 只有在图片服务启用且有图片信息时才包含
         images_info = ""
-        if _is_image_service_enabled() and 'images_summary' in slide_data:
+        if _is_image_service_enabled() and "images_summary" in slide_data:
             images_info = f"""
 
 

@@ -7,10 +7,10 @@ import copy
 import json
 import logging
 import os
-import tempfile
 import shutil
-from typing import Tuple, Optional, Dict, Any, List
+import tempfile
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger as loguru_logger
 
@@ -44,17 +44,22 @@ class MagicPDFConverter:
         # 确保输出目录存在
         os.makedirs(self.output_dir, exist_ok=True)
         logger.info(f"Mineru转换器初始化，输出目录: {self.output_dir}")
-    
+
     def is_available(self) -> bool:
         """检查mineru是否可用"""
         if self._is_available is None:
             try:
-                from mineru.cli.common import convert_pdf_bytes_to_bytes_by_pypdfium2, prepare_env, read_fn
+                from mineru.backend.pipeline.model_json_to_middle_json import \
+                    result_to_middle_json as pipeline_result_to_middle_json
+                from mineru.backend.pipeline.pipeline_analyze import \
+                    doc_analyze as pipeline_doc_analyze
+                from mineru.backend.pipeline.pipeline_middle_json_mkcontent import \
+                    union_make as pipeline_union_make
+                from mineru.cli.common import (
+                    convert_pdf_bytes_to_bytes_by_pypdfium2, prepare_env,
+                    read_fn)
                 from mineru.data.data_reader_writer import FileBasedDataWriter
                 from mineru.utils.enum_class import MakeMode
-                from mineru.backend.pipeline.pipeline_analyze import doc_analyze as pipeline_doc_analyze
-                from mineru.backend.pipeline.pipeline_middle_json_mkcontent import union_make as pipeline_union_make
-                from mineru.backend.pipeline.model_json_to_middle_json import result_to_middle_json as pipeline_result_to_middle_json
 
                 self._is_available = True
                 logger.info("Mineru库检查成功")
@@ -63,13 +68,16 @@ class MagicPDFConverter:
                 logger.warning(f"Mineru库未安装: {e}")
 
         return self._is_available
-    
-    def convert_pdf_file(self, file_path: str,
-                        lang: str = "ch",
-                        backend: str = "pipeline",
-                        method: str = "auto",
-                        formula_enable: bool = True,
-                        table_enable: bool = True) -> Tuple[str, str]:
+
+    def convert_pdf_file(
+        self,
+        file_path: str,
+        lang: str = "ch",
+        backend: str = "pipeline",
+        method: str = "auto",
+        formula_enable: bool = True,
+        table_enable: bool = True,
+    ) -> Tuple[str, str]:
         """
         转换PDF文件为Markdown
 
@@ -98,19 +106,23 @@ class MagicPDFConverter:
         if not path.exists():
             raise FileNotFoundError(f"文件不存在: {file_path}")
 
-        if not path.suffix.lower() == '.pdf':
+        if not path.suffix.lower() == ".pdf":
             raise ValueError(f"不支持的文件格式: {path.suffix}")
 
         logger.info(f"开始使用Mineru转换文件: {file_path}")
 
         try:
             # 导入必要的模块
-            from mineru.cli.common import convert_pdf_bytes_to_bytes_by_pypdfium2, prepare_env, read_fn
+            from mineru.backend.pipeline.model_json_to_middle_json import \
+                result_to_middle_json as pipeline_result_to_middle_json
+            from mineru.backend.pipeline.pipeline_analyze import \
+                doc_analyze as pipeline_doc_analyze
+            from mineru.backend.pipeline.pipeline_middle_json_mkcontent import \
+                union_make as pipeline_union_make
+            from mineru.cli.common import (
+                convert_pdf_bytes_to_bytes_by_pypdfium2, prepare_env, read_fn)
             from mineru.data.data_reader_writer import FileBasedDataWriter
             from mineru.utils.enum_class import MakeMode
-            from mineru.backend.pipeline.pipeline_analyze import doc_analyze as pipeline_doc_analyze
-            from mineru.backend.pipeline.pipeline_middle_json_mkcontent import union_make as pipeline_union_make
-            from mineru.backend.pipeline.model_json_to_middle_json import result_to_middle_json as pipeline_result_to_middle_json
 
             # 准备文件名和目录
             pdf_file_name = str(path.absolute())
@@ -120,7 +132,9 @@ class MagicPDFConverter:
             pdf_bytes = read_fn(path)
 
             # 准备输出目录
-            local_image_dir, local_md_dir = prepare_env(self.output_dir, name_without_suff, method)
+            local_image_dir, local_md_dir = prepare_env(
+                self.output_dir, name_without_suff, method
+            )
             image_dir = os.path.basename(local_image_dir)
 
             # 创建数据写入器
@@ -130,14 +144,23 @@ class MagicPDFConverter:
             # 使用pipeline后端进行处理
             if backend == "pipeline":
                 # 转换PDF字节
-                new_pdf_bytes = convert_pdf_bytes_to_bytes_by_pypdfium2(pdf_bytes, 0, None)
+                new_pdf_bytes = convert_pdf_bytes_to_bytes_by_pypdfium2(
+                    pdf_bytes, 0, None
+                )
 
                 # 进行文档分析
-                infer_results, all_image_lists, all_pdf_docs, lang_list, ocr_enabled_list = pipeline_doc_analyze(
-                    [new_pdf_bytes], [lang],
+                (
+                    infer_results,
+                    all_image_lists,
+                    all_pdf_docs,
+                    lang_list,
+                    ocr_enabled_list,
+                ) = pipeline_doc_analyze(
+                    [new_pdf_bytes],
+                    [lang],
                     parse_method=method,
                     formula_enable=formula_enable,
-                    table_enable=table_enable
+                    table_enable=table_enable,
                 )
 
                 # 处理结果
@@ -150,21 +173,37 @@ class MagicPDFConverter:
 
                 # 转换为中间JSON格式
                 middle_json = pipeline_result_to_middle_json(
-                    model_list, images_list, pdf_doc, image_writer,
-                    _lang, _ocr_enable, formula_enable
+                    model_list,
+                    images_list,
+                    pdf_doc,
+                    image_writer,
+                    _lang,
+                    _ocr_enable,
+                    formula_enable,
                 )
 
                 pdf_info = middle_json["pdf_info"]
 
                 # 生成调试文件（可选）
                 try:
-                    from mineru.utils.draw_bbox import draw_layout_bbox, draw_span_bbox
+                    from mineru.utils.draw_bbox import (draw_layout_bbox,
+                                                        draw_span_bbox)
 
                     # 绘制布局边界框
-                    draw_layout_bbox(pdf_info, new_pdf_bytes, local_md_dir, f"{name_without_suff}_layout.pdf")
+                    draw_layout_bbox(
+                        pdf_info,
+                        new_pdf_bytes,
+                        local_md_dir,
+                        f"{name_without_suff}_layout.pdf",
+                    )
 
                     # 绘制span边界框
-                    draw_span_bbox(pdf_info, new_pdf_bytes, local_md_dir, f"{name_without_suff}_span.pdf")
+                    draw_span_bbox(
+                        pdf_info,
+                        new_pdf_bytes,
+                        local_md_dir,
+                        f"{name_without_suff}_span.pdf",
+                    )
 
                     logger.debug(f"调试文件已生成: {local_md_dir}")
                 except Exception as e:
@@ -184,25 +223,29 @@ class MagicPDFConverter:
 
                 # 保存内容列表（JSON格式）
                 try:
-                    content_list = pipeline_union_make(pdf_info, MakeMode.CONTENT_LIST, image_dir)
+                    content_list = pipeline_union_make(
+                        pdf_info, MakeMode.CONTENT_LIST, image_dir
+                    )
                     md_writer.write_string(
                         f"{name_without_suff}_content_list.json",
-                        json.dumps(content_list, ensure_ascii=False, indent=4)
+                        json.dumps(content_list, ensure_ascii=False, indent=4),
                     )
 
                     # 保存中间JSON
                     md_writer.write_string(
                         f"{name_without_suff}_middle.json",
-                        json.dumps(middle_json, ensure_ascii=False, indent=4)
+                        json.dumps(middle_json, ensure_ascii=False, indent=4),
                     )
 
                     # 保存模型输出JSON
                     md_writer.write_string(
                         f"{name_without_suff}_model.json",
-                        json.dumps(model_json, ensure_ascii=False, indent=4)
+                        json.dumps(model_json, ensure_ascii=False, indent=4),
                     )
 
-                    logger.debug(f"额外文件已保存: content_list.json, middle.json, model.json")
+                    logger.debug(
+                        f"额外文件已保存: content_list.json, middle.json, model.json"
+                    )
                 except Exception as e:
                     logger.warning(f"保存额外文件失败: {e}")
 
@@ -249,22 +292,40 @@ class MagicPDFConverter:
                 "pdf_type": "auto",  # mineru会自动检测
                 "recommended_ocr": True,  # 默认推荐OCR
                 "output_dir": self.output_dir,
-                "supported_backends": ["pipeline", "vlm-transformers", "vlm-sglang-engine", "vlm-sglang-client"],
+                "supported_backends": [
+                    "pipeline",
+                    "vlm-transformers",
+                    "vlm-sglang-engine",
+                    "vlm-sglang-client",
+                ],
                 "supported_methods": ["auto", "txt", "ocr"],
-                "supported_languages": ["ch", "ch_server", "ch_lite", "en", "korean", "japan", "chinese_cht", "ta", "te", "ka"]
+                "supported_languages": [
+                    "ch",
+                    "ch_server",
+                    "ch_lite",
+                    "en",
+                    "korean",
+                    "japan",
+                    "chinese_cht",
+                    "ta",
+                    "te",
+                    "ka",
+                ],
             }
 
         except Exception as e:
             return {"available": False, "error": str(e)}
 
-    def parse_documents(self,
-                       path_list: List[Path],
-                       lang: str = "ch",
-                       backend: str = "pipeline",
-                       method: str = "auto",
-                       server_url: Optional[str] = None,
-                       start_page_id: int = 0,
-                       end_page_id: Optional[int] = None) -> List[Tuple[str, str]]:
+    def parse_documents(
+        self,
+        path_list: List[Path],
+        lang: str = "ch",
+        backend: str = "pipeline",
+        method: str = "auto",
+        server_url: Optional[str] = None,
+        start_page_id: int = 0,
+        end_page_id: Optional[int] = None,
+    ) -> List[Tuple[str, str]]:
         """
         批量解析多个文档
 
@@ -329,28 +390,32 @@ class MagicPDFConverter:
 
         return {
             "markdown": os.path.join(method_dir, f"{name_without_suff}.md"),
-            "content_list": os.path.join(method_dir, f"{name_without_suff}_content_list.json"),
+            "content_list": os.path.join(
+                method_dir, f"{name_without_suff}_content_list.json"
+            ),
             "middle_json": os.path.join(method_dir, f"{name_without_suff}_middle.json"),
             "model_json": os.path.join(method_dir, f"{name_without_suff}_model.json"),
             "origin_pdf": os.path.join(method_dir, f"{name_without_suff}_origin.pdf"),
             "layout_pdf": os.path.join(method_dir, f"{name_without_suff}_layout.pdf"),
             "span_pdf": os.path.join(method_dir, f"{name_without_suff}_span.pdf"),
-            "images_dir": os.path.join(method_dir, "images")
+            "images_dir": os.path.join(method_dir, "images"),
         }
-    
+
     def __del__(self):
         """析构函数，自动清理临时文件"""
         self.cleanup()
 
 
-def parse_doc(path_list: List[Path],
-              output_dir: str,
-              lang: str = "ch",
-              backend: str = "pipeline",
-              method: str = "auto",
-              server_url: Optional[str] = None,
-              start_page_id: int = 0,
-              end_page_id: Optional[int] = None) -> None:
+def parse_doc(
+    path_list: List[Path],
+    output_dir: str,
+    lang: str = "ch",
+    backend: str = "pipeline",
+    method: str = "auto",
+    server_url: Optional[str] = None,
+    start_page_id: int = 0,
+    end_page_id: Optional[int] = None,
+) -> None:
     """
     便利函数：解析文档列表，兼容参考代码的API
 
@@ -387,10 +452,7 @@ def parse_doc(path_list: List[Path],
 
                 # 转换文件
                 md_content, encoding = converter.convert_pdf_file(
-                    str(path),
-                    lang=lang,
-                    backend=backend,
-                    method=method
+                    str(path), lang=lang, backend=backend, method=method
                 )
 
                 logger.info(f"成功处理文件: {path}, 输出目录: {output_dir}")

@@ -2,17 +2,17 @@
 Global Master Template Service for managing reusable master templates
 """
 
+import base64
 import json
 import logging
 import time
-import base64
-from typing import Dict, Any, List, Optional
 from io import BytesIO
+from typing import Any, Dict, List, Optional
 
-from ..ai import get_ai_provider, AIMessage, MessageRole
+from ..ai import AIMessage, MessageRole, get_ai_provider
 from ..core.config import ai_config
-from ..database.service import DatabaseService
 from ..database.database import AsyncSessionLocal
+from ..database.service import DatabaseService
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ class GlobalMasterTemplateService:
         """Create a new global master template"""
         try:
             # Validate required fields
-            required_fields = ['template_name', 'html_template']
+            required_fields = ["template_name", "html_template"]
             for field in required_fields:
                 if not template_data.get(field):
                     raise ValueError(f"Missing required field: {field}")
@@ -42,24 +42,32 @@ class GlobalMasterTemplateService:
             # Check if template name already exists
             async with AsyncSessionLocal() as session:
                 db_service = DatabaseService(session)
-                existing = await db_service.get_global_master_template_by_name(template_data['template_name'])
+                existing = await db_service.get_global_master_template_by_name(
+                    template_data["template_name"]
+                )
                 if existing:
-                    raise ValueError(f"Template name '{template_data['template_name']}' already exists")
+                    raise ValueError(
+                        f"Template name '{template_data['template_name']}' already exists"
+                    )
 
             # Generate preview image if not provided
-            if not template_data.get('preview_image'):
-                template_data['preview_image'] = await self._generate_preview_image(template_data['html_template'])
+            if not template_data.get("preview_image"):
+                template_data["preview_image"] = await self._generate_preview_image(
+                    template_data["html_template"]
+                )
 
             # Extract style config if not provided
-            if not template_data.get('style_config'):
-                template_data['style_config'] = self._extract_style_config(template_data['html_template'])
+            if not template_data.get("style_config"):
+                template_data["style_config"] = self._extract_style_config(
+                    template_data["html_template"]
+                )
 
             # Set default values
-            template_data.setdefault('description', '')
-            template_data.setdefault('tags', [])
-            template_data.setdefault('is_default', False)
-            template_data.setdefault('is_active', True)
-            template_data.setdefault('created_by', 'system')
+            template_data.setdefault("description", "")
+            template_data.setdefault("tags", [])
+            template_data.setdefault("is_default", False)
+            template_data.setdefault("is_active", True)
+            template_data.setdefault("created_by", "system")
 
             # Create template
             async with AsyncSessionLocal() as session:
@@ -77,7 +85,7 @@ class GlobalMasterTemplateService:
                     "usage_count": template.usage_count,
                     "created_by": template.created_by,
                     "created_at": template.created_at,
-                    "updated_at": template.updated_at
+                    "updated_at": template.updated_at,
                 }
 
         except Exception as e:
@@ -89,7 +97,9 @@ class GlobalMasterTemplateService:
         try:
             async with AsyncSessionLocal() as session:
                 db_service = DatabaseService(session)
-                templates = await db_service.get_all_global_master_templates(active_only)
+                templates = await db_service.get_all_global_master_templates(
+                    active_only
+                )
 
                 return [
                     {
@@ -103,7 +113,7 @@ class GlobalMasterTemplateService:
                         "usage_count": template.usage_count,
                         "created_by": template.created_by,
                         "created_at": template.created_at,
-                        "updated_at": template.updated_at
+                        "updated_at": template.updated_at,
                     }
                     for template in templates
                 ]
@@ -117,7 +127,7 @@ class GlobalMasterTemplateService:
         active_only: bool = True,
         page: int = 1,
         page_size: int = 6,
-        search: Optional[str] = None
+        search: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Get all global master templates with pagination"""
         try:
@@ -128,11 +138,13 @@ class GlobalMasterTemplateService:
                 offset = (page - 1) * page_size
 
                 # Get templates with pagination
-                templates, total_count = await db_service.get_global_master_templates_paginated(
-                    active_only=active_only,
-                    offset=offset,
-                    limit=page_size,
-                    search=search
+                templates, total_count = (
+                    await db_service.get_global_master_templates_paginated(
+                        active_only=active_only,
+                        offset=offset,
+                        limit=page_size,
+                        search=search,
+                    )
                 )
 
                 # Calculate pagination info
@@ -152,7 +164,7 @@ class GlobalMasterTemplateService:
                         "usage_count": template.usage_count,
                         "created_by": template.created_by,
                         "created_at": template.created_at,
-                        "updated_at": template.updated_at
+                        "updated_at": template.updated_at,
                     }
                     for template in templates
                 ]
@@ -165,8 +177,8 @@ class GlobalMasterTemplateService:
                         "total_count": total_count,
                         "total_pages": total_pages,
                         "has_next": has_next,
-                        "has_prev": has_prev
-                    }
+                        "has_prev": has_prev,
+                    },
                 }
         except Exception as e:
             logger.error(f"Failed to get paginated templates: {e}")
@@ -177,7 +189,9 @@ class GlobalMasterTemplateService:
         try:
             async with AsyncSessionLocal() as session:
                 db_service = DatabaseService(session)
-                template = await db_service.get_global_master_template_by_id(template_id)
+                template = await db_service.get_global_master_template_by_id(
+                    template_id
+                )
 
                 if not template:
                     return None
@@ -195,35 +209,47 @@ class GlobalMasterTemplateService:
                     "usage_count": template.usage_count,
                     "created_by": template.created_by,
                     "created_at": template.created_at,
-                    "updated_at": template.updated_at
+                    "updated_at": template.updated_at,
                 }
 
         except Exception as e:
             logger.error(f"Failed to get global master template {template_id}: {e}")
             raise
 
-    async def update_template(self, template_id: int, update_data: Dict[str, Any]) -> bool:
+    async def update_template(
+        self, template_id: int, update_data: Dict[str, Any]
+    ) -> bool:
         """Update a global master template"""
         try:
             # Check if template name conflicts (if being updated)
-            if 'template_name' in update_data:
+            if "template_name" in update_data:
                 async with AsyncSessionLocal() as session:
                     db_service = DatabaseService(session)
-                    existing = await db_service.get_global_master_template_by_name(update_data['template_name'])
+                    existing = await db_service.get_global_master_template_by_name(
+                        update_data["template_name"]
+                    )
                     if existing and existing.id != template_id:
-                        raise ValueError(f"Template name '{update_data['template_name']}' already exists")
+                        raise ValueError(
+                            f"Template name '{update_data['template_name']}' already exists"
+                        )
 
             # Update preview image if HTML template is updated
-            if 'html_template' in update_data and 'preview_image' not in update_data:
-                update_data['preview_image'] = await self._generate_preview_image(update_data['html_template'])
+            if "html_template" in update_data and "preview_image" not in update_data:
+                update_data["preview_image"] = await self._generate_preview_image(
+                    update_data["html_template"]
+                )
 
             # Update style config if HTML template is updated
-            if 'html_template' in update_data and 'style_config' not in update_data:
-                update_data['style_config'] = self._extract_style_config(update_data['html_template'])
+            if "html_template" in update_data and "style_config" not in update_data:
+                update_data["style_config"] = self._extract_style_config(
+                    update_data["html_template"]
+                )
 
             async with AsyncSessionLocal() as session:
                 db_service = DatabaseService(session)
-                return await db_service.update_global_master_template(template_id, update_data)
+                return await db_service.update_global_master_template(
+                    template_id, update_data
+                )
 
         except Exception as e:
             logger.error(f"Failed to update global master template {template_id}: {e}")
@@ -236,7 +262,9 @@ class GlobalMasterTemplateService:
                 db_service = DatabaseService(session)
 
                 # Check if template exists
-                template = await db_service.get_global_master_template_by_id(template_id)
+                template = await db_service.get_global_master_template_by_id(
+                    template_id
+                )
                 if not template:
                     logger.warning(f"Template {template_id} not found for deletion")
                     return False
@@ -245,13 +273,17 @@ class GlobalMasterTemplateService:
                 if template.is_default:
                     raise ValueError("Cannot delete the default template")
 
-                logger.info(f"Deleting template {template_id}: {template.template_name}")
+                logger.info(
+                    f"Deleting template {template_id}: {template.template_name}"
+                )
                 result = await db_service.delete_global_master_template(template_id)
 
                 if result:
                     logger.info(f"Successfully deleted template {template_id}")
                 else:
-                    logger.warning(f"Failed to delete template {template_id} - no rows affected")
+                    logger.warning(
+                        f"Failed to delete template {template_id} - no rows affected"
+                    )
 
                 return result
 
@@ -293,14 +325,20 @@ class GlobalMasterTemplateService:
                     "usage_count": template.usage_count,
                     "created_by": template.created_by,
                     "created_at": template.created_at,
-                    "updated_at": template.updated_at
+                    "updated_at": template.updated_at,
                 }
 
         except Exception as e:
             logger.error(f"Failed to get default template: {e}")
             raise
 
-    async def generate_template_with_ai_stream(self, prompt: str, template_name: str, description: str = "", tags: List[str] = None):
+    async def generate_template_with_ai_stream(
+        self,
+        prompt: str,
+        template_name: str,
+        description: str = "",
+        tags: List[str] = None,
+    ):
         """Generate a new template using AI with streaming response"""
         import asyncio
         import json
@@ -341,45 +379,38 @@ class GlobalMasterTemplateService:
 
         try:
             # 检查AI提供商是否支持流式响应
-            if hasattr(self.ai_provider, 'stream_text_completion'):
+            if hasattr(self.ai_provider, "stream_text_completion"):
                 # 使用流式API
                 async for chunk in self.ai_provider.stream_text_completion(
-                    prompt=ai_prompt,
-                    max_tokens=ai_config.max_tokens,
-                    temperature=0.7
+                    prompt=ai_prompt, max_tokens=ai_config.max_tokens, temperature=0.7
                 ):
-                    yield {
-                        'type': 'thinking',
-                        'content': chunk
-                    }
+                    yield {"type": "thinking", "content": chunk}
             else:
                 # 模拟流式响应
-                yield {'type': 'thinking', 'content': '🤔 正在分析您的需求...\n\n'}
+                yield {"type": "thinking", "content": "🤔 正在分析您的需求...\n\n"}
                 await asyncio.sleep(1)
 
-                yield {'type': 'thinking', 'content': f'需求分析：{prompt}\n\n'}
+                yield {"type": "thinking", "content": f"需求分析：{prompt}\n\n"}
                 await asyncio.sleep(0.5)
 
-                yield {'type': 'thinking', 'content': '🎨 开始设计模板风格...\n'}
+                yield {"type": "thinking", "content": "🎨 开始设计模板风格...\n"}
                 await asyncio.sleep(1)
 
-                yield {'type': 'thinking', 'content': '📐 确定布局结构...\n'}
+                yield {"type": "thinking", "content": "📐 确定布局结构...\n"}
                 await asyncio.sleep(0.8)
 
-                yield {'type': 'thinking', 'content': '🎯 选择配色方案...\n'}
+                yield {"type": "thinking", "content": "🎯 选择配色方案...\n"}
                 await asyncio.sleep(0.7)
 
-                yield {'type': 'thinking', 'content': '💻 开始编写HTML代码...\n'}
+                yield {"type": "thinking", "content": "💻 开始编写HTML代码...\n"}
                 await asyncio.sleep(1)
 
                 # 调用标准AI生成
                 response = await self.ai_provider.text_completion(
-                    prompt=ai_prompt,
-                    max_tokens=ai_config.max_tokens,
-                    temperature=0.7
+                    prompt=ai_prompt, max_tokens=ai_config.max_tokens, temperature=0.7
                 )
 
-                yield {'type': 'thinking', 'content': '✨ 优化样式和交互效果...\n'}
+                yield {"type": "thinking", "content": "✨ 优化样式和交互效果...\n"}
                 await asyncio.sleep(0.5)
 
                 # 处理AI响应
@@ -388,34 +419,37 @@ class GlobalMasterTemplateService:
                 if not self._validate_html_template(html_template):
                     raise ValueError("Generated HTML template is invalid")
 
-                yield {'type': 'thinking', 'content': '💾 保存模板到数据库...\n'}
+                yield {"type": "thinking", "content": "💾 保存模板到数据库...\n"}
                 await asyncio.sleep(0.3)
 
                 # 创建模板
                 template_data = {
-                    'template_name': template_name,
-                    'description': description or f"AI生成的模板：{prompt[:100]}",
-                    'html_template': html_template,
-                    'tags': tags or ['AI生成'],
-                    'created_by': 'AI'
+                    "template_name": template_name,
+                    "description": description or f"AI生成的模板：{prompt[:100]}",
+                    "html_template": html_template,
+                    "tags": tags or ["AI生成"],
+                    "created_by": "AI",
                 }
 
                 result = await self.create_template(template_data)
 
                 yield {
-                    'type': 'complete',
-                    'message': '模板生成完成！',
-                    'template_id': result['id']
+                    "type": "complete",
+                    "message": "模板生成完成！",
+                    "template_id": result["id"],
                 }
 
         except Exception as e:
             logger.error(f"Failed to generate template with AI stream: {e}")
-            yield {
-                'type': 'error',
-                'message': str(e)
-            }
+            yield {"type": "error", "message": str(e)}
 
-    async def generate_template_with_ai(self, prompt: str, template_name: str, description: str = "", tags: List[str] = None) -> Dict[str, Any]:
+    async def generate_template_with_ai(
+        self,
+        prompt: str,
+        template_name: str,
+        description: str = "",
+        tags: List[str] = None,
+    ) -> Dict[str, Any]:
         """Generate a new template using AI"""
         try:
             # Construct AI prompt for template generation
@@ -445,9 +479,7 @@ class GlobalMasterTemplateService:
 
             # Call AI to generate template
             response = await self.ai_provider.text_completion(
-                prompt=ai_prompt,
-                max_tokens=ai_config.max_tokens,
-                temperature=0.7
+                prompt=ai_prompt, max_tokens=ai_config.max_tokens, temperature=0.7
             )
 
             # Extract HTML from response
@@ -460,17 +492,21 @@ class GlobalMasterTemplateService:
             if not self._validate_html_template(html_template):
                 logger.error(f"Generated HTML template validation failed.")
                 logger.error(f"Template length: {len(html_template)}")
-                logger.error(f"Template preview (first 2000 chars): {html_template[:2000]}")
-                logger.error(f"Template ending (last 500 chars): {html_template[-500:]}")
+                logger.error(
+                    f"Template preview (first 2000 chars): {html_template[:2000]}"
+                )
+                logger.error(
+                    f"Template ending (last 500 chars): {html_template[-500:]}"
+                )
                 raise ValueError("Generated HTML template is invalid")
 
             # Create template data
             template_data = {
-                'template_name': template_name,
-                'description': description or f"AI生成的模板：{prompt[:100]}",
-                'html_template': html_template,
-                'tags': tags or ['AI生成'],
-                'created_by': 'AI'
+                "template_name": template_name,
+                "description": description or f"AI生成的模板：{prompt[:100]}",
+                "html_template": html_template,
+                "tags": tags or ["AI生成"],
+                "created_by": "AI",
             }
 
             # Create the template
@@ -484,24 +520,34 @@ class GlobalMasterTemplateService:
         """Extract HTML code from AI response with improved extraction"""
         import re
 
-        logger.info(f"Extracting HTML from response. Content length: {len(response_content)}")
+        logger.info(
+            f"Extracting HTML from response. Content length: {len(response_content)}"
+        )
 
         # Try to extract HTML code block (most common format)
-        html_match = re.search(r'```html\s*(.*?)\s*```', response_content, re.DOTALL)
+        html_match = re.search(r"```html\s*(.*?)\s*```", response_content, re.DOTALL)
         if html_match:
             extracted = html_match.group(1).strip()
             logger.info(f"Extracted HTML from code block. Length: {len(extracted)}")
             return extracted
 
         # Try to extract any code block that contains DOCTYPE
-        code_block_match = re.search(r'```[a-zA-Z]*\s*(<!DOCTYPE html.*?</html>)\s*```', response_content, re.DOTALL | re.IGNORECASE)
+        code_block_match = re.search(
+            r"```[a-zA-Z]*\s*(<!DOCTYPE html.*?</html>)\s*```",
+            response_content,
+            re.DOTALL | re.IGNORECASE,
+        )
         if code_block_match:
             extracted = code_block_match.group(1).strip()
-            logger.info(f"Extracted HTML from generic code block. Length: {len(extracted)}")
+            logger.info(
+                f"Extracted HTML from generic code block. Length: {len(extracted)}"
+            )
             return extracted
 
         # Try to extract DOCTYPE HTML directly
-        doctype_match = re.search(r'<!DOCTYPE html.*?</html>', response_content, re.DOTALL | re.IGNORECASE)
+        doctype_match = re.search(
+            r"<!DOCTYPE html.*?</html>", response_content, re.DOTALL | re.IGNORECASE
+        )
         if doctype_match:
             extracted = doctype_match.group(0).strip()
             logger.info(f"Extracted HTML from direct match. Length: {len(extracted)}")
@@ -509,12 +555,18 @@ class GlobalMasterTemplateService:
 
         # If no specific pattern found, check if the content itself is HTML
         content_stripped = response_content.strip()
-        if content_stripped.lower().startswith('<!doctype html') and content_stripped.lower().endswith('</html>'):
-            logger.info(f"Content appears to be direct HTML. Length: {len(content_stripped)}")
+        if content_stripped.lower().startswith(
+            "<!doctype html"
+        ) and content_stripped.lower().endswith("</html>"):
+            logger.info(
+                f"Content appears to be direct HTML. Length: {len(content_stripped)}"
+            )
             return content_stripped
 
         # Return original content as last resort
-        logger.warning(f"Could not extract HTML from response, returning original content. Preview: {response_content[:200]}")
+        logger.warning(
+            f"Could not extract HTML from response, returning original content. Preview: {response_content[:200]}"
+        )
         return response_content.strip()
 
     def _validate_html_template(self, html_content: str) -> bool:
@@ -527,19 +579,21 @@ class GlobalMasterTemplateService:
             html_lower = html_content.lower().strip()
 
             # Check basic HTML structure with more flexible validation
-            if not html_lower.startswith('<!doctype html'):
-                logger.error(f"HTML validation failed: Missing or incorrect DOCTYPE. Content starts with: {html_content[:100]}")
+            if not html_lower.startswith("<!doctype html"):
+                logger.error(
+                    f"HTML validation failed: Missing or incorrect DOCTYPE. Content starts with: {html_content[:100]}"
+                )
                 return False
 
-            if '</html>' not in html_lower:
+            if "</html>" not in html_lower:
                 logger.error("HTML validation failed: Missing closing </html> tag")
                 return False
 
             # Check required elements with better error reporting
             required_elements = {
-                '<head>': '<head',
-                '<body>': '<body',
-                '<title>': '<title'
+                "<head>": "<head",
+                "<body>": "<body",
+                "<title>": "<title",
             }
             missing_elements = []
 
@@ -548,7 +602,9 @@ class GlobalMasterTemplateService:
                     missing_elements.append(element_name)
 
             if missing_elements:
-                logger.error(f"HTML validation failed: Missing required elements: {missing_elements}")
+                logger.error(
+                    f"HTML validation failed: Missing required elements: {missing_elements}"
+                )
                 return False
 
             logger.info("HTML template validation passed successfully")
@@ -578,24 +634,30 @@ class GlobalMasterTemplateService:
         style_config = {
             "dimensions": "1280x720",
             "aspect_ratio": "16:9",
-            "framework": "HTML + CSS"
+            "framework": "HTML + CSS",
         }
 
         try:
             # Extract color configuration
-            color_matches = re.findall(r'(?:background|color)[^:]*:\s*([^;]+)', html_content, re.IGNORECASE)
+            color_matches = re.findall(
+                r"(?:background|color)[^:]*:\s*([^;]+)", html_content, re.IGNORECASE
+            )
             if color_matches:
-                style_config["colors"] = list(set(color_matches[:10]))  # Limit to 10 colors
+                style_config["colors"] = list(
+                    set(color_matches[:10])
+                )  # Limit to 10 colors
 
             # Extract font configuration
-            font_matches = re.findall(r'font-family[^:]*:\s*([^;]+)', html_content, re.IGNORECASE)
+            font_matches = re.findall(
+                r"font-family[^:]*:\s*([^;]+)", html_content, re.IGNORECASE
+            )
             if font_matches:
                 style_config["fonts"] = list(set(font_matches[:5]))  # Limit to 5 fonts
 
             # Check for frameworks
-            if 'tailwind' in html_content.lower():
+            if "tailwind" in html_content.lower():
                 style_config["framework"] = "Tailwind CSS"
-            elif 'bootstrap' in html_content.lower():
+            elif "bootstrap" in html_content.lower():
                 style_config["framework"] = "Bootstrap"
 
         except Exception as e:
@@ -603,12 +665,16 @@ class GlobalMasterTemplateService:
 
         return style_config
 
-    async def get_templates_by_tags(self, tags: List[str], active_only: bool = True) -> List[Dict[str, Any]]:
+    async def get_templates_by_tags(
+        self, tags: List[str], active_only: bool = True
+    ) -> List[Dict[str, Any]]:
         """Get global master templates by tags"""
         try:
             async with AsyncSessionLocal() as session:
                 db_service = DatabaseService(session)
-                templates = await db_service.get_global_master_templates_by_tags(tags, active_only)
+                templates = await db_service.get_global_master_templates_by_tags(
+                    tags, active_only
+                )
 
                 return [
                     {
@@ -622,7 +688,7 @@ class GlobalMasterTemplateService:
                         "usage_count": template.usage_count,
                         "created_by": template.created_by,
                         "created_at": template.created_at,
-                        "updated_at": template.updated_at
+                        "updated_at": template.updated_at,
                     }
                     for template in templates
                 ]
@@ -637,7 +703,7 @@ class GlobalMasterTemplateService:
         active_only: bool = True,
         page: int = 1,
         page_size: int = 6,
-        search: Optional[str] = None
+        search: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Get global master templates by tags with pagination"""
         try:
@@ -648,12 +714,14 @@ class GlobalMasterTemplateService:
                 offset = (page - 1) * page_size
 
                 # Get templates with pagination
-                templates, total_count = await db_service.get_global_master_templates_by_tags_paginated(
-                    tags=tags,
-                    active_only=active_only,
-                    offset=offset,
-                    limit=page_size,
-                    search=search
+                templates, total_count = (
+                    await db_service.get_global_master_templates_by_tags_paginated(
+                        tags=tags,
+                        active_only=active_only,
+                        offset=offset,
+                        limit=page_size,
+                        search=search,
+                    )
                 )
 
                 # Calculate pagination info
@@ -673,7 +741,7 @@ class GlobalMasterTemplateService:
                         "usage_count": template.usage_count,
                         "created_by": template.created_by,
                         "created_at": template.created_at,
-                        "updated_at": template.updated_at
+                        "updated_at": template.updated_at,
                     }
                     for template in templates
                 ]
@@ -686,8 +754,8 @@ class GlobalMasterTemplateService:
                         "total_count": total_count,
                         "total_pages": total_pages,
                         "has_next": has_next,
-                        "has_prev": has_prev
-                    }
+                        "has_prev": has_prev,
+                    },
                 }
         except Exception as e:
             logger.error(f"Failed to get paginated templates by tags: {e}")
@@ -698,7 +766,9 @@ class GlobalMasterTemplateService:
         try:
             async with AsyncSessionLocal() as session:
                 db_service = DatabaseService(session)
-                return await db_service.increment_global_master_template_usage(template_id)
+                return await db_service.increment_global_master_template_usage(
+                    template_id
+                )
 
         except Exception as e:
             logger.error(f"Failed to increment template usage {template_id}: {e}")

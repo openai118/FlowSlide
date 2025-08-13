@@ -2,15 +2,18 @@
 Enhanced AI Service for handling OpenAI-compatible requests and PPT generation
 """
 
-import re
 import json
 import logging
-from typing import Dict, Any, List, Optional
-from ..api.models import ChatCompletionRequest, CompletionRequest, PPTGenerationRequest
-from ..ai import get_ai_provider, AIMessage, MessageRole
+import re
+from typing import Any, Dict, List, Optional
+
+from ..ai import AIMessage, MessageRole, get_ai_provider
+from ..api.models import (ChatCompletionRequest, CompletionRequest,
+                          PPTGenerationRequest)
 from ..core.config import ai_config
 
 logger = logging.getLogger(__name__)
+
 
 class AIService:
     """Enhanced AI service for processing requests and generating responses"""
@@ -19,46 +22,91 @@ class AIService:
         self.provider_name = provider_name
 
         self.ppt_keywords = [
-            "ppt", "presentation", "slides", "幻灯片", "演示", "汇报",
-            "展示", "发表", "讲解", "课件", "slide", "powerpoint"
+            "ppt",
+            "presentation",
+            "slides",
+            "幻灯片",
+            "演示",
+            "汇报",
+            "展示",
+            "发表",
+            "讲解",
+            "课件",
+            "slide",
+            "powerpoint",
         ]
 
         self.scenario_templates = {
             "general": {
                 "style": "professional",
                 "tone": "formal",
-                "structure": ["introduction", "main_content", "conclusion"]
+                "structure": ["introduction", "main_content", "conclusion"],
             },
             "tourism": {
                 "style": "vibrant",
                 "tone": "engaging",
-                "structure": ["destination_overview", "attractions", "itinerary", "practical_info"]
+                "structure": [
+                    "destination_overview",
+                    "attractions",
+                    "itinerary",
+                    "practical_info",
+                ],
             },
             "education": {
                 "style": "playful",
                 "tone": "friendly",
-                "structure": ["learning_objectives", "key_concepts", "examples", "activities", "summary"]
+                "structure": [
+                    "learning_objectives",
+                    "key_concepts",
+                    "examples",
+                    "activities",
+                    "summary",
+                ],
             },
             "analysis": {
                 "style": "analytical",
                 "tone": "objective",
-                "structure": ["problem_statement", "methodology", "findings", "analysis", "recommendations"]
+                "structure": [
+                    "problem_statement",
+                    "methodology",
+                    "findings",
+                    "analysis",
+                    "recommendations",
+                ],
             },
             "history": {
                 "style": "classic",
                 "tone": "narrative",
-                "structure": ["background", "timeline", "key_events", "significance", "legacy"]
+                "structure": [
+                    "background",
+                    "timeline",
+                    "key_events",
+                    "significance",
+                    "legacy",
+                ],
             },
             "technology": {
                 "style": "modern",
                 "tone": "innovative",
-                "structure": ["overview", "features", "benefits", "implementation", "future"]
+                "structure": [
+                    "overview",
+                    "features",
+                    "benefits",
+                    "implementation",
+                    "future",
+                ],
             },
             "business": {
                 "style": "corporate",
                 "tone": "persuasive",
-                "structure": ["executive_summary", "problem", "solution", "market_analysis", "financial_projections"]
-            }
+                "structure": [
+                    "executive_summary",
+                    "problem",
+                    "solution",
+                    "market_analysis",
+                    "financial_projections",
+                ],
+            },
         }
 
     @property
@@ -71,31 +119,29 @@ class AIService:
         """Check if the request is related to PPT generation"""
         text_lower = text.lower()
         return any(keyword in text_lower for keyword in self.ppt_keywords)
-    
+
     async def handle_ppt_chat_request(self, request: ChatCompletionRequest) -> str:
         """Handle PPT-related chat completion request using real AI"""
         try:
             # Convert to AI messages
             ai_messages = []
             for msg in request.messages:
-                ai_messages.append(AIMessage(
-                    role=MessageRole(msg.role),
-                    content=msg.content
-                ))
+                ai_messages.append(
+                    AIMessage(role=MessageRole(msg.role), content=msg.content)
+                )
 
             # Add system prompt for PPT generation
             system_prompt = self._get_ppt_system_prompt()
-            ai_messages.insert(0, AIMessage(
-                role=MessageRole.SYSTEM,
-                content=system_prompt
-            ))
+            ai_messages.insert(
+                0, AIMessage(role=MessageRole.SYSTEM, content=system_prompt)
+            )
 
             # Generate response using AI provider
             response = await self.ai_provider.chat_completion(
                 messages=ai_messages,
                 max_tokens=request.max_tokens or ai_config.max_tokens,
                 temperature=request.temperature or ai_config.temperature,
-                top_p=request.top_p or ai_config.top_p
+                top_p=request.top_p or ai_config.top_p,
             )
 
             return response.content
@@ -103,12 +149,16 @@ class AIService:
         except Exception as e:
             logger.error(f"Error in PPT chat request: {e}")
             # Fallback to basic response
-            return await self._generate_fallback_ppt_response(request.messages[-1].content)
-    
+            return await self._generate_fallback_ppt_response(
+                request.messages[-1].content
+            )
+
     async def handle_ppt_completion_request(self, request: CompletionRequest) -> str:
         """Handle PPT-related completion request using real AI"""
         try:
-            prompt = request.prompt if isinstance(request.prompt, str) else request.prompt[0]
+            prompt = (
+                request.prompt if isinstance(request.prompt, str) else request.prompt[0]
+            )
 
             # Create enhanced prompt for PPT generation
             enhanced_prompt = self._create_ppt_prompt(prompt)
@@ -118,7 +168,7 @@ class AIService:
                 prompt=enhanced_prompt,
                 max_tokens=request.max_tokens or ai_config.max_tokens,
                 temperature=request.temperature or ai_config.temperature,
-                top_p=request.top_p or ai_config.top_p
+                top_p=request.top_p or ai_config.top_p,
             )
 
             return response.content
@@ -127,31 +177,32 @@ class AIService:
             logger.error(f"Error in PPT completion request: {e}")
             # Fallback to basic response
             return await self._generate_fallback_ppt_response(prompt)
-    
+
     async def handle_general_chat_request(self, request: ChatCompletionRequest) -> str:
         """Handle general (non-PPT) chat completion request using real AI"""
         try:
             # Convert to AI messages
             ai_messages = []
             for msg in request.messages:
-                ai_messages.append(AIMessage(
-                    role=MessageRole(msg.role),
-                    content=msg.content
-                ))
+                ai_messages.append(
+                    AIMessage(role=MessageRole(msg.role), content=msg.content)
+                )
 
             # Add system prompt for general assistance
             system_prompt = self._get_general_system_prompt()
-            ai_messages.insert(0, AIMessage(
-                role=MessageRole.SYSTEM,
-                content=system_prompt
-            ))
+            ai_messages.insert(
+                0, AIMessage(role=MessageRole.SYSTEM, content=system_prompt)
+            )
 
             # Generate response using AI provider
             response = await self.ai_provider.chat_completion(
                 messages=ai_messages,
-                max_tokens=request.max_tokens or min(ai_config.max_tokens, 1000),  # Use smaller limit for general chat
+                max_tokens=request.max_tokens
+                or min(
+                    ai_config.max_tokens, 1000
+                ),  # Use smaller limit for general chat
                 temperature=request.temperature or ai_config.temperature,
-                top_p=request.top_p or ai_config.top_p
+                top_p=request.top_p or ai_config.top_p,
             )
 
             return response.content
@@ -159,12 +210,18 @@ class AIService:
         except Exception as e:
             logger.error(f"Error in general chat request: {e}")
             # Fallback to simple response
-            return self._generate_fallback_general_response(request.messages[-1].content)
-    
-    async def handle_general_completion_request(self, request: CompletionRequest) -> str:
+            return self._generate_fallback_general_response(
+                request.messages[-1].content
+            )
+
+    async def handle_general_completion_request(
+        self, request: CompletionRequest
+    ) -> str:
         """Handle general (non-PPT) completion request using real AI"""
         try:
-            prompt = request.prompt if isinstance(request.prompt, str) else request.prompt[0]
+            prompt = (
+                request.prompt if isinstance(request.prompt, str) else request.prompt[0]
+            )
 
             # Create enhanced prompt for general assistance
             enhanced_prompt = self._create_general_prompt(prompt)
@@ -172,9 +229,12 @@ class AIService:
             # Generate response using AI provider
             response = await self.ai_provider.text_completion(
                 prompt=enhanced_prompt,
-                max_tokens=request.max_tokens or min(ai_config.max_tokens, 1000),  # Use smaller limit for general completion
+                max_tokens=request.max_tokens
+                or min(
+                    ai_config.max_tokens, 1000
+                ),  # Use smaller limit for general completion
                 temperature=request.temperature or ai_config.temperature,
-                top_p=request.top_p or ai_config.top_p
+                top_p=request.top_p or ai_config.top_p,
             )
 
             return response.content
@@ -267,27 +327,27 @@ Try saying something like: "Create a PPT about artificial intelligence for begin
             "topic": "",
             "scenario": "general",
             "requirements": "",
-            "language": "zh" if self._contains_chinese(text) else "en"
+            "language": "zh" if self._contains_chinese(text) else "en",
         }
-        
+
         # Extract topic (simple heuristic)
         topic_patterns = [
             r"about\s+(.+?)(?:\s+for|\s+ppt|\s+presentation|$)",
             r"关于\s*(.+?)(?:\s*的|\s*PPT|\s*演示|$)",
             r"主题\s*[:：]\s*(.+?)(?:\s|$)",
-            r"topic\s*[:：]\s*(.+?)(?:\s|$)"
+            r"topic\s*[:：]\s*(.+?)(?:\s|$)",
         ]
-        
+
         for pattern in topic_patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 info["topic"] = match.group(1).strip()
                 break
-        
+
         if not info["topic"]:
             # Fallback: use the whole text as topic
             info["topic"] = text.strip()
-        
+
         # Detect scenario
         scenario_keywords = {
             "tourism": ["travel", "tourism", "旅游", "景点", "旅行"],
@@ -295,29 +355,31 @@ Try saying something like: "Create a PPT about artificial intelligence for begin
             "analysis": ["analysis", "data", "research", "分析", "研究", "数据"],
             "history": ["history", "historical", "culture", "历史", "文化"],
             "technology": ["technology", "tech", "software", "技术", "科技", "软件"],
-            "business": ["business", "company", "corporate", "商业", "企业", "公司"]
+            "business": ["business", "company", "corporate", "商业", "企业", "公司"],
         }
-        
+
         text_lower = text.lower()
         for scenario, keywords in scenario_keywords.items():
             if any(keyword in text_lower for keyword in keywords):
                 info["scenario"] = scenario
                 break
-        
+
         return info
-    
+
     def _contains_chinese(self, text: str) -> bool:
         """Check if text contains Chinese characters"""
-        return bool(re.search(r'[\u4e00-\u9fff]', text))
-    
+        return bool(re.search(r"[\u4e00-\u9fff]", text))
+
     async def _generate_outline_response(self, ppt_info: Dict[str, Any]) -> str:
         """Generate PPT outline response"""
         topic = ppt_info["topic"]
         scenario = ppt_info["scenario"]
         language = ppt_info["language"]
-        
-        template = self.scenario_templates.get(scenario, self.scenario_templates["general"])
-        
+
+        template = self.scenario_templates.get(
+            scenario, self.scenario_templates["general"]
+        )
+
         if language == "zh":
             response = f"""# {topic} - PPT大纲
 
@@ -338,12 +400,12 @@ Try saying something like: "Create a PPT about artificial intelligence for begin
 - 主要章节导航
 
 """
-            
+
             # Generate content based on scenario structure
             for i, section in enumerate(template["structure"], 3):
                 section_names = {
                     "introduction": "引言",
-                    "main_content": "主要内容", 
+                    "main_content": "主要内容",
                     "conclusion": "总结",
                     "destination_overview": "目的地概览",
                     "attractions": "主要景点",
@@ -373,14 +435,16 @@ Try saying something like: "Create a PPT about artificial intelligence for begin
                     "problem": "问题分析",
                     "solution": "解决方案",
                     "market_analysis": "市场分析",
-                    "financial_projections": "财务预测"
+                    "financial_projections": "财务预测",
                 }
-                
+
                 section_name = section_names.get(section, section)
-                response += f"### 第{i}页：{section_name}\n- 相关内容要点\n- 支撑数据或案例\n\n"
-            
+                response += (
+                    f"### 第{i}页：{section_name}\n- 相关内容要点\n- 支撑数据或案例\n\n"
+                )
+
             response += f"### 第{len(template['structure']) + 3}页：谢谢\n- 感谢聆听\n- 联系方式\n- Q&A环节"
-            
+
         else:
             response = f"""# {topic} - PPT Outline
 
@@ -401,11 +465,10 @@ Try saying something like: "Create a PPT about artificial intelligence for begin
 - Main Section Navigation
 
 """
-            
+
             for i, section in enumerate(template["structure"], 3):
                 response += f"### Slide {i}: {section.replace('_', ' ').title()}\n- Key content points\n- Supporting data or examples\n\n"
-            
+
             response += f"### Slide {len(template['structure']) + 3}: Thank You\n- Thank you for your attention\n- Contact Information\n- Q&A Session"
-        
+
         return response
-    

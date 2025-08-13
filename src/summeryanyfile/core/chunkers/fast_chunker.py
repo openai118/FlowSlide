@@ -4,7 +4,7 @@
 
 import logging
 import os
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from .base_chunker import BaseChunker, DocumentChunk
 
@@ -33,16 +33,14 @@ def _get_default_max_tokens() -> int:
 class FastChunker(BaseChunker):
     """
     快速分块器，基于 max_tokens 的简单分块策略
-    
+
     - 块大小：max_tokens 的 1/3
     - 重叠大小：max_tokens 的 1/10
     - 优化速度，适合大文档的快速处理
     """
-    
+
     def __init__(
-        self,
-        max_tokens: Optional[int] = None,
-        chars_per_token: float = 4.0
+        self, max_tokens: Optional[int] = None, chars_per_token: float = 4.0
     ) -> None:
         """
         初始化快速分块器
@@ -69,40 +67,46 @@ class FastChunker(BaseChunker):
         self.max_tokens = max_tokens
         self.chars_per_token = chars_per_token
 
-        logger.info(f"快速分块器初始化: max_tokens={max_tokens}, "
-                   f"chunk_size={self.chunk_size_tokens}, chunk_overlap={self.chunk_overlap_tokens}")
-    
-    def chunk_text(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> List[DocumentChunk]:
+        logger.info(
+            f"快速分块器初始化: max_tokens={max_tokens}, "
+            f"chunk_size={self.chunk_size_tokens}, chunk_overlap={self.chunk_overlap_tokens}"
+        )
+
+    def chunk_text(
+        self, text: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> List[DocumentChunk]:
         """
         使用快速策略分块文本
-        
+
         Args:
             text: 输入文本
             metadata: 可选的元数据
-            
+
         Returns:
             DocumentChunk对象列表
         """
         if metadata is None:
             metadata = {}
-        
+
         # 快速分割文本
         text_chunks = self._split_text_fast(text)
-        
+
         # 转换为DocumentChunk对象
         chunks = []
         for i, chunk_text in enumerate(text_chunks):
             chunk_metadata = metadata.copy()
-            chunk_metadata.update({
-                "chunk_index": i,
-                "chunking_strategy": "fast",
-                "estimated_tokens": len(chunk_text) / self.chars_per_token
-            })
+            chunk_metadata.update(
+                {
+                    "chunk_index": i,
+                    "chunking_strategy": "fast",
+                    "estimated_tokens": len(chunk_text) / self.chars_per_token,
+                }
+            )
             chunks.append(self._create_chunk(chunk_text, chunk_metadata))
-        
+
         logger.info(f"创建了 {len(chunks)} 个快速块")
         return chunks
-    
+
     def _split_text_fast(self, text: str) -> List[str]:
         """
         快速分割文本，基于 token 数量进行分割
@@ -158,34 +162,34 @@ class FastChunker(BaseChunker):
                 start = 0
 
         return [chunk for chunk in chunks if chunk.strip()]
-    
+
     def _find_split_point(self, text: str) -> int:
         """
         在文本中找到最佳分割点
-        
+
         Args:
             text: 要分析的文本
-            
+
         Returns:
             分割点位置，如果没有找到返回0
         """
         # 优先级分隔符列表（从后往前查找）
         separators = [
             "\n\n",  # 段落分隔符
-            "\n",    # 行分隔符
-            ". ",    # 英文句子分隔符
-            "。",    # 中文句子分隔符
-            "! ",    # 英文感叹句
-            "！",    # 中文感叹句
-            "? ",    # 英文疑问句
-            "？",    # 中文疑问句
-            "; ",    # 分号
-            "；",    # 中文分号
-            ", ",    # 逗号
-            "，",    # 中文逗号
-            " "      # 空格
+            "\n",  # 行分隔符
+            ". ",  # 英文句子分隔符
+            "。",  # 中文句子分隔符
+            "! ",  # 英文感叹句
+            "！",  # 中文感叹句
+            "? ",  # 英文疑问句
+            "？",  # 中文疑问句
+            "; ",  # 分号
+            "；",  # 中文分号
+            ", ",  # 逗号
+            "，",  # 中文逗号
+            " ",  # 空格
         ]
-        
+
         # 从文本末尾向前查找最佳分割点
         for separator in separators:
             # 在文本的后半部分查找分隔符
@@ -193,77 +197,82 @@ class FastChunker(BaseChunker):
             pos = text.rfind(separator, search_start)
             if pos != -1:
                 return pos + len(separator)
-        
+
         return 0
-    
+
     def get_token_estimate(self, text: str) -> int:
         """
         估算文本的 token 数量
-        
+
         Args:
             text: 要估算的文本
-            
+
         Returns:
             估算的 token 数量
         """
         return int(len(text) / self.chars_per_token)
-    
-    def adjust_for_token_limit(self, chunks: List[DocumentChunk], token_limit: int) -> List[DocumentChunk]:
+
+    def adjust_for_token_limit(
+        self, chunks: List[DocumentChunk], token_limit: int
+    ) -> List[DocumentChunk]:
         """
         根据 token 限制调整块
-        
+
         Args:
             chunks: 原始块列表
             token_limit: token 限制
-            
+
         Returns:
             调整后的块列表
         """
         adjusted_chunks = []
-        
+
         for chunk in chunks:
             estimated_tokens = self.get_token_estimate(chunk.content)
-            
+
             if estimated_tokens <= token_limit:
                 adjusted_chunks.append(chunk)
             else:
                 # 如果块太大，进一步分割
                 sub_chunks = self._split_large_chunk(chunk, token_limit)
                 adjusted_chunks.extend(sub_chunks)
-        
+
         return adjusted_chunks
-    
-    def _split_large_chunk(self, chunk: DocumentChunk, token_limit: int) -> List[DocumentChunk]:
+
+    def _split_large_chunk(
+        self, chunk: DocumentChunk, token_limit: int
+    ) -> List[DocumentChunk]:
         """
         分割过大的块
-        
+
         Args:
             chunk: 要分割的块
             token_limit: token 限制
-            
+
         Returns:
             分割后的块列表
         """
         max_chars = int(token_limit * self.chars_per_token)
-        
+
         if len(chunk.content) <= max_chars:
             return [chunk]
-        
+
         # 创建临时分块器
         temp_chunker = FastChunker(
-            max_tokens=token_limit,
-            chars_per_token=self.chars_per_token
+            max_tokens=token_limit, chars_per_token=self.chars_per_token
         )
-        
+
         # 分割内容
         sub_chunks = temp_chunker.chunk_text(chunk.content, chunk.metadata)
-        
+
         # 更新元数据
         for i, sub_chunk in enumerate(sub_chunks):
-            sub_chunk.metadata.update({
-                "parent_chunk_id": chunk.chunk_id,
-                "sub_chunk_index": i,
-                "is_sub_chunk": True
-            })
-        
+            sub_chunk.metadata.update(
+                {
+                    "parent_chunk_id": chunk.chunk_id,
+                    "sub_chunk_index": i,
+                    "is_sub_chunk": True,
+                }
+            )
+
         return sub_chunks

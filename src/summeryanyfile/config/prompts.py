@@ -7,12 +7,15 @@ from langchain_core.prompts import ChatPromptTemplate
 
 class PromptTemplates:
     """提示模板集合"""
-    
+
     @staticmethod
     def get_structure_analysis_prompt() -> ChatPromptTemplate:
         """文档结构分析提示"""
-        return ChatPromptTemplate([
-            ("human", """
+        return ChatPromptTemplate(
+            [
+                (
+                    "human",
+                    """
             ## 任务目标
             基于提供的文档内容，执行结构化信息提取，生成标准化的文档元数据。
              
@@ -79,14 +82,19 @@ class PromptTemplates:
             4. 数据类型是否与字段规范一致？
 
             请严格按照上述规范执行提取任务，确保输出结果的准确性和完整性。
-            """)
-        ])
-    
+            """,
+                )
+            ]
+        )
+
     @staticmethod
     def get_initial_outline_prompt() -> ChatPromptTemplate:
         """初始PPT框架生成提示"""
-        return ChatPromptTemplate([
-            ("human", """
+        return ChatPromptTemplate(
+            [
+                (
+                    "human",
+                    """
             ## 任务目标
             基于文档结构和内容，结合项目具体要求和目标受众，生成PPT演示文稿的初始框架大纲。
 
@@ -269,14 +277,19 @@ class PromptTemplates:
 
             ## 执行指令
             请严格按照上述规范和约束条件执行大纲生成任务，确保输出结果的准确性、完整性和规范性。
-            """)
-        ])
-    
+            """,
+                )
+            ]
+        )
+
     @staticmethod
     def get_refine_outline_prompt() -> ChatPromptTemplate:
         """内容细化提示"""
-        return ChatPromptTemplate([
-            ("human", """
+        return ChatPromptTemplate(
+            [
+                (
+                    "human",
+                    """
             ## 任务目标
             基于现有PPT大纲和新增文档内容，结合项目要求和目标受众，执行大纲细化和扩展操作。
 
@@ -401,14 +414,19 @@ class PromptTemplates:
 
             ## 执行指令
             请严格按照上述规范和约束条件执行大纲细化任务，确保输出结果的准确性、完整性和规范性。
-            """)
-        ])
-    
+            """,
+                )
+            ]
+        )
+
     @staticmethod
     def get_finalize_outline_prompt() -> ChatPromptTemplate:
         """最终优化提示"""
-        return ChatPromptTemplate([
-            ("human", """
+        return ChatPromptTemplate(
+            [
+                (
+                    "human",
+                    """
             ## 任务目标
             对PPT大纲执行最终优化处理，结合项目要求和目标受众，确保输出质量达到发布标准。
 
@@ -550,19 +568,24 @@ class PromptTemplates:
 
             ## 执行指令
             请严格按照上述规范和约束条件执行最终优化任务，确保输出结果达到发布质量标准。
-            """)
-        ])
-    
+            """,
+                )
+            ]
+        )
+
     @staticmethod
     def get_custom_prompt(template: str) -> ChatPromptTemplate:
         """自定义提示模板"""
         return ChatPromptTemplate([("human", template)])
-    
+
     @staticmethod
     def get_error_recovery_prompt() -> ChatPromptTemplate:
         """错误恢复提示"""
-        return ChatPromptTemplate([
-            ("human", """
+        return ChatPromptTemplate(
+            [
+                (
+                    "human",
+                    """
             ## 任务目标
             执行错误恢复操作，基于文档内容摘要，结合项目要求和目标受众，生成基础PPT大纲。
 
@@ -652,9 +675,11 @@ class PromptTemplates:
 
             ## 执行指令
             请严格按照上述规范执行错误恢复任务，生成可靠的基础PPT大纲。
-            """)
-        ])
-    
+            """,
+                )
+            ]
+        )
+
     @classmethod
     def get_all_prompts(cls) -> dict:
         """获取所有提示模板"""

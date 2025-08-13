@@ -3,12 +3,12 @@ PPT内容生成和增强相关提示词
 包含所有用于生成和优化PPT内容的提示词模板
 """
 
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 
 class ContentPrompts:
     """PPT内容生成和增强相关的提示词集合"""
-    
+
     @staticmethod
     def get_slide_content_prompt_zh(slide_title: str, scenario: str, topic: str) -> str:
         """获取中文幻灯片内容生成提示词"""
@@ -88,12 +88,18 @@ Enhancement requirements:
 Please output the enhanced content:"""
 
     @staticmethod
-    def get_ppt_creation_context(topic: str, stage_type: str, focus_content: List[str],
-                               tech_highlights: List[str], target_audience: str, description: str) -> str:
+    def get_ppt_creation_context(
+        topic: str,
+        stage_type: str,
+        focus_content: List[str],
+        tech_highlights: List[str],
+        target_audience: str,
+        description: str,
+    ) -> str:
         """获取PPT创建上下文提示词"""
-        focus_content_str = ', '.join(focus_content) if focus_content else '无'
-        tech_highlights_str = ', '.join(tech_highlights) if tech_highlights else '无'
-        
+        focus_content_str = ", ".join(focus_content) if focus_content else "无"
+        tech_highlights_str = ", ".join(tech_highlights) if tech_highlights else "无"
+
         return f"""请为以下项目生成PPT页面：
 
 项目信息：
@@ -119,13 +125,19 @@ Please output the enhanced content:"""
 请根据以上信息完成当前阶段的任务。"""
 
     @staticmethod
-    def get_general_subtask_context(topic: str, stage_type: str, focus_content: List[str],
-                                  tech_highlights: List[str], target_audience: str, 
-                                  description: str, subtask: str) -> str:
+    def get_general_subtask_context(
+        topic: str,
+        stage_type: str,
+        focus_content: List[str],
+        tech_highlights: List[str],
+        target_audience: str,
+        description: str,
+        subtask: str,
+    ) -> str:
         """获取通用子任务上下文提示词"""
-        focus_content_str = ', '.join(focus_content) if focus_content else '无'
-        tech_highlights_str = ', '.join(tech_highlights) if tech_highlights else '无'
-        
+        focus_content_str = ", ".join(focus_content) if focus_content else "无"
+        tech_highlights_str = ", ".join(tech_highlights) if tech_highlights else "无"
+
         return f"""项目信息：
 - 主题：{topic}
 - 类型：{stage_type}
@@ -139,7 +151,9 @@ Please output the enhanced content:"""
 请根据以上信息完成当前子任务。"""
 
     @staticmethod
-    def get_general_subtask_prompt(confirmed_requirements: Dict[str, Any], stage_name: str, subtask: str) -> str:
+    def get_general_subtask_prompt(
+        confirmed_requirements: Dict[str, Any], stage_name: str, subtask: str
+    ) -> str:
         """获取通用子任务提示词"""
         return f"""项目信息：
 - 主题：{confirmed_requirements['topic']}

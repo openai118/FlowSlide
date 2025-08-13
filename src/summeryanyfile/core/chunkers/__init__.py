@@ -3,11 +3,11 @@
 """
 
 from .base_chunker import BaseChunker, DocumentChunk
-from .semantic_chunker import SemanticChunker
-from .recursive_chunker import RecursiveChunker
-from .paragraph_chunker import ParagraphChunker
-from .hybrid_chunker import HybridChunker
 from .fast_chunker import FastChunker
+from .hybrid_chunker import HybridChunker
+from .paragraph_chunker import ParagraphChunker
+from .recursive_chunker import RecursiveChunker
+from .semantic_chunker import SemanticChunker
 
 __all__ = [
     "BaseChunker",
@@ -16,5 +16,5 @@ __all__ = [
     "RecursiveChunker",
     "ParagraphChunker",
     "HybridChunker",
-    "FastChunker"
+    "FastChunker",
 ]

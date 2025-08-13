@@ -4,8 +4,8 @@
 
 import os
 from dataclasses import dataclass
-from typing import List, Dict, Any, Literal, TypedDict, Optional
 from enum import Enum
+from typing import Any, Dict, List, Literal, Optional, TypedDict
 
 
 def _get_default_max_tokens() -> int:
@@ -48,16 +48,18 @@ def _get_default_temperature() -> float:
 
 class ChunkStrategy(Enum):
     """文档分块策略"""
+
     PARAGRAPH = "paragraph"  # 基于段落分块
-    SEMANTIC = "semantic"    # 语义分块
+    SEMANTIC = "semantic"  # 语义分块
     RECURSIVE = "recursive"  # 递归分块
-    HYBRID = "hybrid"        # 混合策略
-    FAST = "fast"            # 快速分块策略
+    HYBRID = "hybrid"  # 混合策略
+    FAST = "fast"  # 快速分块策略
 
 
 @dataclass
 class SlideInfo:
     """幻灯片信息数据类"""
+
     page_number: int
     title: str
     content_points: List[str]
@@ -96,6 +98,7 @@ class SlideInfo:
 
 class PPTState(TypedDict):
     """PPT生成状态"""
+
     document_chunks: List[str]
     current_index: int
     ppt_title: str
@@ -121,13 +124,14 @@ class PPTState(TypedDict):
 @dataclass
 class DocumentInfo:
     """文档信息"""
+
     title: str
     content: str
     file_path: str
     file_type: str
     encoding: str
     size: int
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
         return {
@@ -143,6 +147,7 @@ class DocumentInfo:
 @dataclass
 class ProcessingConfig:
     """处理配置"""
+
     max_slides: int = 25
     min_slides: int = 5  # 新增：最小页数
     chunk_size: int = 3000
@@ -167,7 +172,9 @@ class ProcessingConfig:
 
         # 验证逻辑
         if self.min_slides > self.max_slides:
-            raise ValueError(f"最小页数({self.min_slides})不能大于最大页数({self.max_slides})")
+            raise ValueError(
+                f"最小页数({self.min_slides})不能大于最大页数({self.max_slides})"
+            )
         if self.min_slides < 1:
             raise ValueError("最小页数不能小于1")
         if self.max_slides > 1000:
@@ -175,15 +182,13 @@ class ProcessingConfig:
         if self.recursion_limit is not None and self.recursion_limit < 10:
             raise ValueError("递归限制不能小于10")
 
-
-
     @property
     def slides_range(self) -> str:
         """获取页数范围的字符串表示"""
         if self.min_slides == self.max_slides:
             return f"{self.min_slides}页"
         return f"{self.min_slides}-{self.max_slides}页"
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
         return {
@@ -205,11 +210,12 @@ class ProcessingConfig:
 @dataclass
 class PPTOutline:
     """PPT大纲结果"""
+
     title: str
     total_pages: int
     page_count_mode: str
     slides: List[SlideInfo]
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
         return {
@@ -218,11 +224,13 @@ class PPTOutline:
             "page_count_mode": self.page_count_mode,
             "slides": [slide.to_dict() for slide in self.slides],
         }
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PPTOutline":
         """从字典创建实例"""
-        slides = [SlideInfo.from_dict(slide_data) for slide_data in data.get("slides", [])]
+        slides = [
+            SlideInfo.from_dict(slide_data) for slide_data in data.get("slides", [])
+        ]
         return cls(
             title=data.get("title", ""),
             total_pages=data.get("total_pages", 0),

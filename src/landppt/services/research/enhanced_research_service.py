@@ -8,17 +8,18 @@ extraction and analysis using LangChain and BeautifulSoup for comprehensive rese
 import asyncio
 import logging
 import time
-from datetime import datetime
-from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Union
 
 from langchain.schema import Document
 
-from ...ai import get_ai_provider, AIMessage, MessageRole
+from ...ai import AIMessage, MessageRole, get_ai_provider
 from ...core.config import ai_config
-from ..deep_research_service import DEEPResearchService, ResearchReport, ResearchStep
+from ..deep_research_service import (DEEPResearchService, ResearchReport,
+                                     ResearchStep)
+from .content_extractor import ExtractedContent, WebContentExtractor
 from .searxng_provider import SearXNGContentProvider, SearXNGSearchResponse
-from .content_extractor import WebContentExtractor, ExtractedContent
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class EnhancedResearchStep:
     """Enhanced research step with multiple data sources"""
+
     step_number: int
     query: str
     description: str
@@ -40,6 +42,7 @@ class EnhancedResearchStep:
 @dataclass
 class EnhancedResearchReport:
     """Enhanced research report with comprehensive data"""
+
     topic: str
     language: str
     steps: List[EnhancedResearchStep]
@@ -55,48 +58,51 @@ class EnhancedResearchReport:
 
 class EnhancedResearchService:
     """Enhanced research service with multiple providers and deep content analysis"""
-    
+
     def __init__(self):
         self.deep_research_service = DEEPResearchService()
         self.searxng_provider = SearXNGContentProvider()
         self.content_extractor = WebContentExtractor()
-        
+
         # Text processing - 使用基于 max_tokens 的简单快速分块策略
         try:
             # 尝试导入 FastChunker
-            import sys
             import os
-            sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+            import sys
+
+            sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
             from summeryanyfile.core.chunkers.fast_chunker import FastChunker
 
             self.text_splitter = FastChunker(max_tokens=ai_config.max_tokens)
-            logger.info(f"使用 FastChunker 进行文本分块，max_tokens={ai_config.max_tokens}")
+            logger.info(
+                f"使用 FastChunker 进行文本分块，max_tokens={ai_config.max_tokens}"
+            )
         except ImportError as e:
             logger.warning(f"无法导入 FastChunker，使用简单分块策略: {e}")
             # 回退到简单的分块策略
             self.text_splitter = None
-        
+
     @property
     def ai_provider(self):
         """Get AI provider"""
         return get_ai_provider()
-    
+
     def is_available(self) -> bool:
         """Check if enhanced research service is available"""
         # At least one search provider must be available
         tavily_available = self.deep_research_service.is_available()
         searxng_available = self.searxng_provider.is_available()
         ai_available = self.ai_provider is not None
-        
+
         return ai_available and (tavily_available or searxng_available)
-    
+
     def get_available_providers(self) -> List[str]:
         """Get list of available search providers"""
         providers = []
         if self.deep_research_service.is_available():
-            providers.append('tavily')
+            providers.append("tavily")
         if self.searxng_provider.is_available():
-            providers.append('searxng')
+            providers.append("searxng")
         return providers
 
     def split_text(self, text: str) -> List[str]:
@@ -186,7 +192,21 @@ class EnhancedResearchService:
             分割点位置，如果没有找到返回0
         """
         # 分隔符优先级列表
-        separators = ["\n\n", "\n", ". ", "。", "! ", "！", "? ", "？", "; ", "；", ", ", "，", " "]
+        separators = [
+            "\n\n",
+            "\n",
+            ". ",
+            "。",
+            "! ",
+            "！",
+            "? ",
+            "？",
+            "; ",
+            "；",
+            ", ",
+            "，",
+            " ",
+        ]
 
         # 从文本后半部分开始查找
         search_start = len(text) // 2
@@ -196,8 +216,10 @@ class EnhancedResearchService:
                 return pos + len(separator)
 
         return 0
-    
-    async def conduct_enhanced_research(self, topic: str, language: str = "zh", context: Optional[Dict[str, Any]] = None) -> EnhancedResearchReport:
+
+    async def conduct_enhanced_research(
+        self, topic: str, language: str = "zh", context: Optional[Dict[str, Any]] = None
+    ) -> EnhancedResearchReport:
         """
         Conduct comprehensive enhanced research with multiple providers
 
@@ -218,7 +240,7 @@ class EnhancedResearchService:
 
             # Step 2: Execute research steps with multiple providers
             research_steps = []
-            provider_stats = {'tavily': 0, 'searxng': 0, 'content_extraction': 0}
+            provider_stats = {"tavily": 0, "searxng": 0, "content_extraction": 0}
 
             for i, step_plan in enumerate(research_plan, 1):
                 step = await self._execute_enhanced_research_step(
@@ -231,30 +253,42 @@ class EnhancedResearchService:
                     await asyncio.sleep(1)
 
             # Step 3: Analyze all collected content
-            content_analysis = await self._analyze_collected_content(research_steps, topic, language)
+            content_analysis = await self._analyze_collected_content(
+                research_steps, topic, language
+            )
 
             # Step 4: Generate comprehensive report
             report = await self._generate_enhanced_report(
-                topic, language, research_steps, content_analysis,
-                time.time() - start_time, provider_stats
+                topic,
+                language,
+                research_steps,
+                content_analysis,
+                time.time() - start_time,
+                provider_stats,
             )
 
-            logger.info(f"Enhanced research completed in {report.total_duration:.2f} seconds")
+            logger.info(
+                f"Enhanced research completed in {report.total_duration:.2f} seconds"
+            )
             return report
 
         except Exception as e:
             logger.error(f"Enhanced research failed: {e}")
             raise
-    
-    async def _generate_research_plan(self, topic: str, language: str, context: Optional[Dict[str, Any]] = None) -> List[Dict[str, str]]:
+
+    async def _generate_research_plan(
+        self, topic: str, language: str, context: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, str]]:
         """Generate research plan using AI with context information"""
 
         # Extract context information
-        scenario = context.get('scenario', '通用') if context else '通用'
-        target_audience = context.get('target_audience', '普通大众') if context else '普通大众'
-        requirements = context.get('requirements', '') if context else ''
-        ppt_style = context.get('ppt_style', 'general') if context else 'general'
-        description = context.get('description', '') if context else ''
+        scenario = context.get("scenario", "通用") if context else "通用"
+        target_audience = (
+            context.get("target_audience", "普通大众") if context else "普通大众"
+        )
+        requirements = context.get("requirements", "") if context else ""
+        ppt_style = context.get("ppt_style", "general") if context else "general"
+        description = context.get("description", "") if context else ""
 
         # Build context description
         context_info = f"""
@@ -298,21 +332,23 @@ class EnhancedResearchService:
 - 每个查询都应该能产生独特且有价值的信息
 - 确保研究内容与项目需求高度匹配
 """
-        
+
         try:
             response = await self.ai_provider.text_completion(
                 prompt=prompt,
                 max_tokens=min(ai_config.max_tokens, 2000),
-                temperature=0.7
+                temperature=0.7,
             )
             # Extract text content from AIResponse object
-            response_text = response.content if hasattr(response, 'content') else str(response)
-            
+            response_text = (
+                response.content if hasattr(response, "content") else str(response)
+            )
+
             # Extract JSON from response
             import json
             import re
 
-            json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
+            json_match = re.search(r"```json\s*(.*?)\s*```", response_text, re.DOTALL)
             if json_match:
                 plan_data = json.loads(json_match.group(1))
                 if isinstance(plan_data, list) and len(plan_data) > 0:
@@ -325,59 +361,76 @@ class EnhancedResearchService:
                     return plan_data
             except:
                 pass
-                
+
         except Exception as e:
             logger.error(f"Failed to generate AI research plan: {e}")
-            raise Exception(f"Unable to generate research plan for topic '{topic}': {e}")
-    
-    async def _execute_enhanced_research_step(self, step_number: int, step_plan: Dict[str, str],
-                                            topic: str, language: str, 
-                                            provider_stats: Dict[str, int]) -> EnhancedResearchStep:
+            raise Exception(
+                f"Unable to generate research plan for topic '{topic}': {e}"
+            )
+
+    async def _execute_enhanced_research_step(
+        self,
+        step_number: int,
+        step_plan: Dict[str, str],
+        topic: str,
+        language: str,
+        provider_stats: Dict[str, int],
+    ) -> EnhancedResearchStep:
         """Execute a single enhanced research step with multiple providers"""
         step_start_time = time.time()
-        logger.info(f"Executing enhanced research step {step_number}: {step_plan['query']}")
-        
+        logger.info(
+            f"Executing enhanced research step {step_number}: {step_plan['query']}"
+        )
+
         step = EnhancedResearchStep(
             step_number=step_number,
-            query=step_plan['query'],
-            description=step_plan['description']
+            query=step_plan["query"],
+            description=step_plan["description"],
         )
-        
+
         # Determine which providers to use based on configuration
-        use_tavily = ai_config.research_provider in ['tavily', 'both'] and self.deep_research_service.is_available()
-        use_searxng = ai_config.research_provider in ['searxng', 'both'] and self.searxng_provider.is_available()
-        
+        use_tavily = (
+            ai_config.research_provider in ["tavily", "both"]
+            and self.deep_research_service.is_available()
+        )
+        use_searxng = (
+            ai_config.research_provider in ["searxng", "both"]
+            and self.searxng_provider.is_available()
+        )
+
         # Execute searches with available providers
         search_tasks = []
-        
+
         if use_tavily:
-            search_tasks.append(self._search_with_tavily(step_plan['query'], language))
-        
+            search_tasks.append(self._search_with_tavily(step_plan["query"], language))
+
         if use_searxng:
-            search_tasks.append(self._search_with_searxng(step_plan['query'], language))
-        
+            search_tasks.append(self._search_with_searxng(step_plan["query"], language))
+
         # Execute searches concurrently
         search_results = await asyncio.gather(*search_tasks, return_exceptions=True)
-        
+
         # Process search results
         tavily_results = None
         searxng_results = None
-        
+
         result_index = 0
         if use_tavily:
             if not isinstance(search_results[result_index], Exception):
                 tavily_results = search_results[result_index]
-                provider_stats['tavily'] += 1
+                provider_stats["tavily"] += 1
             result_index += 1
-        
+
         if use_searxng:
-            if result_index < len(search_results) and not isinstance(search_results[result_index], Exception):
+            if result_index < len(search_results) and not isinstance(
+                search_results[result_index], Exception
+            ):
                 searxng_results = search_results[result_index]
-                provider_stats['searxng'] += 1
-        
+                provider_stats["searxng"] += 1
+
         step.tavily_results = tavily_results
         step.searxng_results = searxng_results
-        
+
         # Extract content from URLs if enabled
         if ai_config.research_enable_content_extraction:
             urls = self._collect_urls_from_results(tavily_results, searxng_results)
@@ -385,17 +438,23 @@ class EnhancedResearchService:
                 step.extracted_content = await self.content_extractor.extract_multiple(
                     urls[:10], max_concurrent=3  # Limit to top 10 URLs
                 )
-                provider_stats['content_extraction'] += len(step.extracted_content or [])
-        
+                provider_stats["content_extraction"] += len(
+                    step.extracted_content or []
+                )
+
         # Analyze collected data
         step.analysis = await self._analyze_step_data(step, topic, language)
         step.completed = True
         step.duration = time.time() - step_start_time
-        
-        logger.info(f"Completed enhanced research step {step_number} in {step.duration:.2f}s")
+
+        logger.info(
+            f"Completed enhanced research step {step_number} in {step.duration:.2f}s"
+        )
         return step
 
-    async def _search_with_tavily(self, query: str, language: str) -> Optional[List[Dict[str, Any]]]:
+    async def _search_with_tavily(
+        self, query: str, language: str
+    ) -> Optional[List[Dict[str, Any]]]:
         """Search using Tavily provider"""
         try:
             return await self.deep_research_service._tavily_search(query, language)
@@ -403,7 +462,9 @@ class EnhancedResearchService:
             logger.warning(f"Tavily search failed: {e}")
             return None
 
-    async def _search_with_searxng(self, query: str, language: str) -> Optional[SearXNGSearchResponse]:
+    async def _search_with_searxng(
+        self, query: str, language: str
+    ) -> Optional[SearXNGSearchResponse]:
         """Search using SearXNG provider"""
         try:
             return await self.searxng_provider.search(query, language)
@@ -411,15 +472,18 @@ class EnhancedResearchService:
             logger.warning(f"SearXNG search failed: {e}")
             return None
 
-    def _collect_urls_from_results(self, tavily_results: Optional[List[Dict[str, Any]]],
-                                 searxng_results: Optional[SearXNGSearchResponse]) -> List[str]:
+    def _collect_urls_from_results(
+        self,
+        tavily_results: Optional[List[Dict[str, Any]]],
+        searxng_results: Optional[SearXNGSearchResponse],
+    ) -> List[str]:
         """Collect URLs from all search results"""
         urls = []
 
         # Collect from Tavily results
         if tavily_results:
             for result in tavily_results:
-                url = result.get('url')
+                url = result.get("url")
                 if url and url not in urls:
                     urls.append(url)
 
@@ -431,7 +495,9 @@ class EnhancedResearchService:
 
         return urls
 
-    async def _analyze_step_data(self, step: EnhancedResearchStep, topic: str, language: str) -> str:
+    async def _analyze_step_data(
+        self, step: EnhancedResearchStep, topic: str, language: str
+    ) -> str:
         """Analyze data collected in a research step"""
 
         # Prepare content for analysis
@@ -443,7 +509,9 @@ class EnhancedResearchService:
             for i, result in enumerate(step.tavily_results[:5], 1):
                 content_parts.append(f"{i}. {result.get('title', 'No title')}")
                 content_parts.append(f"   URL: {result.get('url', 'No URL')}")
-                content_parts.append(f"   内容: {result.get('content', 'No content')[:300]}...")
+                content_parts.append(
+                    f"   内容: {result.get('content', 'No content')[:300]}..."
+                )
                 content_parts.append("")
 
         # Add SearXNG results
@@ -494,42 +562,47 @@ class EnhancedResearchService:
             analysis_response = await self.ai_provider.text_completion(
                 prompt=analysis_prompt,
                 max_tokens=min(ai_config.max_tokens, 1000),
-                temperature=0.3
+                temperature=0.3,
             )
             # Extract text content from AIResponse object
-            analysis = analysis_response.content if hasattr(analysis_response, 'content') else str(analysis_response)
+            analysis = (
+                analysis_response.content
+                if hasattr(analysis_response, "content")
+                else str(analysis_response)
+            )
             return analysis
         except Exception as e:
             logger.warning(f"Failed to generate step analysis: {e}")
             return f"分析步骤 {step.step_number}: {step.description}\n查询: {step.query}\n收集到相关信息，等待进一步分析。"
 
-    async def _analyze_collected_content(self, steps: List[EnhancedResearchStep],
-                                       topic: str, language: str) -> Dict[str, Any]:
+    async def _analyze_collected_content(
+        self, steps: List[EnhancedResearchStep], topic: str, language: str
+    ) -> Dict[str, Any]:
         """Analyze all collected content for patterns and insights"""
 
         # Collect all content
         all_content = []
         total_sources = 0
         content_stats = {
-            'tavily_results': 0,
-            'searxng_results': 0,
-            'extracted_pages': 0,
-            'total_words': 0
+            "tavily_results": 0,
+            "searxng_results": 0,
+            "extracted_pages": 0,
+            "total_words": 0,
         }
 
         for step in steps:
             if step.tavily_results:
-                content_stats['tavily_results'] += len(step.tavily_results)
+                content_stats["tavily_results"] += len(step.tavily_results)
                 total_sources += len(step.tavily_results)
 
             if step.searxng_results:
-                content_stats['searxng_results'] += len(step.searxng_results.results)
+                content_stats["searxng_results"] += len(step.searxng_results.results)
                 total_sources += len(step.searxng_results.results)
 
             if step.extracted_content:
-                content_stats['extracted_pages'] += len(step.extracted_content)
+                content_stats["extracted_pages"] += len(step.extracted_content)
                 for content in step.extracted_content:
-                    content_stats['total_words'] += content.word_count
+                    content_stats["total_words"] += content.word_count
 
             all_content.append(step.analysis)
 
@@ -563,31 +636,43 @@ class EnhancedResearchService:
             comprehensive_analysis_response = await self.ai_provider.text_completion(
                 prompt=analysis_prompt,
                 max_tokens=min(ai_config.max_tokens, 1500),
-                temperature=0.3
+                temperature=0.3,
             )
             # Extract text content from AIResponse object
-            comprehensive_analysis = comprehensive_analysis_response.content if hasattr(comprehensive_analysis_response, 'content') else str(comprehensive_analysis_response)
+            comprehensive_analysis = (
+                comprehensive_analysis_response.content
+                if hasattr(comprehensive_analysis_response, "content")
+                else str(comprehensive_analysis_response)
+            )
 
             return {
-                'comprehensive_analysis': comprehensive_analysis,
-                'content_stats': content_stats,
-                'total_sources': total_sources,
-                'analysis_quality': 'high' if total_sources >= 20 else 'medium' if total_sources >= 10 else 'basic'
+                "comprehensive_analysis": comprehensive_analysis,
+                "content_stats": content_stats,
+                "total_sources": total_sources,
+                "analysis_quality": (
+                    "high"
+                    if total_sources >= 20
+                    else "medium" if total_sources >= 10 else "basic"
+                ),
             }
         except Exception as e:
             logger.warning(f"Failed to generate comprehensive analysis: {e}")
             return {
-                'comprehensive_analysis': f"收集了来自{total_sources}个来源的信息，等待进一步分析。",
-                'content_stats': content_stats,
-                'total_sources': total_sources,
-                'analysis_quality': 'basic'
+                "comprehensive_analysis": f"收集了来自{total_sources}个来源的信息，等待进一步分析。",
+                "content_stats": content_stats,
+                "total_sources": total_sources,
+                "analysis_quality": "basic",
             }
 
-    async def _generate_enhanced_report(self, topic: str, language: str,
-                                      steps: List[EnhancedResearchStep],
-                                      content_analysis: Dict[str, Any],
-                                      duration: float,
-                                      provider_stats: Dict[str, Any]) -> EnhancedResearchReport:
+    async def _generate_enhanced_report(
+        self,
+        topic: str,
+        language: str,
+        steps: List[EnhancedResearchStep],
+        content_analysis: Dict[str, Any],
+        duration: float,
+        provider_stats: Dict[str, Any],
+    ) -> EnhancedResearchReport:
         """Generate comprehensive enhanced research report"""
 
         # Collect all findings
@@ -600,7 +685,7 @@ class EnhancedResearchService:
             # Collect sources
             if step.tavily_results:
                 for result in step.tavily_results:
-                    url = result.get('url')
+                    url = result.get("url")
                     if url and url not in all_sources:
                         all_sources.append(url)
 
@@ -636,10 +721,14 @@ class EnhancedResearchService:
             executive_summary_response = await self.ai_provider.text_completion(
                 prompt=summary_prompt,
                 max_tokens=min(ai_config.max_tokens, 1200),
-                temperature=0.3
+                temperature=0.3,
             )
             # Extract text content from AIResponse object
-            executive_summary = executive_summary_response.content if hasattr(executive_summary_response, 'content') else str(executive_summary_response)
+            executive_summary = (
+                executive_summary_response.content
+                if hasattr(executive_summary_response, "content")
+                else str(executive_summary_response)
+            )
         except Exception as e:
             logger.warning(f"Failed to generate executive summary: {e}")
             executive_summary = f"针对主题'{topic}'的综合研究报告，包含{len(steps)}个研究步骤的深入分析。"
@@ -655,24 +744,24 @@ class EnhancedResearchService:
             content_analysis=content_analysis,
             created_at=datetime.now(),
             total_duration=duration,
-            provider_stats=provider_stats
+            provider_stats=provider_stats,
         )
 
     def get_status(self) -> Dict[str, Any]:
         """Get enhanced research service status"""
         return {
-            'service': 'enhanced_research',
-            'available': self.is_available(),
-            'providers': {
-                'tavily': self.deep_research_service.is_available(),
-                'searxng': self.searxng_provider.is_available(),
-                'content_extraction': ai_config.research_enable_content_extraction
+            "service": "enhanced_research",
+            "available": self.is_available(),
+            "providers": {
+                "tavily": self.deep_research_service.is_available(),
+                "searxng": self.searxng_provider.is_available(),
+                "content_extraction": ai_config.research_enable_content_extraction,
             },
-            'configuration': {
-                'research_provider': ai_config.research_provider,
-                'enable_content_extraction': ai_config.research_enable_content_extraction,
-                'max_content_length': ai_config.research_max_content_length,
-                'extraction_timeout': ai_config.research_extraction_timeout
+            "configuration": {
+                "research_provider": ai_config.research_provider,
+                "enable_content_extraction": ai_config.research_enable_content_extraction,
+                "max_content_length": ai_config.research_max_content_length,
+                "extraction_timeout": ai_config.research_extraction_timeout,
             },
-            'ai_provider': ai_config.default_ai_provider
+            "ai_provider": ai_config.default_ai_provider,
         }

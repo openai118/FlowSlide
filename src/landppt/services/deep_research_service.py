@@ -6,20 +6,23 @@ import asyncio
 import json
 import logging
 import time
-from datetime import datetime
-from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 from tavily import TavilyClient
-from ..core.config import ai_config
+
 from ..ai import get_ai_provider
+from ..core.config import ai_config
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class ResearchStep:
     """Represents a single research step"""
+
     step_number: int
     query: str
     description: str
@@ -27,9 +30,11 @@ class ResearchStep:
     analysis: str
     completed: bool = False
 
+
 @dataclass
 class ResearchReport:
     """Complete research report"""
+
     topic: str
     language: str
     steps: List[ResearchStep]
@@ -40,15 +45,16 @@ class ResearchReport:
     created_at: datetime
     total_duration: float
 
+
 class DEEPResearchService:
     """
     DEEP Research Service implementing comprehensive research methodology:
     D - Define research objectives
-    E - Explore multiple perspectives  
+    E - Explore multiple perspectives
     E - Evaluate sources and evidence
     P - Present comprehensive findings
     """
-    
+
     def __init__(self):
         self.tavily_client = None
         self._initialize_tavily_client()
@@ -57,7 +63,9 @@ class DEEPResearchService:
         """Initialize Tavily client"""
         try:
             current_api_key = ai_config.tavily_api_key
-            logger.info(f"Initializing Tavily client with API key: {'***' + current_api_key[-4:] if current_api_key and len(current_api_key) > 4 else 'None'}")
+            logger.info(
+                f"Initializing Tavily client with API key: {'***' + current_api_key[-4:] if current_api_key and len(current_api_key) > 4 else 'None'}"
+            )
 
             if current_api_key:
                 self.tavily_client = TavilyClient(api_key=current_api_key)
@@ -76,14 +84,18 @@ class DEEPResearchService:
         self.tavily_client = None
         # Reinitialize with new config
         self._initialize_tavily_client()
-        logger.info(f"Research service reload completed. Available: {self.is_available()}")
+        logger.info(
+            f"Research service reload completed. Available: {self.is_available()}"
+        )
 
     @property
     def ai_provider(self):
         """Dynamically get AI provider to ensure latest config"""
         return get_ai_provider()
-    
-    async def conduct_deep_research(self, topic: str, language: str = "zh", context: Optional[Dict[str, Any]] = None) -> ResearchReport:
+
+    async def conduct_deep_research(
+        self, topic: str, language: str = "zh", context: Optional[Dict[str, Any]] = None
+    ) -> ResearchReport:
         """
         Conduct comprehensive DEEP research on a given topic
 
@@ -100,7 +112,9 @@ class DEEPResearchService:
 
         try:
             # Step 1: Define research objectives and generate research plan with context
-            research_plan = await self._define_research_objectives(topic, language, context)
+            research_plan = await self._define_research_objectives(
+                topic, language, context
+            )
 
             # Step 2: Execute research steps
             research_steps = []
@@ -117,22 +131,28 @@ class DEEPResearchService:
                 topic, language, research_steps, time.time() - start_time
             )
 
-            logger.info(f"DEEP research completed in {report.total_duration:.2f} seconds")
+            logger.info(
+                f"DEEP research completed in {report.total_duration:.2f} seconds"
+            )
             return report
 
         except Exception as e:
             logger.error(f"DEEP research failed: {e}")
             raise
-    
-    async def _define_research_objectives(self, topic: str, language: str, context: Optional[Dict[str, Any]] = None) -> List[Dict[str, str]]:
+
+    async def _define_research_objectives(
+        self, topic: str, language: str, context: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, str]]:
         """Define research objectives and create research plan with context"""
 
         # Extract context information
-        scenario = context.get('scenario', '通用') if context else '通用'
-        target_audience = context.get('target_audience', '普通大众') if context else '普通大众'
-        requirements = context.get('requirements', '') if context else ''
-        ppt_style = context.get('ppt_style', 'general') if context else 'general'
-        description = context.get('description', '') if context else ''
+        scenario = context.get("scenario", "通用") if context else "通用"
+        target_audience = (
+            context.get("target_audience", "普通大众") if context else "普通大众"
+        )
+        requirements = context.get("requirements", "") if context else ""
+        ppt_style = context.get("ppt_style", "general") if context else "general"
+        description = context.get("description", "") if context else ""
 
         # Build context description
         context_info = f"""
@@ -186,64 +206,91 @@ class DEEPResearchService:
             response = await self.ai_provider.text_completion(
                 prompt=prompt,
                 max_tokens=min(ai_config.max_tokens, 1500),
-                temperature=0.3  # Lower temperature for structured planning
+                temperature=0.3,  # Lower temperature for structured planning
             )
-            
+
             # Extract JSON from response
             content = response.content.strip()
-            json_start = content.find('[')
-            json_end = content.rfind(']') + 1
-            
+            json_start = content.find("[")
+            json_end = content.rfind("]") + 1
+
             if json_start >= 0 and json_end > json_start:
                 json_str = content[json_start:json_end]
                 research_plan = json.loads(json_str)
-                
+
                 # Validate plan structure
                 if isinstance(research_plan, list) and len(research_plan) > 0:
                     for step in research_plan:
-                        if not isinstance(step, dict) or 'query' not in step or 'description' not in step:
+                        if (
+                            not isinstance(step, dict)
+                            or "query" not in step
+                            or "description" not in step
+                        ):
                             raise ValueError("Invalid research plan structure")
-                    
-                    logger.info(f"Generated research plan with {len(research_plan)} steps")
+
+                    logger.info(
+                        f"Generated research plan with {len(research_plan)} steps"
+                    )
                     return research_plan
-            
+
             raise ValueError("Failed to parse research plan JSON")
-            
+
         except Exception as e:
             logger.error(f"Failed to generate AI research plan: {e}")
-            raise Exception(f"Unable to generate research plan for topic '{topic}': {e}")
-
+            raise Exception(
+                f"Unable to generate research plan for topic '{topic}': {e}"
+            )
 
         else:
             return [
-                {"query": f"{topic} definition concepts overview", "description": "Understanding basic concepts and definitions"},
-                {"query": f"{topic} current status trends 2024", "description": "Analyzing current status and latest trends"},
-                {"query": f"{topic} case studies practical applications", "description": "Collecting real cases and practical applications"},
-                {"query": f"{topic} expert opinions research reports", "description": "Gathering expert opinions and authoritative research"},
-                {"query": f"{topic} future development predictions", "description": "Exploring future directions and predictions"}
+                {
+                    "query": f"{topic} definition concepts overview",
+                    "description": "Understanding basic concepts and definitions",
+                },
+                {
+                    "query": f"{topic} current status trends 2024",
+                    "description": "Analyzing current status and latest trends",
+                },
+                {
+                    "query": f"{topic} case studies practical applications",
+                    "description": "Collecting real cases and practical applications",
+                },
+                {
+                    "query": f"{topic} expert opinions research reports",
+                    "description": "Gathering expert opinions and authoritative research",
+                },
+                {
+                    "query": f"{topic} future development predictions",
+                    "description": "Exploring future directions and predictions",
+                },
             ]
 
-    async def _execute_research_step(self, step_number: int, step_plan: Dict[str, str],
-                                   topic: str, language: str) -> ResearchStep:
+    async def _execute_research_step(
+        self, step_number: int, step_plan: Dict[str, str], topic: str, language: str
+    ) -> ResearchStep:
         """Execute a single research step"""
         logger.info(f"Executing research step {step_number}: {step_plan['query']}")
 
         try:
             # Perform Tavily search
-            search_results = await self._tavily_search(step_plan['query'], language)
+            search_results = await self._tavily_search(step_plan["query"], language)
 
             # Analyze results with AI
             analysis = await self._analyze_search_results(
-                step_plan['query'], step_plan['description'], search_results, topic, language
+                step_plan["query"],
+                step_plan["description"],
+                search_results,
+                topic,
+                language,
             )
 
             step = ResearchStep(
                 step_number=step_number,
-                query=step_plan['query'],
-                description=step_plan['description'],
+                query=step_plan["query"],
+                description=step_plan["description"],
                 results=search_results,
                 analysis=analysis,
-                completed=True
+                completed=True,
             )
 
             logger.info(f"Completed research step {step_number}")
@@ -254,11 +301,11 @@ class DEEPResearchService:
             # Return partial step with error info
             return ResearchStep(
                 step_number=step_number,
-                query=step_plan['query'],
-                description=step_plan['description'],
+                query=step_plan["query"],
+                description=step_plan["description"],
                 results=[],
                 analysis=f"研究步骤执行失败: {str(e)}",
-                completed=False
+                completed=False,
             )
 
     async def _tavily_search(self, query: str, language: str) -> List[Dict[str, Any]]:
@@ -273,42 +320,58 @@ class DEEPResearchService:
                 "search_depth": ai_config.tavily_search_depth,
                 "max_results": ai_config.tavily_max_results,
                 "include_answer": True,
-                "include_raw_content": False
+                "include_raw_content": False,
             }
 
             # Add domain filters if configured
             if ai_config.tavily_include_domains:
-                search_params["include_domains"] = ai_config.tavily_include_domains.split(',')
+                search_params["include_domains"] = (
+                    ai_config.tavily_include_domains.split(",")
+                )
             if ai_config.tavily_exclude_domains:
-                search_params["exclude_domains"] = ai_config.tavily_exclude_domains.split(',')
+                search_params["exclude_domains"] = (
+                    ai_config.tavily_exclude_domains.split(",")
+                )
 
             # Execute search
             response = self.tavily_client.search(**search_params)
 
             # Process results
             results = []
-            for result in response.get('results', []):
+            for result in response.get("results", []):
                 processed_result = {
-                    'title': result.get('title', ''),
-                    'url': result.get('url', ''),
-                    'content': result.get('content', ''),
-                    'score': result.get('score', 0),
-                    'published_date': result.get('published_date', '')
+                    "title": result.get("title", ""),
+                    "url": result.get("url", ""),
+                    "content": result.get("content", ""),
+                    "score": result.get("score", 0),
+                    "published_date": result.get("published_date", ""),
                 }
                 results.append(processed_result)
 
-            logger.info(f"Tavily search returned {len(results)} results for query: {query}")
+            logger.info(
+                f"Tavily search returned {len(results)} results for query: {query}"
+            )
             return results
 
         except Exception as e:
             logger.error(f"Tavily search failed for query '{query}': {e}")
             return []
 
-    async def _analyze_search_results(self, query: str, description: str,
-                                    results: List[Dict[str, Any]], topic: str, language: str) -> str:
+    async def _analyze_search_results(
+        self,
+        query: str,
+        description: str,
+        results: List[Dict[str, Any]],
+        topic: str,
+        language: str,
+    ) -> str:
         """Analyze search results using AI"""
         if not results:
-            return "未找到相关搜索结果" if language == "zh" else "No relevant search results found"
+            return (
+                "未找到相关搜索结果"
+                if language == "zh"
+                else "No relevant search results found"
+            )
 
         # Prepare results summary for AI analysis
         results_summary = ""
@@ -340,18 +403,26 @@ class DEEPResearchService:
             response = await self.ai_provider.text_completion(
                 prompt=prompt,
                 max_tokens=min(ai_config.max_tokens, 1000),
-                temperature=0.4
+                temperature=0.4,
             )
 
             return response.content.strip()
 
         except Exception as e:
             logger.error(f"Failed to analyze search results: {e}")
-            return f"分析失败: {str(e)}" if language == "zh" else f"Analysis failed: {str(e)}"
+            return (
+                f"分析失败: {str(e)}"
+                if language == "zh"
+                else f"Analysis failed: {str(e)}"
+            )
 
-    async def _generate_comprehensive_report(self, topic: str, language: str,
-                                           research_steps: List[ResearchStep],
-                                           duration: float) -> ResearchReport:
+    async def _generate_comprehensive_report(
+        self,
+        topic: str,
+        language: str,
+        research_steps: List[ResearchStep],
+        duration: float,
+    ) -> ResearchReport:
         """Generate comprehensive research report"""
         logger.info("Generating comprehensive research report")
 
@@ -365,8 +436,8 @@ class DEEPResearchService:
                     all_findings.append(f"**{step.description}**\n{step.analysis}")
 
                 for result in step.results:
-                    if result.get('url'):
-                        all_sources.add(result['url'])
+                    if result.get("url"):
+                        all_sources.add(result["url"])
 
             # Generate executive summary and recommendations
             summary_analysis = await self._generate_executive_summary(
@@ -374,8 +445,12 @@ class DEEPResearchService:
             )
 
             # Extract key findings and recommendations
-            key_findings = await self._extract_key_findings(topic, language, all_findings)
-            recommendations = await self._generate_recommendations(topic, language, all_findings)
+            key_findings = await self._extract_key_findings(
+                topic, language, all_findings
+            )
+            recommendations = await self._generate_recommendations(
+                topic, language, all_findings
+            )
 
             report = ResearchReport(
                 topic=topic,
@@ -386,7 +461,7 @@ class DEEPResearchService:
                 recommendations=recommendations,
                 sources=list(all_sources),
                 created_at=datetime.now(),
-                total_duration=duration
+                total_duration=duration,
             )
 
             logger.info("Research report generated successfully")
@@ -396,8 +471,9 @@ class DEEPResearchService:
             logger.error(f"Failed to generate research report: {e}")
             raise
 
-    async def _generate_executive_summary(self, topic: str, language: str,
-                                        findings: List[str]) -> str:
+    async def _generate_executive_summary(
+        self, topic: str, language: str, findings: List[str]
+    ) -> str:
         """Generate executive summary"""
         findings_text = "\n\n".join(findings)
 
@@ -424,15 +500,20 @@ class DEEPResearchService:
             response = await self.ai_provider.text_completion(
                 prompt=prompt,
                 max_tokens=min(ai_config.max_tokens, 800),
-                temperature=0.3
+                temperature=0.3,
             )
             return response.content.strip()
         except Exception as e:
             logger.error(f"Failed to generate executive summary: {e}")
-            return "执行摘要生成失败" if language == "zh" else "Executive summary generation failed"
+            return (
+                "执行摘要生成失败"
+                if language == "zh"
+                else "Executive summary generation failed"
+            )
 
-    async def _extract_key_findings(self, topic: str, language: str,
-                                  findings: List[str]) -> List[str]:
+    async def _extract_key_findings(
+        self, topic: str, language: str, findings: List[str]
+    ) -> List[str]:
         """Extract key findings from research"""
         findings_text = "\n\n".join(findings)
 
@@ -462,17 +543,19 @@ class DEEPResearchService:
             response = await self.ai_provider.text_completion(
                 prompt=prompt,
                 max_tokens=min(ai_config.max_tokens, 600),
-                temperature=0.3
+                temperature=0.3,
             )
 
             # Parse numbered list
             content = response.content.strip()
             findings_list = []
-            for line in content.split('\n'):
+            for line in content.split("\n"):
                 line = line.strip()
-                if line and (line[0].isdigit() or line.startswith('-') or line.startswith('•')):
+                if line and (
+                    line[0].isdigit() or line.startswith("-") or line.startswith("•")
+                ):
                     # Remove numbering and clean up
-                    clean_finding = line.split('.', 1)[-1].strip()
+                    clean_finding = line.split(".", 1)[-1].strip()
                     if clean_finding:
                         findings_list.append(clean_finding)
 
@@ -480,10 +563,15 @@ class DEEPResearchService:
 
         except Exception as e:
             logger.error(f"Failed to extract key findings: {e}")
-            return ["关键发现提取失败"] if language == "zh" else ["Key findings extraction failed"]
+            return (
+                ["关键发现提取失败"]
+                if language == "zh"
+                else ["Key findings extraction failed"]
+            )
 
-    async def _generate_recommendations(self, topic: str, language: str,
-                                      findings: List[str]) -> List[str]:
+    async def _generate_recommendations(
+        self, topic: str, language: str, findings: List[str]
+    ) -> List[str]:
         """Generate actionable recommendations"""
         findings_text = "\n\n".join(findings)
 
@@ -514,17 +602,19 @@ class DEEPResearchService:
             response = await self.ai_provider.text_completion(
                 prompt=prompt,
                 max_tokens=min(ai_config.max_tokens, 600),
-                temperature=0.4
+                temperature=0.4,
             )
 
             # Parse numbered list
             content = response.content.strip()
             recommendations_list = []
-            for line in content.split('\n'):
+            for line in content.split("\n"):
                 line = line.strip()
-                if line and (line[0].isdigit() or line.startswith('-') or line.startswith('•')):
+                if line and (
+                    line[0].isdigit() or line.startswith("-") or line.startswith("•")
+                ):
                     # Remove numbering and clean up
-                    clean_rec = line.split('.', 1)[-1].strip()
+                    clean_rec = line.split(".", 1)[-1].strip()
                     if clean_rec:
                         recommendations_list.append(clean_rec)
 
@@ -532,7 +622,11 @@ class DEEPResearchService:
 
         except Exception as e:
             logger.error(f"Failed to generate recommendations: {e}")
-            return ["建议生成失败"] if language == "zh" else ["Recommendations generation failed"]
+            return (
+                ["建议生成失败"]
+                if language == "zh"
+                else ["Recommendations generation failed"]
+            )
 
     def is_available(self) -> bool:
         """Check if research service is available"""
@@ -545,5 +639,5 @@ class DEEPResearchService:
             "ai_provider_available": self.ai_provider is not None,
             "ai_provider_type": ai_config.default_ai_provider,
             "max_results": ai_config.tavily_max_results,
-            "search_depth": ai_config.tavily_search_depth
+            "search_depth": ai_config.tavily_search_depth,
         }

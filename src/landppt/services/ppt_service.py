@@ -2,79 +2,82 @@
 PPT Service for generating presentations
 """
 
+import io
 import json
 import re
-from typing import Dict, Any, List, Optional
-from ..api.models import PPTGenerationRequest, PPTOutline
+from typing import Any, Dict, List, Optional
+
 import docx
 import PyPDF2
-import io
+
+from ..api.models import PPTGenerationRequest, PPTOutline
+
 
 class PPTService:
     """Service for PPT generation and processing"""
-    
+
     def __init__(self):
         self.scenario_configs = {
             "general": {
                 "color_scheme": "#2E86AB",
                 "font_family": "Arial, sans-serif",
-                "style_class": "general-theme"
+                "style_class": "general-theme",
             },
             "tourism": {
                 "color_scheme": "#27AE60",
                 "font_family": "Georgia, serif",
-                "style_class": "tourism-theme"
+                "style_class": "tourism-theme",
             },
             "education": {
                 "color_scheme": "#E74C3C",
                 "font_family": "Comic Sans MS, cursive",
-                "style_class": "education-theme"
+                "style_class": "education-theme",
             },
             "analysis": {
                 "color_scheme": "#34495E",
                 "font_family": "Helvetica, sans-serif",
-                "style_class": "analysis-theme"
+                "style_class": "analysis-theme",
             },
             "history": {
                 "color_scheme": "#8B4513",
                 "font_family": "Times New Roman, serif",
-                "style_class": "history-theme"
+                "style_class": "history-theme",
             },
             "technology": {
                 "color_scheme": "#9B59B6",
                 "font_family": "Roboto, sans-serif",
-                "style_class": "technology-theme"
+                "style_class": "technology-theme",
             },
             "business": {
                 "color_scheme": "#1F4E79",
                 "font_family": "Calibri, sans-serif",
-                "style_class": "business-theme"
-            }
+                "style_class": "business-theme",
+            },
         }
-    
-    async def generate_ppt(self, task_id: str, request: PPTGenerationRequest) -> Dict[str, Any]:
+
+    async def generate_ppt(
+        self, task_id: str, request: PPTGenerationRequest
+    ) -> Dict[str, Any]:
         """Generate complete PPT based on request"""
         try:
             # Step 1: Generate outline
             outline = await self.generate_outline(request)
-            
+
             # Step 2: Generate slides HTML
-            slides_html = await self.generate_slides_from_outline(outline, request.scenario)
-            
+            slides_html = await self.generate_slides_from_outline(
+                outline, request.scenario
+            )
+
             return {
                 "success": True,
                 "task_id": task_id,
                 "outline": outline,
-                "slides_html": slides_html
+                "slides_html": slides_html,
             }
-            
+
         except Exception as e:
-            return {
-                "success": False,
-                "task_id": task_id,
-                "error": str(e)
-            }
-    
+            return {"success": False, "task_id": task_id, "error": str(e)}
+
     async def generate_outline(self, request: PPTGenerationRequest) -> PPTOutline:
         """Generate PPT outline based on request"""
         topic = request.topic
@@ -85,38 +88,51 @@ class PPTService:
         description = request.description
         # Generate slides based on scenario
         slides = []
-        
+
         # Title slide
-        slides.append({
-            "id": 1,
-            "type": "title",
-            "title": topic,
-            "subtitle": "专业演示" if language == "zh" else "Professional Presentation",
-            "content": ""
-        })
-        
+        slides.append(
+            {
+                "id": 1,
+                "type": "title",
+                "title": topic,
+                "subtitle": (
+                    "专业演示" if language == "zh" else "Professional Presentation"
+                ),
+                "content": "",
+            }
+        )
+
         # Agenda slide
-        slides.append({
-            "id": 2,
-            "type": "agenda",
-            "title": "目录" if language == "zh" else "Agenda",
-            "subtitle": "",
-            "content": self._generate_agenda_content(scenario, language,)
-        })
-        
+        slides.append(
+            {
+                "id": 2,
+                "type": "agenda",
+                "title": "目录" if language == "zh" else "Agenda",
+                "subtitle": "",
+                "content": self._generate_agenda_content(
+                    scenario,
+                    language,
+                ),
+            }
+        )
+
         # Content slides based on scenario
         content_slides = self._generate_content_slides(topic, scenario, language)
         slides.extend(content_slides)
-        
+
         # Thank you slide
-        slides.append({
-            "id": len(slides) + 1,
-            "type": "thankyou",
-            "title": "谢谢" if language == "zh" else "Thank You",
-            "subtitle": "感谢聆听" if language == "zh" else "Thank you for your attention",
-            "content": ""
-        })
-        
+        slides.append(
+            {
+                "id": len(slides) + 1,
+                "type": "thankyou",
+                "title": "谢谢" if language == "zh" else "Thank You",
+                "subtitle": (
+                    "感谢聆听" if language == "zh" else "Thank you for your attention"
+                ),
+                "content": "",
+            }
+        )
+
         return PPTOutline(
             title=topic,
             slides=slides,
@@ -124,23 +140,25 @@ class PPTService:
                 "scenario": scenario,
                 "language": language,
                 "total_slides": len(slides),
-                "generated_at": "2024-01-01T00:00:00Z"
-            }
+                "generated_at": "2024-01-01T00:00:00Z",
+            },
         )
-    
-    async def generate_slides_from_outline(self, outline: PPTOutline, scenario: str) -> str:
+
+    async def generate_slides_from_outline(
+        self, outline: PPTOutline, scenario: str
+    ) -> str:
         """Generate HTML slides from outline"""
         config = self.scenario_configs.get(scenario, self.scenario_configs["general"])
-        
+
         # Generate CSS styles
         css_styles = self._generate_css_styles(config)
-        
+
         # Generate HTML for each slide
         slides_html = []
         for slide in outline.slides:
             slide_html = self._generate_slide_html(slide, config)
             slides_html.append(slide_html)
-        
+
         # Combine into complete HTML document
         complete_html = f"""
 <!DOCTYPE html>
@@ -225,10 +243,12 @@ class PPTService:
 </body>
 </html>
         """
-        
+
         return complete_html
-    
-    async def process_uploaded_file(self, filename: str, content: bytes, file_type: str) -> str:
+
+    async def process_uploaded_file(
+        self, filename: str, content: bytes, file_type: str
+    ) -> str:
         """Process uploaded file and extract content"""
         try:
             if file_type == ".docx":
@@ -236,145 +256,216 @@ class PPTService:
             elif file_type == ".pdf":
                 return self._process_pdf(content)
             elif file_type in [".txt", ".md"]:
-                return content.decode('utf-8')
+                return content.decode("utf-8")
             else:
                 raise ValueError(f"Unsupported file type: {file_type}")
-                
+
         except Exception as e:
             raise Exception(f"Error processing file: {str(e)}")
-    
+
     def _process_docx(self, content: bytes) -> str:
         """Process DOCX file and extract text"""
         doc = docx.Document(io.BytesIO(content))
         text_content = []
-        
+
         for paragraph in doc.paragraphs:
             if paragraph.text.strip():
                 text_content.append(paragraph.text.strip())
-        
+
         return "\n".join(text_content)
-    
+
     def _process_pdf(self, content: bytes) -> str:
         """Process PDF file and extract text"""
         pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
         text_content = []
-        
+
         for page in pdf_reader.pages:
             text = page.extract_text()
             if text.strip():
                 text_content.append(text.strip())
-        
+
         return "\n".join(text_content)
-    
+
     def _generate_agenda_content(self, scenario: str, language: str) -> str:
         """Generate agenda content based on scenario"""
         agenda_templates = {
             "general": {
                 "zh": ["引言", "主要内容", "案例分析", "总结"],
-                "en": ["Introduction", "Main Content", "Case Study", "Conclusion"]
+                "en": ["Introduction", "Main Content", "Case Study", "Conclusion"],
             },
             "tourism": {
                 "zh": ["目的地概览", "主要景点", "行程安排", "实用信息"],
-                "en": ["Destination Overview", "Main Attractions", "Itinerary", "Practical Information"]
+                "en": [
+                    "Destination Overview",
+                    "Main Attractions",
+                    "Itinerary",
+                    "Practical Information",
+                ],
             },
             "education": {
                 "zh": ["学习目标", "核心概念", "实例说明", "互动活动", "总结回顾"],
-                "en": ["Learning Objectives", "Key Concepts", "Examples", "Activities", "Summary"]
+                "en": [
+                    "Learning Objectives",
+                    "Key Concepts",
+                    "Examples",
+                    "Activities",
+                    "Summary",
+                ],
             },
             "analysis": {
                 "zh": ["问题陈述", "研究方法", "研究发现", "深入分析", "建议方案"],
-                "en": ["Problem Statement", "Methodology", "Findings", "Analysis", "Recommendations"]
+                "en": [
+                    "Problem Statement",
+                    "Methodology",
+                    "Findings",
+                    "Analysis",
+                    "Recommendations",
+                ],
             },
             "history": {
                 "zh": ["历史背景", "时间线", "关键事件", "重要意义", "历史影响"],
-                "en": ["Background", "Timeline", "Key Events", "Significance", "Legacy"]
+                "en": [
+                    "Background",
+                    "Timeline",
+                    "Key Events",
+                    "Significance",
+                    "Legacy",
+                ],
             },
             "technology": {
                 "zh": ["技术概览", "核心功能", "优势特点", "实施方案", "未来展望"],
-                "en": ["Overview", "Features", "Benefits", "Implementation", "Future"]
+                "en": ["Overview", "Features", "Benefits", "Implementation", "Future"],
             },
             "business": {
                 "zh": ["执行摘要", "问题分析", "解决方案", "市场分析", "财务预测"],
-                "en": ["Executive Summary", "Problem", "Solution", "Market Analysis", "Financial Projections"]
-            }
+                "en": [
+                    "Executive Summary",
+                    "Problem",
+                    "Solution",
+                    "Market Analysis",
+                    "Financial Projections",
+                ],
+            },
         }
-        
+
         template = agenda_templates.get(scenario, agenda_templates["general"])
         items = template.get(language, template["en"])
-        
+
         return "\n".join([f"• {item}" for item in items])
-    
-    def _generate_content_slides(self, topic: str, scenario: str, language: str) -> List[Dict[str, Any]]:
+
+    def _generate_content_slides(
+        self, topic: str, scenario: str, language: str
+    ) -> List[Dict[str, Any]]:
         """Generate content slides based on topic and scenario"""
         slides = []
-        
+
         # Get agenda items to create content slides
         agenda_templates = {
             "general": {
                 "zh": ["引言", "主要内容", "案例分析", "总结"],
-                "en": ["Introduction", "Main Content", "Case Study", "Conclusion"]
+                "en": ["Introduction", "Main Content", "Case Study", "Conclusion"],
             },
             "tourism": {
                 "zh": ["目的地概览", "主要景点", "行程安排", "实用信息"],
-                "en": ["Destination Overview", "Main Attractions", "Itinerary", "Practical Information"]
+                "en": [
+                    "Destination Overview",
+                    "Main Attractions",
+                    "Itinerary",
+                    "Practical Information",
+                ],
             },
             "education": {
                 "zh": ["学习目标", "核心概念", "实例说明", "互动活动", "总结回顾"],
-                "en": ["Learning Objectives", "Key Concepts", "Examples", "Activities", "Summary"]
+                "en": [
+                    "Learning Objectives",
+                    "Key Concepts",
+                    "Examples",
+                    "Activities",
+                    "Summary",
+                ],
             },
             "analysis": {
                 "zh": ["问题陈述", "研究方法", "研究发现", "深入分析", "建议方案"],
-                "en": ["Problem Statement", "Methodology", "Findings", "Analysis", "Recommendations"]
+                "en": [
+                    "Problem Statement",
+                    "Methodology",
+                    "Findings",
+                    "Analysis",
+                    "Recommendations",
+                ],
             },
             "history": {
                 "zh": ["历史背景", "时间线", "关键事件", "重要意义", "历史影响"],
-                "en": ["Background", "Timeline", "Key Events", "Significance", "Legacy"]
+                "en": [
+                    "Background",
+                    "Timeline",
+                    "Key Events",
+                    "Significance",
+                    "Legacy",
+                ],
             },
             "technology": {
                 "zh": ["技术概览", "核心功能", "优势特点", "实施方案", "未来展望"],
-                "en": ["Overview", "Features", "Benefits", "Implementation", "Future"]
+                "en": ["Overview", "Features", "Benefits", "Implementation", "Future"],
             },
             "business": {
                 "zh": ["执行摘要", "问题分析", "解决方案", "市场分析", "财务预测"],
-                "en": ["Executive Summary", "Problem", "Solution", "Market Analysis", "Financial Projections"]
-            }
+                "en": [
+                    "Executive Summary",
+                    "Problem",
+                    "Solution",
+                    "Market Analysis",
+                    "Financial Projections",
+                ],
+            },
         }
-        
+
         template = agenda_templates.get(scenario, agenda_templates["general"])
         items = template.get(language, template["en"])
-        
-        for i, item in enumerate(items, 3):  # Start from slide 3 (after title and agenda)
+
+        for i, item in enumerate(
+            items, 3
+        ):  # Start from slide 3 (after title and agenda)
             content = self._generate_slide_content(topic, item, scenario, language)
-            slides.append({
-                "id": i,
-                "type": "content",
-                "title": item,
-                "subtitle": "",
-                "content": content
-            })
-        
+            slides.append(
+                {
+                    "id": i,
+                    "type": "content",
+                    "title": item,
+                    "subtitle": "",
+                    "content": content,
+                }
+            )
+
         return slides
-    
-    def _generate_slide_content(self, topic: str, section: str, scenario: str, language: str) -> str:
+
+    def _generate_slide_content(
+        self, topic: str, section: str, scenario: str, language: str
+    ) -> str:
         """Generate content for a specific slide section"""
         # This is a simplified content generation
-        
+
         if language == "zh":
             content_templates = {
                 "引言": f"• {topic}的重要性\n• 本次演示的目标\n• 主要讨论内容概览",
                 "主要内容": f"• {topic}的核心要点\n• 关键特征和优势\n• 实际应用场景",
                 "案例分析": f"• 成功案例展示\n• 实施过程分析\n• 经验教训总结",
-                "总结": f"• {topic}的主要收获\n• 关键要点回顾\n• 下一步行动计划"
+                "总结": f"• {topic}的主要收获\n• 关键要点回顾\n• 下一步行动计划",
             }
-            return content_templates.get(section, f"• 关于{section}的要点\n• 详细说明和分析\n• 相关案例或数据")
+            return content_templates.get(
+                section, f"• 关于{section}的要点\n• 详细说明和分析\n• 相关案例或数据"
+            )
         else:
             content_templates = {
                 "Introduction": f"• Importance of {topic}\n• Objectives of this presentation\n• Overview of main topics",
                 "Main Content": f"• Core aspects of {topic}\n• Key features and benefits\n• Practical applications",
                 "Case Study": f"• Success story showcase\n• Implementation process\n• Lessons learned",
-                "Conclusion": f"• Key takeaways from {topic}\n• Summary of main points\n• Next steps and action plan"
+                "Conclusion": f"• Key takeaways from {topic}\n• Summary of main points\n• Next steps and action plan",
             }
-            return content_templates.get(section, f"• Key points about {section}\n• Detailed explanation and analysis\n• Related examples or data")
+            return content_templates.get(
+                section,
+                f"• Key points about {section}\n• Detailed explanation and analysis\n• Related examples or data",
+            )
 
     def _generate_css_styles(self, config: Dict[str, Any]) -> str:
         """Generate CSS styles for the presentation"""
@@ -592,7 +683,9 @@ class PPTService:
         }}
         """
 
-    def _generate_slide_html(self, slide: Dict[str, Any], config: Dict[str, Any]) -> str:
+    def _generate_slide_html(
+        self, slide: Dict[str, Any], config: Dict[str, Any]
+    ) -> str:
         """Generate HTML for a single slide"""
         slide_type = slide.get("type", "content")
         slide_id = slide.get("id", 1)
@@ -610,8 +703,14 @@ class PPTService:
 
         elif slide_type == "agenda":
             # Convert content to HTML list
-            agenda_items = [item.strip() for item in content.split('\n') if item.strip()]
-            agenda_html = '<ul>' + ''.join([f'<li>{item}</li>' for item in agenda_items]) + '</ul>'
+            agenda_items = [
+                item.strip() for item in content.split("\n") if item.strip()
+            ]
+            agenda_html = (
+                "<ul>"
+                + "".join([f"<li>{item}</li>" for item in agenda_items])
+                + "</ul>"
+            )
 
             return f"""
             <div class="slide agenda-slide" id="slide-{slide_id}">

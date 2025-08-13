@@ -7,22 +7,28 @@ import asyncio
 import logging
 import os
 import tempfile
-from pathlib import Path
-from typing import List, Optional, Dict, Any, Tuple
 import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
-    from playwright.async_api import async_playwright, Browser, Page, BrowserContext
+    from playwright.async_api import (Browser, BrowserContext, Page,
+                                      async_playwright)
+
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
+
     # Create dummy types for type hints when playwright is not available
     class Browser:
         pass
+
     class Page:
         pass
+
     class BrowserContext:
         pass
+
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +53,9 @@ class PlaywrightPDFConverter:
     def install_chromium():
         """手动安装 Chromium 的辅助方法"""
         if not PLAYWRIGHT_AVAILABLE:
-            raise ImportError("Playwright is not available. Please install: pip install playwright")
+            raise ImportError(
+                "Playwright is not available. Please install: pip install playwright"
+            )
 
         try:
             logger.info("🔄 开始手动安装 Chromium...")
@@ -55,9 +63,13 @@ class PlaywrightPDFConverter:
             # 方法1: 使用 playwright install 命令
             try:
                 import subprocess
-                result = subprocess.run([
-                    'python', '-m', 'playwright', 'install', 'chromium'
-                ], capture_output=True, text=True, timeout=300)
+
+                result = subprocess.run(
+                    ["python", "-m", "playwright", "install", "chromium"],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
 
                 if result.returncode == 0:
                     logger.info("✅ Chromium 通过 Playwright 安装成功")
@@ -70,9 +82,13 @@ class PlaywrightPDFConverter:
             # 方法2: 尝试安装所有浏览器
             try:
                 import subprocess
-                result = subprocess.run([
-                    'python', '-m', 'playwright', 'install'
-                ], capture_output=True, text=True, timeout=600)
+
+                result = subprocess.run(
+                    ["python", "-m", "playwright", "install"],
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                )
 
                 if result.returncode == 0:
                     logger.info("✅ 所有浏览器通过 Playwright 安装成功")
@@ -87,56 +103,58 @@ class PlaywrightPDFConverter:
         except Exception as e:
             logger.error(f"❌ Chromium 安装失败: {e}")
             return False
-    
+
     async def _launch_browser(self) -> Browser:
         """Launch browser with enhanced settings optimized for chart rendering"""
         if not self.is_available():
-            raise ImportError("Playwright is not available. Please install: pip install playwright")
+            raise ImportError(
+                "Playwright is not available. Please install: pip install playwright"
+            )
 
         # Enhanced launch options with better Windows compatibility
         launch_args = [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--no-first-run',
-            '--disable-extensions',
-            '--disable-plugins',
-            '--disable-background-timer-throttling',
-            '--disable-backgrounding-occluded-windows',
-            '--disable-renderer-backgrounding',
-            '--run-all-compositor-stages-before-draw',
-            '--disable-checker-imaging',
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--no-first-run",
+            "--disable-extensions",
+            "--disable-plugins",
+            "--disable-background-timer-throttling",
+            "--disable-backgrounding-occluded-windows",
+            "--disable-renderer-backgrounding",
+            "--run-all-compositor-stages-before-draw",
+            "--disable-checker-imaging",
             # Additional stability options for Windows
-            '--disable-web-security',
-            '--disable-features=VizDisplayCompositor',
-            '--disable-ipc-flooding-protection',
-            '--disable-software-rasterizer',
-            '--disable-background-networking',
-            '--disable-default-apps',
-            '--disable-sync',
-            '--disable-translate',
-            '--hide-scrollbars',
-            '--metrics-recording-only',
-            '--mute-audio',
-            '--no-default-browser-check',
-            '--no-pings',
-            '--password-store=basic',
-            '--use-mock-keychain',
+            "--disable-web-security",
+            "--disable-features=VizDisplayCompositor",
+            "--disable-ipc-flooding-protection",
+            "--disable-software-rasterizer",
+            "--disable-background-networking",
+            "--disable-default-apps",
+            "--disable-sync",
+            "--disable-translate",
+            "--hide-scrollbars",
+            "--metrics-recording-only",
+            "--mute-audio",
+            "--no-default-browser-check",
+            "--no-pings",
+            "--password-store=basic",
+            "--use-mock-keychain",
             # Windows specific fixes
-            '--disable-logging',
-            '--disable-gpu-logging',
-            '--disable-crash-reporter',
-            '--disable-in-process-stack-traces',
-            '--disable-breakpad',
-            '--disable-component-extensions-with-background-pages',
-            '--disable-client-side-phishing-detection',
-            '--disable-hang-monitor',
-            '--disable-prompt-on-repost',
-            '--disable-domain-reliability',
-            '--disable-component-update',
-            '--no-service-autorun',
-            '--disable-background-mode'
+            "--disable-logging",
+            "--disable-gpu-logging",
+            "--disable-crash-reporter",
+            "--disable-in-process-stack-traces",
+            "--disable-breakpad",
+            "--disable-component-extensions-with-background-pages",
+            "--disable-client-side-phishing-detection",
+            "--disable-hang-monitor",
+            "--disable-prompt-on-repost",
+            "--disable-domain-reliability",
+            "--disable-component-update",
+            "--no-service-autorun",
+            "--disable-background-mode",
         ]
 
         try:
@@ -148,24 +166,27 @@ class PlaywrightPDFConverter:
             logger.info("🔄 Trying Playwright's installed Chromium...")
             try:
                 browser = await self.playwright.chromium.launch(
-                    headless=True,
-                    args=launch_args
+                    headless=True, args=launch_args
                 )
                 logger.info("✅ Playwright Chromium launched successfully")
                 return browser
 
             except Exception as playwright_error:
-                logger.warning(f"❌ Playwright Chromium launch failed: {playwright_error}")
+                logger.warning(
+                    f"❌ Playwright Chromium launch failed: {playwright_error}"
+                )
 
             # Method 2: Try system Chrome with enhanced error handling
             system_chrome_paths = [
-                'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-                'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-                'C:\\Users\\{}\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe'.format(os.environ.get('USERNAME', '')),
-                '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-                '/usr/bin/google-chrome',
-                '/usr/bin/chromium-browser',
-                '/snap/bin/chromium'
+                "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+                "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+                "C:\\Users\\{}\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe".format(
+                    os.environ.get("USERNAME", "")
+                ),
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                "/usr/bin/google-chrome",
+                "/usr/bin/chromium-browser",
+                "/snap/bin/chromium",
             ]
 
             for chrome_path in system_chrome_paths:
@@ -176,29 +197,25 @@ class PlaywrightPDFConverter:
                     chrome_configs = [
                         # Config 1: Standard headless with custom executable
                         {
-                            'executable_path': chrome_path,
-                            'headless': True,
-                            'args': [
-                                '--no-sandbox',
-                                '--disable-setuid-sandbox',
-                                '--disable-dev-shm-usage',
-                                '--disable-gpu',
-                                '--disable-extensions',
-                                '--disable-plugins'
-                            ]
+                            "executable_path": chrome_path,
+                            "headless": True,
+                            "args": [
+                                "--no-sandbox",
+                                "--disable-setuid-sandbox",
+                                "--disable-dev-shm-usage",
+                                "--disable-gpu",
+                                "--disable-extensions",
+                                "--disable-plugins",
+                            ],
                         },
                         # Config 2: Minimal args
                         {
-                            'executable_path': chrome_path,
-                            'headless': True,
-                            'args': ['--no-sandbox', '--disable-setuid-sandbox']
+                            "executable_path": chrome_path,
+                            "headless": True,
+                            "args": ["--no-sandbox", "--disable-setuid-sandbox"],
                         },
                         # Config 3: No custom args
-                        {
-                            'executable_path': chrome_path,
-                            'headless': True,
-                            'args': []
-                        }
+                        {"executable_path": chrome_path, "headless": True, "args": []},
                     ]
 
                     for config_idx, config in enumerate(chrome_configs):
@@ -220,8 +237,8 @@ class PlaywrightPDFConverter:
 
             # Try to use any available Chrome-like browser
             portable_browsers = [
-                'chrome.exe',  # Portable Chrome in current directory
-                'chromium.exe',  # Portable Chromium
+                "chrome.exe",  # Portable Chrome in current directory
+                "chromium.exe",  # Portable Chromium
             ]
 
             for browser_exe in portable_browsers:
@@ -229,11 +246,13 @@ class PlaywrightPDFConverter:
                     logger.info(f"🔍 Found portable browser: {browser_exe}")
                     try:
                         portable_config = {
-                            'executable_path': os.path.abspath(browser_exe),
-                            'headless': True,
-                            'args': ['--no-sandbox', '--disable-setuid-sandbox']
+                            "executable_path": os.path.abspath(browser_exe),
+                            "headless": True,
+                            "args": ["--no-sandbox", "--disable-setuid-sandbox"],
                         }
-                        browser = await self.playwright.chromium.launch(**portable_config)
+                        browser = await self.playwright.chromium.launch(
+                            **portable_config
+                        )
                         logger.info(f"✅ Portable browser launched: {browser_exe}")
                         return browser
                     except Exception as e:
@@ -243,8 +262,7 @@ class PlaywrightPDFConverter:
             logger.info("🔄 Final attempt with minimal configuration...")
             try:
                 browser = await self.playwright.chromium.launch(
-                    headless=True,
-                    args=['--no-sandbox']  # Only essential arg
+                    headless=True, args=["--no-sandbox"]  # Only essential arg
                 )
                 logger.info("✅ Browser launched with minimal configuration")
                 return browser
@@ -274,13 +292,15 @@ class PlaywrightPDFConverter:
                 self.browser = await self._launch_browser()
                 # Create a browser context for better isolation
                 self.context = await self.browser.new_context(
-                    viewport={'width': 1280, 'height': 720},
+                    viewport={"width": 1280, "height": 720},
                     device_scale_factor=2,
-                    ignore_https_errors=True
+                    ignore_https_errors=True,
                 )
             return self.browser
-    
-    async def _wait_for_charts_and_dynamic_content(self, page: Page, max_wait_time: int = 15000):
+
+    async def _wait_for_charts_and_dynamic_content(
+        self, page: Page, max_wait_time: int = 15000
+    ):
         """
         Enhanced function to wait for Chart.js, ECharts.js, D3.js charts and dynamic content to fully render
         Improved detection for multiple chart libraries and animations with extended wait time
@@ -292,10 +312,11 @@ class PlaywrightPDFConverter:
         max_attempts = 30  # 进一步增加尝试次数以确保所有动态内容完全加载
 
         # 首先等待基础DOM和资源加载
-        await page.wait_for_selector('body', timeout=5000)
+        await page.wait_for_selector("body", timeout=5000)
 
         # 等待所有图片加载完成
-        await page.evaluate('''() => {
+        await page.evaluate(
+            """() => {
             return new Promise((resolve) => {
                 const images = Array.from(document.querySelectorAll('img'));
                 if (images.length === 0) {
@@ -323,14 +344,18 @@ class PlaywrightPDFConverter:
                 // 超时保护
                 setTimeout(resolve, 3000);
             });
-        }''')
+        }"""
+        )
 
-        while (time.time() * 1000 - start_time) < max_wait_time and attempts < max_attempts:
+        while (
+            time.time() * 1000 - start_time
+        ) < max_wait_time and attempts < max_attempts:
             attempts += 1
 
             try:
                 # 详细检查页面状态，包括多种图表库的动态内容
-                chart_status = await page.evaluate('''() => {
+                chart_status = await page.evaluate(
+                    """() => {
                     const results = {
                         domReady: document.readyState === 'complete',
                         chartJsLoaded: typeof window.Chart !== 'undefined',
@@ -508,30 +533,53 @@ class PlaywrightPDFConverter:
                     }
 
                     return results;
-                }''')
+                }"""
+                )
 
-                logger.debug(f"📊 图表检查 (第{attempts}次): DOM:{chart_status['domReady']}, Chart.js:{chart_status['renderedCharts']}/{chart_status['totalCharts']}, ECharts:{chart_status['renderedEcharts']}/{chart_status['echartsInstances']}, D3:{chart_status['renderedD3']}/{chart_status['d3Elements']}, 动画:{chart_status['animationsComplete']}")
+                logger.debug(
+                    f"📊 图表检查 (第{attempts}次): DOM:{chart_status['domReady']}, Chart.js:{chart_status['renderedCharts']}/{chart_status['totalCharts']}, ECharts:{chart_status['renderedEcharts']}/{chart_status['echartsInstances']}, D3:{chart_status['renderedD3']}/{chart_status['d3Elements']}, 动画:{chart_status['animationsComplete']}"
+                )
 
                 # 判断是否所有内容都已准备就绪
                 all_charts_ready = (
-                    (chart_status['totalCharts'] == 0 or chart_status['renderedCharts'] >= chart_status['totalCharts']) and
-                    (chart_status['echartsInstances'] == 0 or chart_status['renderedEcharts'] >= chart_status['echartsInstances']) and
-                    (chart_status['d3Elements'] == 0 or chart_status['renderedD3'] >= chart_status['d3Elements'])
+                    (
+                        chart_status["totalCharts"] == 0
+                        or chart_status["renderedCharts"] >= chart_status["totalCharts"]
+                    )
+                    and (
+                        chart_status["echartsInstances"] == 0
+                        or chart_status["renderedEcharts"]
+                        >= chart_status["echartsInstances"]
+                    )
+                    and (
+                        chart_status["d3Elements"] == 0
+                        or chart_status["renderedD3"] >= chart_status["d3Elements"]
+                    )
                 )
 
-                all_ready = (chart_status['domReady'] and
-                           chart_status['scriptsLoaded'] and
-                           chart_status['imagesLoaded'] and
-                           chart_status['animationsComplete'] and
-                           all_charts_ready)
+                all_ready = (
+                    chart_status["domReady"]
+                    and chart_status["scriptsLoaded"]
+                    and chart_status["imagesLoaded"]
+                    and chart_status["animationsComplete"]
+                    and all_charts_ready
+                )
 
                 if all_ready:
                     logger.debug("✅ 所有图表和动态内容已完全渲染")
                     break
 
                 # 动态等待时间：如果有图表内容，等待时间更短
-                total_rendered = chart_status['renderedCharts'] + chart_status['renderedEcharts'] + chart_status['renderedD3']
-                total_expected = chart_status['totalCharts'] + chart_status['echartsInstances'] + chart_status['d3Elements']
+                total_rendered = (
+                    chart_status["renderedCharts"]
+                    + chart_status["renderedEcharts"]
+                    + chart_status["renderedD3"]
+                )
+                total_expected = (
+                    chart_status["totalCharts"]
+                    + chart_status["echartsInstances"]
+                    + chart_status["d3Elements"]
+                )
 
                 if total_rendered > 0 or total_expected == 0:
                     await asyncio.sleep(0.2)  # 已有内容，快速检查
@@ -553,7 +601,8 @@ class PlaywrightPDFConverter:
         await asyncio.sleep(1.0)
 
         # 强制触发一次重排和重绘
-        await page.evaluate('''() => {
+        await page.evaluate(
+            """() => {
             // 强制重排
             document.body.offsetHeight;
 
@@ -566,7 +615,8 @@ class PlaywrightPDFConverter:
                     requestAnimationFrame(resolve);
                 });
             });
-        }''')
+        }"""
+        )
 
         total_time = time.time() * 1000 - start_time
         logger.debug(f"✨ 图表和动态内容等待完成，总耗时: {total_time:.0f}ms")
@@ -576,7 +626,8 @@ class PlaywrightPDFConverter:
         logger.debug("🔍 执行最终图表渲染验证...")
 
         try:
-            final_status = await page.evaluate('''() => {
+            final_status = await page.evaluate(
+                """() => {
                 const results = {
                     totalCanvasElements: 0,
                     renderedCanvasElements: 0,
@@ -852,21 +903,40 @@ class PlaywrightPDFConverter:
                 results.contentVerified = contentVerified;
 
                 return results;
-            }''')
+            }"""
+            )
 
             # 计算渲染统计
-            total_rendered = final_status['renderedCanvasElements'] + final_status['renderedEchartsInstances'] + final_status['renderedSvgElements']
-            total_expected = final_status['totalCanvasElements'] + final_status['echartsInstances'] + final_status['svgElements']
-            render_percentage = (total_rendered / total_expected * 100) if total_expected > 0 else 100
+            total_rendered = (
+                final_status["renderedCanvasElements"]
+                + final_status["renderedEchartsInstances"]
+                + final_status["renderedSvgElements"]
+            )
+            total_expected = (
+                final_status["totalCanvasElements"]
+                + final_status["echartsInstances"]
+                + final_status["svgElements"]
+            )
+            render_percentage = (
+                (total_rendered / total_expected * 100) if total_expected > 0 else 100
+            )
 
-            logger.debug(f"📊 最终验证结果: Canvas:{final_status['renderedCanvasElements']}/{final_status['totalCanvasElements']}, Chart.js:{final_status['chartInstances']}, ECharts:{final_status['renderedEchartsInstances']}/{final_status['echartsInstances']}, SVG:{final_status['renderedSvgElements']}/{final_status['svgElements']}, D3:{final_status['renderedD3Elements']}/{final_status['d3Elements']}")
-            logger.debug(f"📈 渲染完成度: {render_percentage:.1f}% ({total_rendered}/{total_expected})")
+            logger.debug(
+                f"📊 最终验证结果: Canvas:{final_status['renderedCanvasElements']}/{final_status['totalCanvasElements']}, Chart.js:{final_status['chartInstances']}, ECharts:{final_status['renderedEchartsInstances']}/{final_status['echartsInstances']}, SVG:{final_status['renderedSvgElements']}/{final_status['svgElements']}, D3:{final_status['renderedD3Elements']}/{final_status['d3Elements']}"
+            )
+            logger.debug(
+                f"📈 渲染完成度: {render_percentage:.1f}% ({total_rendered}/{total_expected})"
+            )
 
-            if final_status['errors']:
-                logger.debug(f"⚠️ 验证中发现错误: {final_status['errors'][:3]}")  # 只显示前3个错误
+            if final_status["errors"]:
+                logger.debug(
+                    f"⚠️ 验证中发现错误: {final_status['errors'][:3]}"
+                )  # 只显示前3个错误
 
-            if not final_status['contentVerified']:
-                logger.info(f"⚠️ 图表渲染检测: {render_percentage:.1f}%完成 ({total_rendered}/{total_expected})，但PDF生成将继续")
+            if not final_status["contentVerified"]:
+                logger.info(
+                    f"⚠️ 图表渲染检测: {render_percentage:.1f}%完成 ({total_rendered}/{total_expected})，但PDF生成将继续"
+                )
             else:
                 logger.debug(f"✅ 图表内容验证通过: {render_percentage:.1f}%渲染完成")
 
@@ -876,17 +946,17 @@ class PlaywrightPDFConverter:
             logger.error(f"❌ 最终图表验证失败: {error}")
             # 返回一个基础的验证结果，假设内容已渲染
             return {
-                'totalCanvasElements': 0,
-                'renderedCanvasElements': 0,
-                'chartInstances': 0,
-                'echartsInstances': 0,
-                'renderedEchartsInstances': 0,
-                'svgElements': 0,
-                'renderedSvgElements': 0,
-                'd3Elements': 0,
-                'renderedD3Elements': 0,
-                'errors': [f"验证失败: {error}"],
-                'contentVerified': True  # 验证失败时保守处理，假设已渲染
+                "totalCanvasElements": 0,
+                "renderedCanvasElements": 0,
+                "chartInstances": 0,
+                "echartsInstances": 0,
+                "renderedEchartsInstances": 0,
+                "svgElements": 0,
+                "renderedSvgElements": 0,
+                "d3Elements": 0,
+                "renderedD3Elements": 0,
+                "errors": [f"验证失败: {error}"],
+                "contentVerified": True,  # 验证失败时保守处理，假设已渲染
             }
 
     async def _force_chart_initialization(self, page: Page):
@@ -895,7 +965,8 @@ class PlaywrightPDFConverter:
 
         try:
             # 第一步：查找并重新执行图表相关脚本
-            script_count = await page.evaluate('''() => {
+            script_count = await page.evaluate(
+                """() => {
                 // 查找所有可能包含图表配置的script标签
                 const scripts = document.querySelectorAll('script');
                 const chartScripts = [];
@@ -927,7 +998,8 @@ class PlaywrightPDFConverter:
                 });
 
                 return chartScripts.length;
-            }''')
+            }"""
+            )
 
             logger.debug(f"🔄 重新执行了 {script_count} 个图表相关脚本")
 
@@ -935,7 +1007,8 @@ class PlaywrightPDFConverter:
             await asyncio.sleep(0.5)
 
             # 第二步：强制触发图表渲染和更新
-            chart_results = await page.evaluate('''() => {
+            chart_results = await page.evaluate(
+                """() => {
                 const results = {
                     chartJsProcessed: 0,
                     echartsProcessed: 0,
@@ -1101,17 +1174,22 @@ class PlaywrightPDFConverter:
                 }
 
                 return results;
-            }''')
+            }"""
+            )
 
-            logger.debug(f"✅ 图表强制初始化完成: Chart.js:{chart_results['chartJsProcessed']}, ECharts:{chart_results['echartsProcessed']}, D3:{chart_results['d3Processed']}")
+            logger.debug(
+                f"✅ 图表强制初始化完成: Chart.js:{chart_results['chartJsProcessed']}, ECharts:{chart_results['echartsProcessed']}, D3:{chart_results['d3Processed']}"
+            )
 
-            if chart_results['errors']:
+            if chart_results["errors"]:
                 logger.debug(f"⚠️ 初始化过程中的错误: {chart_results['errors']}")
 
         except Exception as error:
             logger.debug(f"⚠️ 图表强制初始化失败: {error}")
 
-    async def _wait_for_fonts_and_resources(self, page: Page, max_wait_time: int = 8000):
+    async def _wait_for_fonts_and_resources(
+        self, page: Page, max_wait_time: int = 8000
+    ):
         """等待所有字体和外部资源加载完成"""
         logger.debug("🔤 等待字体和外部资源加载...")
 
@@ -1119,7 +1197,8 @@ class PlaywrightPDFConverter:
 
         try:
             # 等待字体加载完成
-            await page.evaluate('''() => {
+            await page.evaluate(
+                """() => {
                 return new Promise((resolve) => {
                     if (document.fonts && document.fonts.ready) {
                         document.fonts.ready.then(resolve);
@@ -1130,10 +1209,12 @@ class PlaywrightPDFConverter:
                         setTimeout(resolve, 2000);
                     }
                 });
-            }''')
+            }"""
+            )
 
             # 等待所有样式表加载完成
-            await page.evaluate('''() => {
+            await page.evaluate(
+                """() => {
                 return new Promise((resolve) => {
                     const stylesheets = Array.from(document.styleSheets);
                     let loadedCount = 0;
@@ -1169,10 +1250,12 @@ class PlaywrightPDFConverter:
                     // 超时保护
                     setTimeout(resolve, 3000);
                 });
-            }''')
+            }"""
+            )
 
             # 检查是否有延迟加载的内容
-            await page.evaluate('''() => {
+            await page.evaluate(
+                """() => {
                 // 触发所有可能的懒加载内容
                 const lazyElements = document.querySelectorAll('[data-src], [loading="lazy"], .lazy');
                 lazyElements.forEach(el => {
@@ -1187,7 +1270,8 @@ class PlaywrightPDFConverter:
                 document.querySelectorAll('*').forEach(el => {
                     window.getComputedStyle(el).getPropertyValue('opacity');
                 });
-            }''')
+            }"""
+            )
 
             elapsed_time = time.time() * 1000 - start_time
             logger.debug(f"✅ 字体和资源加载完成，耗时: {elapsed_time:.0f}ms")
@@ -1200,7 +1284,8 @@ class PlaywrightPDFConverter:
         logger.debug("🔍 执行综合页面就绪检查...")
 
         try:
-            page_status = await page.evaluate('''() => {
+            page_status = await page.evaluate(
+                """() => {
                 const status = {
                     domReady: document.readyState === 'complete',
                     fontsReady: false,
@@ -1303,21 +1388,28 @@ class PlaywrightPDFConverter:
                 }
 
                 return status;
-            }''')
+            }"""
+            )
 
-            logger.debug(f"📊 页面状态: DOM:{page_status['domReady']}, 字体:{page_status['fontsReady']}, 图片:{page_status['imagesLoaded']}, 脚本:{page_status['scriptsLoaded']}, 样式:{page_status['stylesheetsLoaded']}, 图表:{page_status['chartsReady']}, 无动画:{page_status['noActiveAnimations']}, 可见内容:{page_status['visibleContent']}")
+            logger.debug(
+                f"📊 页面状态: DOM:{page_status['domReady']}, 字体:{page_status['fontsReady']}, 图片:{page_status['imagesLoaded']}, 脚本:{page_status['scriptsLoaded']}, 样式:{page_status['stylesheetsLoaded']}, 图表:{page_status['chartsReady']}, 无动画:{page_status['noActiveAnimations']}, 可见内容:{page_status['visibleContent']}"
+            )
 
-            if page_status['errors']:
-                logger.debug(f"⚠️ 检查中发现问题: {page_status['errors'][:5]}")  # 只显示前5个错误
+            if page_status["errors"]:
+                logger.debug(
+                    f"⚠️ 检查中发现问题: {page_status['errors'][:5]}"
+                )  # 只显示前5个错误
 
             # 判断页面是否完全就绪
-            is_ready = (page_status['domReady'] and
-                       page_status['fontsReady'] and
-                       page_status['imagesLoaded'] and
-                       page_status['scriptsLoaded'] and
-                       page_status['stylesheetsLoaded'] and
-                       page_status['chartsReady'] and
-                       page_status['visibleContent'])
+            is_ready = (
+                page_status["domReady"]
+                and page_status["fontsReady"]
+                and page_status["imagesLoaded"]
+                and page_status["scriptsLoaded"]
+                and page_status["stylesheetsLoaded"]
+                and page_status["chartsReady"]
+                and page_status["visibleContent"]
+            )
 
             if is_ready:
                 logger.debug("✅ 页面完全就绪")
@@ -1332,7 +1424,7 @@ class PlaywrightPDFConverter:
 
     async def _inject_pdf_styles(self, page: Page):
         """Inject CSS styles optimized for PDF generation"""
-        pdf_styles = '''
+        pdf_styles = """
             /* Comprehensive animation and transition disabling for PDF */
             *, *::before, *::after {
                 animation-duration: 0s !important;
@@ -1441,14 +1533,15 @@ class PlaywrightPDFConverter:
                     color-adjust: exact !important;
                 }
             }
-        '''
+        """
 
         await page.add_style_tag(content=pdf_styles)
 
     async def _inject_javascript_optimizations(self, page: Page):
         """Enhanced JavaScript optimizations for Chart.js, ECharts, and D3.js"""
         # Pre-load optimizations
-        await page.add_init_script('''() => {
+        await page.add_init_script(
+            """() => {
             // Override animation-related functions globally
             window.requestAnimationFrame = function(callback) {
                 return setTimeout(callback, 0);
@@ -1527,10 +1620,12 @@ class PlaywrightPDFConverter:
                     };
                 }
             }
-        }''')
+        }"""
+        )
 
         # Post-load optimizations
-        await page.evaluate('''() => {
+        await page.evaluate(
+            """() => {
             // Enhanced Chart.js animation disabling
             if (window.Chart) {
                 // Set global Chart.js defaults
@@ -1676,10 +1771,15 @@ class PlaywrightPDFConverter:
                     return setTimeout(callback, 0);
                 };
             }
-        }''')
+        }"""
+        )
 
-    async def html_to_pdf(self, html_file_path: str, pdf_output_path: str,
-                         options: Optional[Dict[str, Any]] = None) -> bool:
+    async def html_to_pdf(
+        self,
+        html_file_path: str,
+        pdf_output_path: str,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> bool:
         """
         Convert HTML file to PDF using Pyppeteer
         Optimized for 16:9 PPT slides with complete style preservation
@@ -1700,20 +1800,25 @@ class PlaywrightPDFConverter:
             page = await self.context.new_page()
 
             # Set viewport for 16:9 aspect ratio (1280x720)
-            viewport_width = options.get('viewportWidth', 1280)
-            viewport_height = options.get('viewportHeight', 720)
-            await page.set_viewport_size({'width': viewport_width, 'height': viewport_height})
+            viewport_width = options.get("viewportWidth", 1280)
+            viewport_height = options.get("viewportHeight", 720)
+            await page.set_viewport_size(
+                {"width": viewport_width, "height": viewport_height}
+            )
 
             # Navigate to the HTML file
             absolute_html_path = Path(html_file_path).resolve()
             logger.debug(f"📄 Navigating to: file://{absolute_html_path}")
 
-            await page.goto(f"file://{absolute_html_path}",
-                          wait_until='networkidle',  # 等待网络空闲，确保所有资源加载完成
-                          timeout=60000)  # 增加超时时间以确保完整加载
+            await page.goto(
+                f"file://{absolute_html_path}",
+                wait_until="networkidle",  # 等待网络空闲，确保所有资源加载完成
+                timeout=60000,
+            )  # 增加超时时间以确保完整加载
 
             # 智能等待：根据页面复杂度动态调整等待时间
-            page_complexity = await page.evaluate('''() => {
+            page_complexity = await page.evaluate(
+                """() => {
                 const complexity = {
                     canvasCount: document.querySelectorAll('canvas').length,
                     svgCount: document.querySelectorAll('svg').length,
@@ -1736,20 +1841,23 @@ class PlaywrightPDFConverter:
                     ...complexity,
                     complexityScore: score
                 };
-            }''')
+            }"""
+            )
 
             # 根据复杂度调整等待时间
             base_wait = 1.0
-            if page_complexity['complexityScore'] > 20:
+            if page_complexity["complexityScore"] > 20:
                 wait_time = base_wait + 1.5  # 复杂页面等待更久
-            elif page_complexity['complexityScore'] > 10:
+            elif page_complexity["complexityScore"] > 10:
                 wait_time = base_wait + 1.0
-            elif page_complexity['complexityScore'] > 5:
+            elif page_complexity["complexityScore"] > 5:
                 wait_time = base_wait + 0.5
             else:
                 wait_time = base_wait
 
-            logger.debug(f"📊 页面复杂度分析: 图表:{page_complexity['canvasCount']+page_complexity['svgCount']}, 图片:{page_complexity['imageCount']}, 总分:{page_complexity['complexityScore']}, 等待时间:{wait_time}s")
+            logger.debug(
+                f"📊 页面复杂度分析: 图表:{page_complexity['canvasCount']+page_complexity['svgCount']}, 图片:{page_complexity['imageCount']}, 总分:{page_complexity['complexityScore']}, 等待时间:{wait_time}s"
+            )
             await asyncio.sleep(wait_time)
 
             # 等待字体和外部资源加载完成
@@ -1770,7 +1878,8 @@ class PlaywrightPDFConverter:
 
             # 最终确认所有内容已准备就绪
             logger.debug("🔍 执行最终内容检查...")
-            await page.evaluate('''() => {
+            await page.evaluate(
+                """() => {
                 // 最后一次强制重排和重绘
                 document.body.offsetHeight;
 
@@ -1789,7 +1898,8 @@ class PlaywrightPDFConverter:
                         requestAnimationFrame(resolve);
                     });
                 });
-            }''')
+            }"""
+            )
 
             # 最终稳定等待
             await asyncio.sleep(0.5)
@@ -1799,23 +1909,25 @@ class PlaywrightPDFConverter:
 
             # PDF generation options - optimized for 1280x720 landscape (16:9)
             pdf_options = {
-                'path': pdf_output_path,
-                'width': '338.67mm',  # 1280px at 96dpi = 338.67mm (landscape width)
-                'height': '190.5mm',  # 720px at 96dpi = 190.5mm (landscape height)
-                'print_background': True,  # Include background colors and images
-                'landscape': False,  # Set to false since we're manually setting dimensions
-                'margin': {
-                    'top': '0mm',
-                    'right': '0mm',
-                    'bottom': '0mm',
-                    'left': '0mm'
+                "path": pdf_output_path,
+                "width": "338.67mm",  # 1280px at 96dpi = 338.67mm (landscape width)
+                "height": "190.5mm",  # 720px at 96dpi = 190.5mm (landscape height)
+                "print_background": True,  # Include background colors and images
+                "landscape": False,  # Set to false since we're manually setting dimensions
+                "margin": {
+                    "top": "0mm",
+                    "right": "0mm",
+                    "bottom": "0mm",
+                    "left": "0mm",
                 },
-                'prefer_css_page_size': False,  # Use our custom dimensions
-                'display_header_footer': False,  # No header/footer
-                'scale': 1  # No scaling
+                "prefer_css_page_size": False,  # Use our custom dimensions
+                "display_header_footer": False,  # No header/footer
+                "scale": 1,  # No scaling
             }
 
-            logger.debug(f"📑 Generating PDF with options: {pdf_options['width']} x {pdf_options['height']}")
+            logger.debug(
+                f"📑 Generating PDF with options: {pdf_options['width']} x {pdf_options['height']}"
+            )
 
             await page.pdf(**pdf_options)
 
@@ -1830,8 +1942,13 @@ class PlaywrightPDFConverter:
                 await page.close()
                 logger.debug("📄 Page closed.")
 
-    async def html_to_pdf_with_browser(self, browser: Browser, html_file_path: str,
-                                     pdf_output_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+    async def html_to_pdf_with_browser(
+        self,
+        browser: Browser,
+        html_file_path: str,
+        pdf_output_path: str,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> bool:
         """
         Convert HTML file to PDF using an existing browser instance
         More efficient for batch processing
@@ -1849,18 +1966,22 @@ class PlaywrightPDFConverter:
         try:
             # Create a new context for this conversion to ensure isolation
             context = await browser.new_context(
-                viewport={'width': options.get('viewportWidth', 1280),
-                         'height': options.get('viewportHeight', 720)},
+                viewport={
+                    "width": options.get("viewportWidth", 1280),
+                    "height": options.get("viewportHeight", 720),
+                },
                 device_scale_factor=2,
-                ignore_https_errors=True
+                ignore_https_errors=True,
             )
             page = await context.new_page()
 
             # Navigate to the HTML file with comprehensive loading strategy
             absolute_html_path = Path(html_file_path).resolve()
-            await page.goto(f"file://{absolute_html_path}",
-                          wait_until='networkidle',  # 等待网络空闲，确保所有资源加载完成
-                          timeout=60000)  # 适当的超时时间
+            await page.goto(
+                f"file://{absolute_html_path}",
+                wait_until="networkidle",  # 等待网络空闲，确保所有资源加载完成
+                timeout=60000,
+            )  # 适当的超时时间
 
             # 批处理中也需要额外等待确保内容完全加载
             await asyncio.sleep(0.8)
@@ -1875,7 +1996,8 @@ class PlaywrightPDFConverter:
             await self._wait_for_charts_and_dynamic_content(page, max_wait_time=120000)
 
             # Enhanced CSS injection for batch processing
-            await page.add_style_tag(content='''
+            await page.add_style_tag(
+                content="""
                     /* Comprehensive animation and transition disabling for PDF */
                     *, *::before, *::after {
                         animation-duration: 0s !important;
@@ -1912,10 +2034,12 @@ class PlaywrightPDFConverter:
                             print-color-adjust: exact !important;
                         }
                     }
-                ''')
+                """
+            )
 
             # Inject JavaScript optimizations for batch processing
-            await page.evaluate('''() => {
+            await page.evaluate(
+                """() => {
                 // Force disable Chart.js animations
                 if (window.Chart && window.Chart.defaults) {
                     if (window.Chart.defaults.global) {
@@ -1925,7 +2049,8 @@ class PlaywrightPDFConverter:
                         window.Chart.defaults.animation.duration = 0;
                     }
                 }
-            }''')
+            }"""
+            )
 
             # Perform final chart verification before PDF generation
             await self._perform_final_chart_verification(page)
@@ -1935,20 +2060,20 @@ class PlaywrightPDFConverter:
 
             # PDF generation options - 1280x720 landscape (16:9)
             pdf_options = {
-                'path': pdf_output_path,
-                'width': '338.67mm',  # 1280px at 96dpi = 338.67mm (landscape width)
-                'height': '190.5mm',  # 720px at 96dpi = 190.5mm (landscape height)
-                'print_background': True,
-                'landscape': False,  # Set to false since we're manually setting dimensions
-                'margin': {
-                    'top': '0mm',
-                    'right': '0mm',
-                    'bottom': '0mm',
-                    'left': '0mm'
+                "path": pdf_output_path,
+                "width": "338.67mm",  # 1280px at 96dpi = 338.67mm (landscape width)
+                "height": "190.5mm",  # 720px at 96dpi = 190.5mm (landscape height)
+                "print_background": True,
+                "landscape": False,  # Set to false since we're manually setting dimensions
+                "margin": {
+                    "top": "0mm",
+                    "right": "0mm",
+                    "bottom": "0mm",
+                    "left": "0mm",
                 },
-                'prefer_css_page_size': False,  # Use our custom dimensions
-                'display_header_footer': False,
-                'scale': 1
+                "prefer_css_page_size": False,  # Use our custom dimensions
+                "display_header_footer": False,
+                "scale": 1,
             }
 
             await page.pdf(**pdf_options)
@@ -1961,11 +2086,15 @@ class PlaywrightPDFConverter:
         finally:
             if page:
                 await page.close()
-            if 'context' in locals():
+            if "context" in locals():
                 await context.close()
 
-    async def convert_multiple_html_to_pdf(self, html_files: List[str], output_dir: str,
-                                         merged_pdf_path: Optional[str] = None) -> List[str]:
+    async def convert_multiple_html_to_pdf(
+        self,
+        html_files: List[str],
+        output_dir: str,
+        merged_pdf_path: Optional[str] = None,
+    ) -> List[str]:
         """
         Convert multiple HTML files to PDFs and optionally merge them
         Optimized version with shared browser instance and parallel processing
@@ -1984,10 +2113,12 @@ class PlaywrightPDFConverter:
             batch_size = 3 if len(html_files) > 20 else 4 if len(html_files) > 10 else 5
 
             for i in range(0, len(html_files), batch_size):
-                batch = html_files[i:i + batch_size]
+                batch = html_files[i : i + batch_size]
                 batch_num = i // batch_size + 1
                 total_batches = (len(html_files) + batch_size - 1) // batch_size
-                logger.info(f"📦 Processing batch {batch_num}/{total_batches} ({len(batch)} files)")
+                logger.info(
+                    f"📦 Processing batch {batch_num}/{total_batches} ({len(batch)} files)"
+                )
 
                 # Process batch with retry mechanism
                 batch_results = []
@@ -1996,7 +2127,9 @@ class PlaywrightPDFConverter:
                     base_name = Path(html_file).stem
                     pdf_file = os.path.join(output_dir, f"{base_name}.pdf")
 
-                    logger.info(f"📄 Converting {global_index + 1}/{len(html_files)}: {html_file}")
+                    logger.info(
+                        f"📄 Converting {global_index + 1}/{len(html_files)}: {html_file}"
+                    )
 
                     # Try conversion with retry mechanism
                     success = False
@@ -2005,17 +2138,23 @@ class PlaywrightPDFConverter:
 
                     while not success and retry_count <= max_retries:
                         if retry_count > 0:
-                            logger.info(f"🔄 Retry {retry_count}/{max_retries} for: {html_file}")
+                            logger.info(
+                                f"🔄 Retry {retry_count}/{max_retries} for: {html_file}"
+                            )
                             # Wait a bit before retry
                             await asyncio.sleep(2)
 
-                        success = await self.html_to_pdf_with_browser(browser, html_file, pdf_file)
+                        success = await self.html_to_pdf_with_browser(
+                            browser, html_file, pdf_file
+                        )
                         retry_count += 1
 
                     if success:
                         batch_results.append(pdf_file)
                     else:
-                        logger.error(f"❌ Failed to convert after {max_retries} retries: {html_file}")
+                        logger.error(
+                            f"❌ Failed to convert after {max_retries} retries: {html_file}"
+                        )
 
                 pdf_files.extend(batch_results)
 
@@ -2024,7 +2163,9 @@ class PlaywrightPDFConverter:
                     logger.info("💾 Memory cleanup between batches...")
                     await asyncio.sleep(2)
 
-            logger.info(f"✅ Batch conversion completed. Generated {len(pdf_files)} PDF files.")
+            logger.info(
+                f"✅ Batch conversion completed. Generated {len(pdf_files)} PDF files."
+            )
 
             # If merging is requested and we have PDFs
             if merged_pdf_path and len(pdf_files) > 0:
@@ -2032,9 +2173,13 @@ class PlaywrightPDFConverter:
                     # For single PDF, just copy it to the merged path
                     logger.info("📄 Single PDF detected, copying to merged path...")
                     try:
-                        from ..utils.thread_pool import run_blocking_io
                         import shutil
-                        await run_blocking_io(shutil.copy2, pdf_files[0], merged_pdf_path)
+
+                        from ..utils.thread_pool import run_blocking_io
+
+                        await run_blocking_io(
+                            shutil.copy2, pdf_files[0], merged_pdf_path
+                        )
                         logger.info(f"✅ Single PDF copied to: {merged_pdf_path}")
                     except Exception as e:
                         logger.error(f"❌ Failed to copy single PDF: {e}")
@@ -2069,7 +2214,7 @@ class PlaywrightPDFConverter:
                     if os.path.exists(pdf_file):
                         merger.append(pdf_file)
 
-                with open(output_path, 'wb') as output_file:
+                with open(output_path, "wb") as output_file:
                     merger.write(output_file)
 
                 merger.close()
@@ -2085,7 +2230,7 @@ class PlaywrightPDFConverter:
                     if os.path.exists(pdf_file):
                         merger.append(pdf_file)
 
-                with open(output_path, 'wb') as output_file:
+                with open(output_path, "wb") as output_file:
                     merger.write(output_file)
 
                 merger.close()
@@ -2099,6 +2244,7 @@ class PlaywrightPDFConverter:
     async def merge_pdfs(self, pdf_files: List[str], output_path: str) -> bool:
         """Merge multiple PDF files into one using thread pool to avoid blocking"""
         from ..utils.thread_pool import run_blocking_io
+
         return await run_blocking_io(self._merge_pdfs_sync, pdf_files, output_path)
 
     async def close(self):
@@ -2128,15 +2274,19 @@ def get_pdf_converter() -> PlaywrightPDFConverter:
     return _pdf_converter
 
 
-async def convert_html_to_pdf(html_file_path: str, pdf_output_path: str,
-                            options: Optional[Dict[str, Any]] = None) -> bool:
+async def convert_html_to_pdf(
+    html_file_path: str, pdf_output_path: str, options: Optional[Dict[str, Any]] = None
+) -> bool:
     """Convenience function for single HTML to PDF conversion"""
     converter = get_pdf_converter()
     return await converter.html_to_pdf(html_file_path, pdf_output_path, options)
 
 
-async def convert_multiple_html_to_pdf(html_files: List[str], output_dir: str,
-                                     merged_pdf_path: Optional[str] = None) -> List[str]:
+async def convert_multiple_html_to_pdf(
+    html_files: List[str], output_dir: str, merged_pdf_path: Optional[str] = None
+) -> List[str]:
     """Convenience function for batch HTML to PDF conversion"""
     converter = get_pdf_converter()
-    return await converter.convert_multiple_html_to_pdf(html_files, output_dir, merged_pdf_path)
+    return await converter.convert_multiple_html_to_pdf(
+        html_files, output_dir, merged_pdf_path
+    )

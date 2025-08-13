@@ -7,21 +7,20 @@ This module provides comprehensive research functionality including:
 - Enhanced research service with multiple providers
 """
 
-from .searxng_provider import SearXNGContentProvider, SearXNGSearchResult, SearXNGSearchResponse
-from .content_extractor import WebContentExtractor, ExtractedContent
-from .enhanced_research_service import (
-    EnhancedResearchService, 
-    EnhancedResearchStep, 
-    EnhancedResearchReport
-)
+from .content_extractor import ExtractedContent, WebContentExtractor
+from .enhanced_research_service import (EnhancedResearchReport,
+                                        EnhancedResearchService,
+                                        EnhancedResearchStep)
+from .searxng_provider import (SearXNGContentProvider, SearXNGSearchResponse,
+                               SearXNGSearchResult)
 
 __all__ = [
-    'SearXNGContentProvider',
-    'SearXNGSearchResult', 
-    'SearXNGSearchResponse',
-    'WebContentExtractor',
-    'ExtractedContent',
-    'EnhancedResearchService',
-    'EnhancedResearchStep',
-    'EnhancedResearchReport'
+    "SearXNGContentProvider",
+    "SearXNGSearchResult",
+    "SearXNGSearchResponse",
+    "WebContentExtractor",
+    "ExtractedContent",
+    "EnhancedResearchService",
+    "EnhancedResearchStep",
+    "EnhancedResearchReport",
 ]

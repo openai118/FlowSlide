@@ -3,17 +3,25 @@ PPT大纲生成相关提示词
 包含所有用于生成PPT大纲的提示词模板
 """
 
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 
 class OutlinePrompts:
     """PPT大纲生成相关的提示词集合"""
-    
+
     @staticmethod
-    def get_outline_prompt_zh(topic: str, scenario_desc: str, target_audience: str, 
-                             style_desc: str, requirements: str, description: str,
-                             research_section: str, page_count_instruction: str,
-                             expected_page_count: int, language: str) -> str:
+    def get_outline_prompt_zh(
+        topic: str,
+        scenario_desc: str,
+        target_audience: str,
+        style_desc: str,
+        requirements: str,
+        description: str,
+        research_section: str,
+        page_count_instruction: str,
+        expected_page_count: int,
+        language: str,
+    ) -> str:
         """获取中文大纲生成提示词"""
         return f"""你是一位专业的PPT大纲策划专家，请基于以下项目信息，生成一个**结构清晰、内容创意、专业严谨、格式规范的JSON格式PPT大纲**。
 
@@ -107,10 +115,18 @@ class OutlinePrompts:
 ```"""
 
     @staticmethod
-    def get_outline_prompt_en(topic: str, scenario_desc: str, target_audience: str,
-                             style_desc: str, requirements: str, description: str,
-                             research_section: str, page_count_instruction: str,
-                             expected_page_count: int, language: str) -> str:
+    def get_outline_prompt_en(
+        topic: str,
+        scenario_desc: str,
+        target_audience: str,
+        style_desc: str,
+        requirements: str,
+        description: str,
+        research_section: str,
+        page_count_instruction: str,
+        expected_page_count: int,
+        language: str,
+    ) -> str:
         """获取英文大纲生成提示词"""
         return f"""You are a **professional presentation outline designer**. Based on the following project details, please generate a **well-structured, creative, and professional JSON-format PowerPoint outline**.
 
@@ -205,8 +221,13 @@ Please follow the exact JSON format below, and **wrap the result in a code block
 ```"""
 
     @staticmethod
-    def get_streaming_outline_prompt(topic: str, target_audience: str, ppt_style: str,
-                                   page_count_instruction: str, research_section: str) -> str:
+    def get_streaming_outline_prompt(
+        topic: str,
+        target_audience: str,
+        ppt_style: str,
+        page_count_instruction: str,
+        research_section: str,
+    ) -> str:
         """获取流式大纲生成提示词"""
         return f"""作为专业的PPT大纲生成助手，请为以下项目生成详细的PPT大纲。
 
@@ -269,13 +290,19 @@ slide_type可选值：
 ```"""
 
     @staticmethod
-    def get_outline_generation_context(topic: str, target_audience: str, ppt_style: str,
-                                     page_count_instruction: str, focus_content: List[str],
-                                     tech_highlights: List[str], description: str) -> str:
+    def get_outline_generation_context(
+        topic: str,
+        target_audience: str,
+        ppt_style: str,
+        page_count_instruction: str,
+        focus_content: List[str],
+        tech_highlights: List[str],
+        description: str,
+    ) -> str:
         """获取大纲生成上下文提示词"""
-        focus_content_str = ', '.join(focus_content) if focus_content else '无'
-        tech_highlights_str = ', '.join(tech_highlights) if tech_highlights else '无'
-        
+        focus_content_str = ", ".join(focus_content) if focus_content else "无"
+        tech_highlights_str = ", ".join(tech_highlights) if tech_highlights else "无"
+
         return f"""请为以下项目生成详细的PPT大纲：
 
 项目信息：
@@ -290,8 +317,13 @@ slide_type可选值：
 请生成结构化的PPT大纲，包含每页的标题、内容要点和页面类型。确保内容逻辑清晰，符合目标受众需求。"""
 
     @staticmethod
-    def get_streaming_outline_prompt(topic: str, target_audience: str, ppt_style: str,
-                                   page_count_instruction: str, research_section: str) -> str:
+    def get_streaming_outline_prompt(
+        topic: str,
+        target_audience: str,
+        ppt_style: str,
+        page_count_instruction: str,
+        research_section: str,
+    ) -> str:
         """获取流式大纲生成提示词"""
         prompt = f"""
 作为专业的PPT大纲生成助手，请为以下项目生成详细的PPT大纲。
@@ -357,9 +389,15 @@ slide_type可选值：
         return prompt
 
     @staticmethod
-    def get_outline_generation_context(topic: str, target_audience: str, page_count_instruction: str,
-                                     ppt_style: str, custom_style: str, description: str,
-                                     page_count_mode: str) -> str:
+    def get_outline_generation_context(
+        topic: str,
+        target_audience: str,
+        page_count_instruction: str,
+        ppt_style: str,
+        custom_style: str,
+        description: str,
+        page_count_mode: str,
+    ) -> str:
         """获取大纲生成上下文提示词"""
         context = f"""
 项目信息：

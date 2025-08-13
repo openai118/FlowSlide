@@ -4,20 +4,24 @@ Global Master Template API endpoints
 
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends, Query
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from .models import (
-    GlobalMasterTemplateCreate, GlobalMasterTemplateUpdate, GlobalMasterTemplateResponse,
-    GlobalMasterTemplateDetailResponse, GlobalMasterTemplateGenerateRequest,
-    TemplateSelectionRequest, TemplateSelectionResponse
-)
-from ..services.global_master_template_service import GlobalMasterTemplateService
+from ..services.global_master_template_service import \
+    GlobalMasterTemplateService
+from .models import (GlobalMasterTemplateCreate,
+                     GlobalMasterTemplateDetailResponse,
+                     GlobalMasterTemplateGenerateRequest,
+                     GlobalMasterTemplateResponse, GlobalMasterTemplateUpdate,
+                     TemplateSelectionRequest, TemplateSelectionResponse)
 
 logger = logging.getLogger(__name__)
 
 # Create router
-router = APIRouter(prefix="/api/global-master-templates", tags=["Global Master Templates"])
+router = APIRouter(
+    prefix="/api/global-master-templates", tags=["Global Master Templates"]
+)
 
 # Service instance
 template_service = GlobalMasterTemplateService()
@@ -42,7 +46,9 @@ async def get_all_templates(
     tags: Optional[str] = Query(None, description="Filter by tags (comma-separated)"),
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(6, ge=1, le=100, description="Number of items per page"),
-    search: Optional[str] = Query(None, description="Search in template name and description")
+    search: Optional[str] = Query(
+        None, description="Search in template name and description"
+    ),
 ):
     """Get all global master templates with pagination"""
     try:
@@ -57,8 +63,11 @@ async def get_all_templates(
             )
 
         return {
-            "templates": [GlobalMasterTemplateResponse(**template) for template in result["templates"]],
-            "pagination": result["pagination"]
+            "templates": [
+                GlobalMasterTemplateResponse(**template)
+                for template in result["templates"]
+            ],
+            "pagination": result["pagination"],
         }
     except Exception as e:
         logger.error(f"Failed to get templates: {e}")
@@ -72,7 +81,7 @@ async def get_template_by_id(template_id: int):
         template = await template_service.get_template_by_id(template_id)
         if not template:
             raise HTTPException(status_code=404, detail="Template not found")
-        
+
         return GlobalMasterTemplateDetailResponse(**template)
     except HTTPException:
         raise
@@ -86,15 +95,17 @@ async def update_template(template_id: int, update_data: GlobalMasterTemplateUpd
     """Update a global master template"""
     try:
         # Filter out None values
-        update_dict = {k: v for k, v in update_data.model_dump().items() if v is not None}
-        
+        update_dict = {
+            k: v for k, v in update_data.model_dump().items() if v is not None
+        }
+
         if not update_dict:
             raise HTTPException(status_code=400, detail="No update data provided")
-        
+
         success = await template_service.update_template(template_id, update_dict)
         if not success:
             raise HTTPException(status_code=404, detail="Template not found")
-        
+
         return {"success": True, "message": "Template updated successfully"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -112,7 +123,7 @@ async def delete_template(template_id: int):
         success = await template_service.delete_template(template_id)
         if not success:
             raise HTTPException(status_code=404, detail="Template not found")
-        
+
         return {"success": True, "message": "Template deleted successfully"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -130,7 +141,7 @@ async def set_default_template(template_id: int):
         success = await template_service.set_default_template(template_id)
         if not success:
             raise HTTPException(status_code=404, detail="Template not found")
-        
+
         return {"success": True, "message": "Default template set successfully"}
     except Exception as e:
         logger.error(f"Failed to set default template {template_id}: {e}")
@@ -144,7 +155,7 @@ async def get_default_template():
         template = await template_service.get_default_template()
         if not template:
             raise HTTPException(status_code=404, detail="No default template found")
-        
+
         return GlobalMasterTemplateDetailResponse(**template)
     except HTTPException:
         raise
@@ -161,7 +172,7 @@ async def generate_template_with_ai(request: GlobalMasterTemplateGenerateRequest
             prompt=request.prompt,
             template_name=request.template_name,
             description=request.description,
-            tags=request.tags
+            tags=request.tags,
         )
         return GlobalMasterTemplateResponse(**result)
     except ValueError as e:
@@ -172,10 +183,13 @@ async def generate_template_with_ai(request: GlobalMasterTemplateGenerateRequest
 
 
 @router.post("/generate-stream")
-async def generate_template_with_ai_stream(request: GlobalMasterTemplateGenerateRequest):
+async def generate_template_with_ai_stream(
+    request: GlobalMasterTemplateGenerateRequest,
+):
     """Generate a new template using AI with streaming response"""
-    from fastapi.responses import StreamingResponse
     import json
+
+    from fastapi.responses import StreamingResponse
 
     async def generate_stream():
         try:
@@ -187,7 +201,7 @@ async def generate_template_with_ai_stream(request: GlobalMasterTemplateGenerate
                 prompt=request.prompt,
                 template_name=request.template_name,
                 description=request.description,
-                tags=request.tags
+                tags=request.tags,
             ):
                 yield f"data: {json.dumps(chunk)}\n\n"
 
@@ -201,8 +215,8 @@ async def generate_template_with_ai_stream(request: GlobalMasterTemplateGenerate
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "Content-Type": "text/event-stream"
-        }
+            "Content-Type": "text/event-stream",
+        },
     )
 
 
@@ -212,31 +226,37 @@ async def select_template_for_project(request: TemplateSelectionRequest):
     try:
         if request.selected_template_id:
             # Get the selected template
-            template = await template_service.get_template_by_id(request.selected_template_id)
+            template = await template_service.get_template_by_id(
+                request.selected_template_id
+            )
             if not template:
-                raise HTTPException(status_code=404, detail="Selected template not found")
-            
+                raise HTTPException(
+                    status_code=404, detail="Selected template not found"
+                )
+
             # Increment usage count
-            await template_service.increment_template_usage(request.selected_template_id)
-            
+            await template_service.increment_template_usage(
+                request.selected_template_id
+            )
+
             return TemplateSelectionResponse(
                 success=True,
                 message="Template selected successfully",
-                selected_template=GlobalMasterTemplateResponse(**template)
+                selected_template=GlobalMasterTemplateResponse(**template),
             )
         else:
             # Use default template
             template = await template_service.get_default_template()
             if not template:
                 raise HTTPException(status_code=404, detail="No default template found")
-            
+
             # Increment usage count
-            await template_service.increment_template_usage(template['id'])
-            
+            await template_service.increment_template_usage(template["id"])
+
             return TemplateSelectionResponse(
                 success=True,
                 message="Default template selected",
-                selected_template=GlobalMasterTemplateResponse(**template)
+                selected_template=GlobalMasterTemplateResponse(**template),
             )
     except HTTPException:
         raise
@@ -246,23 +266,25 @@ async def select_template_for_project(request: TemplateSelectionRequest):
 
 
 @router.post("/{template_id}/duplicate", response_model=GlobalMasterTemplateResponse)
-async def duplicate_template(template_id: int, new_name: str = Query(..., description="New template name")):
+async def duplicate_template(
+    template_id: int, new_name: str = Query(..., description="New template name")
+):
     """Duplicate an existing template"""
     try:
         # Get the original template
         original = await template_service.get_template_by_id(template_id)
         if not original:
             raise HTTPException(status_code=404, detail="Template not found")
-        
+
         # Create duplicate data
         duplicate_data = {
-            'template_name': new_name,
-            'description': f"复制自: {original['template_name']}",
-            'html_template': original['html_template'],
-            'tags': original['tags'] + ['复制'],
-            'created_by': 'duplicate'
+            "template_name": new_name,
+            "description": f"复制自: {original['template_name']}",
+            "html_template": original["html_template"],
+            "tags": original["tags"] + ["复制"],
+            "created_by": "duplicate",
         }
-        
+
         result = await template_service.create_template(duplicate_data)
         return GlobalMasterTemplateResponse(**result)
     except ValueError as e:
@@ -281,12 +303,12 @@ async def get_template_preview(template_id: int):
         template = await template_service.get_template_by_id(template_id)
         if not template:
             raise HTTPException(status_code=404, detail="Template not found")
-        
+
         return {
-            "id": template['id'],
-            "template_name": template['template_name'],
-            "preview_image": template['preview_image'],
-            "html_template": template['html_template']
+            "id": template["id"],
+            "template_name": template["template_name"],
+            "preview_image": template["preview_image"],
+            "html_template": template["html_template"],
         }
     except HTTPException:
         raise
@@ -303,7 +325,7 @@ async def increment_template_usage(template_id: int):
         success = await template_service.increment_template_usage(template_id)
         if not success:
             raise HTTPException(status_code=404, detail="Template not found")
-        
+
         return {"success": True, "message": "Usage count incremented"}
     except HTTPException:
         raise

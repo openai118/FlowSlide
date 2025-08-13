@@ -2,22 +2,23 @@
 Authentication middleware for LandPPT
 """
 
-from typing import Optional, Callable
-from fastapi import Request, Response, HTTPException, Depends
+import logging
+from typing import Callable, Optional
+
+from fastapi import Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
-import logging
 
-from .auth_service import get_auth_service, AuthService
 from ..database.database import get_db
 from ..database.models import User
+from .auth_service import AuthService, get_auth_service
 
 logger = logging.getLogger(__name__)
 
 
 class AuthMiddleware:
     """Authentication middleware"""
-    
+
     def __init__(self):
         self.auth_service = get_auth_service()
         # 不需要认证的路径
@@ -32,7 +33,7 @@ class AuthMiddleware:
             "/redoc",
             "/openapi.json",
             "/static",
-            "/favicon.ico"
+            "/favicon.ico",
         }
         # 不需要认证的路径前缀
         self.public_prefixes = [
@@ -42,34 +43,34 @@ class AuthMiddleware:
             "/api/image/thumbnail/",  # 图片缩略图访问无需认证
             "/docs",
             "/redoc",
-            "/openapi.json"
+            "/openapi.json",
         ]
-    
+
     def is_public_path(self, path: str) -> bool:
         """Check if path is public (doesn't require authentication)"""
         # Check exact matches
         if path in self.public_paths:
             return True
-        
+
         # Check prefixes
         for prefix in self.public_prefixes:
             if path.startswith(prefix):
                 return True
-        
+
         return False
-    
+
     async def __call__(self, request: Request, call_next: Callable):
         """Middleware function"""
         path = request.url.path
-        
+
         # Skip authentication for public paths
         if self.is_public_path(path):
             response = await call_next(request)
             return response
-        
+
         # Get session from cookie
         session_id = request.cookies.get("session_id")
-        
+
         if not session_id:
             # No session, redirect to login
             if path.startswith("/api/"):
@@ -77,51 +78,51 @@ class AuthMiddleware:
                 return Response(
                     content='{"detail": "Authentication required"}',
                     status_code=401,
-                    media_type="application/json"
+                    media_type="application/json",
                 )
             else:
                 # Web endpoints redirect to login
                 return RedirectResponse(url="/auth/login", status_code=302)
-        
+
         # Validate session
         try:
             # Get database session
             db_gen = get_db()
             db = next(db_gen)
-            
+
             try:
                 user = self.auth_service.get_user_by_session(db, session_id)
-                
+
                 if not user:
                     # Invalid session, redirect to login
                     if path.startswith("/api/"):
                         return Response(
                             content='{"detail": "Invalid session"}',
                             status_code=401,
-                            media_type="application/json"
+                            media_type="application/json",
                         )
                     else:
                         response = RedirectResponse(url="/auth/login", status_code=302)
                         response.delete_cookie("session_id")
                         return response
-                
+
                 # Add user to request state
                 request.state.user = user
-                
+
                 # Continue with request
                 response = await call_next(request)
                 return response
-                
+
             finally:
                 db.close()
-                
+
         except Exception as e:
             logger.error(f"Authentication middleware error: {e}")
             if path.startswith("/api/"):
                 return Response(
                     content='{"detail": "Authentication error"}',
                     status_code=500,
-                    media_type="application/json"
+                    media_type="application/json",
                 )
             else:
                 return RedirectResponse(url="/auth/login", status_code=302)
@@ -129,7 +130,7 @@ class AuthMiddleware:
 
 def get_current_user(request: Request) -> Optional[User]:
     """Get current authenticated user from request"""
-    return getattr(request.state, 'user', None)
+    return getattr(request.state, "user", None)
 
 
 def require_auth(request: Request) -> User:
@@ -149,8 +150,7 @@ def require_admin(request: Request) -> User:
 
 
 def get_current_user_optional(
-    request: Request,
-    db: Session = Depends(get_db)
+    request: Request, db: Session = Depends(get_db)
 ) -> Optional[User]:
     """Get current user if authenticated, None otherwise"""
     session_id = request.cookies.get("session_id")
@@ -161,10 +161,7 @@ def get_current_user_optional(
     return auth_service.get_user_by_session(db, session_id)
 
 
-def get_current_user_required(
-    request: Request,
-    db: Session = Depends(get_db)
-) -> User:
+def get_current_user_required(request: Request, db: Session = Depends(get_db)) -> User:
     """Get current user, raise exception if not authenticated"""
     user = get_current_user_optional(request, db)
     if not user:
@@ -172,10 +169,7 @@ def get_current_user_required(
     return user
 
 
-def get_current_admin_user(
-    request: Request,
-    db: Session = Depends(get_db)
-) -> User:
+def get_current_admin_user(request: Request, db: Session = Depends(get_db)) -> User:
     """Get current admin user, raise exception if not admin"""
     user = get_current_user_required(request, db)
     if not user.is_admin:

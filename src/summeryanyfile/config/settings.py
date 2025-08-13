@@ -2,15 +2,16 @@
 设置管理 - 处理配置文件和环境变量
 """
 
-import os
-from typing import Optional, Dict, Any
-from pathlib import Path
 import json
 import logging
-from dataclasses import dataclass, asdict
+import os
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any, Dict, Optional
+
 from dotenv import load_dotenv
 
-from ..core.models import ProcessingConfig, ChunkStrategy
+from ..core.models import ChunkStrategy, ProcessingConfig
 
 logger = logging.getLogger(__name__)
 
@@ -18,19 +19,20 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Settings:
     """应用设置"""
+
     # LLM配置
     llm_model: str = "gpt-4o-mini"
     llm_provider: str = "openai"
     temperature: float = 0.7
     max_tokens: int = 4000
-    
+
     # 处理配置
     max_slides: int = 25
     min_slides: int = 5  # 新增：最小页数
     chunk_size: int = 3000
     chunk_overlap: int = 200
     chunk_strategy: str = "paragraph"
-    
+
     # API配置
     openai_api_key: Optional[str] = None
     openai_base_url: Optional[str] = None
@@ -38,19 +40,19 @@ class Settings:
     azure_openai_api_key: Optional[str] = None
     azure_openai_endpoint: Optional[str] = None
     azure_openai_api_version: str = "2024-02-15-preview"
-    
+
     # 输出配置
     output_format: str = "json"
     output_file: Optional[str] = None
-    
+
     # 日志配置
     log_level: str = "INFO"
     log_file: Optional[str] = None
-    
+
     # 其他配置
     progress_bar: bool = True
     debug_mode: bool = False
-    
+
     def to_processing_config(self, target_language: str = "zh") -> ProcessingConfig:
         """转换为处理配置"""
         return ProcessingConfig(
@@ -65,7 +67,7 @@ class Settings:
             max_tokens=self.max_tokens,
             target_language=target_language,
         )
-    
+
     def get_llm_kwargs(self) -> Dict[str, Any]:
         """获取LLM相关的参数"""
         kwargs = {}
@@ -85,40 +87,38 @@ class Settings:
             kwargs["api_version"] = self.azure_openai_api_version
 
         return kwargs
-    
+
     def save_to_file(self, file_path: str):
         """保存设置到文件"""
         config_dict = asdict(self)
         # 移除敏感信息
-        sensitive_keys = [
-            "openai_api_key", 
-            "anthropic_api_key", 
-            "azure_openai_api_key"
-        ]
+        sensitive_keys = ["openai_api_key", "anthropic_api_key", "azure_openai_api_key"]
         for key in sensitive_keys:
             if key in config_dict:
                 config_dict[key] = "***"
-        
-        with open(file_path, 'w', encoding='utf-8') as f:
+
+        with open(file_path, "w", encoding="utf-8") as f:
             json.dump(config_dict, f, indent=2, ensure_ascii=False)
-        
+
         logger.info(f"设置已保存到: {file_path}")
-    
+
     @classmethod
     def load_from_file(cls, file_path: str) -> "Settings":
         """从文件加载设置"""
         if not os.path.exists(file_path):
             logger.warning(f"配置文件不存在: {file_path}")
             return cls()
-        
+
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 config_dict = json.load(f)
-            
+
             # 过滤掉不存在的字段
             valid_fields = {field.name for field in cls.__dataclass_fields__.values()}
-            filtered_config = {k: v for k, v in config_dict.items() if k in valid_fields}
-            
+            filtered_config = {
+                k: v for k, v in config_dict.items() if k in valid_fields
+            }
+
             return cls(**filtered_config)
         except Exception as e:
             logger.error(f"加载配置文件失败: {e}")
@@ -126,18 +126,16 @@ class Settings:
 
 
 def load_settings(
-    config_file: Optional[str] = None,
-    env_file: Optional[str] = None,
-    **overrides
+    config_file: Optional[str] = None, env_file: Optional[str] = None, **overrides
 ) -> Settings:
     """
     加载设置
-    
+
     Args:
         config_file: 配置文件路径
         env_file: 环境变量文件路径
         **overrides: 覆盖参数
-        
+
     Returns:
         设置对象
     """
@@ -151,7 +149,7 @@ def load_settings(
             if os.path.exists(env_path):
                 load_dotenv(env_path)
                 break
-    
+
     # 从配置文件加载
     if config_file:
         settings = Settings.load_from_file(config_file)
@@ -159,15 +157,15 @@ def load_settings(
         # 尝试加载默认配置文件
         default_config_files = [
             "config.json",
-            "settings.json", 
-            os.path.expanduser("~/.summeryanyfile/config.json")
+            "settings.json",
+            os.path.expanduser("~/.summeryanyfile/config.json"),
         ]
         settings = Settings()
         for config_path in default_config_files:
             if os.path.exists(config_path):
                 settings = Settings.load_from_file(config_path)
                 break
-    
+
     # 从环境变量覆盖
     env_mappings = {
         "OPENAI_API_KEY": "openai_api_key",
@@ -189,12 +187,18 @@ def load_settings(
         "LOG_LEVEL": "log_level",
         "DEBUG_MODE": "debug_mode",
     }
-    
+
     for env_key, attr_name in env_mappings.items():
         env_value = os.getenv(env_key)
         if env_value is not None:
             # 类型转换
-            if attr_name in ["max_slides", "min_slides", "chunk_size", "chunk_overlap", "max_tokens"]:
+            if attr_name in [
+                "max_slides",
+                "min_slides",
+                "chunk_size",
+                "chunk_overlap",
+                "max_tokens",
+            ]:
                 try:
                     env_value = int(env_value)
                 except ValueError:
@@ -208,16 +212,16 @@ def load_settings(
                     continue
             elif attr_name == "debug_mode":
                 env_value = env_value.lower() in ("true", "1", "yes", "on")
-            
+
             setattr(settings, attr_name, env_value)
-    
+
     # 应用覆盖参数
     for key, value in overrides.items():
         if hasattr(settings, key):
             setattr(settings, key, value)
         else:
             logger.warning(f"未知的设置参数: {key}")
-    
+
     return settings
 
 
@@ -232,7 +236,7 @@ def create_default_config():
     """创建默认配置文件"""
     config_dir = get_default_config_dir()
     config_file = config_dir / "config.json"
-    
+
     if not config_file.exists():
         settings = Settings()
         settings.save_to_file(str(config_file))
@@ -270,10 +274,10 @@ CHUNK_STRATEGY=paragraph
 LOG_LEVEL=INFO
 DEBUG_MODE=false
 """
-    
+
     env_file = Path(".env.template")
-    with open(env_file, 'w', encoding='utf-8') as f:
+    with open(env_file, "w", encoding="utf-8") as f:
         f.write(template_content)
-    
+
     print(f"环境变量模板已创建: {env_file}")
     print("请复制为 .env 文件并填入您的API密钥")

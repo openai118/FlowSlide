@@ -9,7 +9,7 @@ from pathlib import Path
 
 class SystemPrompts:
     """PPT系统提示词和默认配置集合"""
-    
+
     @staticmethod
     def get_default_ppt_system_prompt() -> str:
         """获取默认PPT生成系统提示词"""
@@ -49,9 +49,9 @@ class SystemPrompts:
             current_dir = Path(__file__).parent
             # 构建prompts.md的路径
             prompts_file = current_dir / "prompts.md"
-            
+
             if prompts_file.exists():
-                with open(prompts_file, 'r', encoding='utf-8') as f:
+                with open(prompts_file, "r", encoding="utf-8") as f:
                     content = f.read()
                 return content
             else:
