@@ -61,8 +61,8 @@ class PostgreSQLHealthChecker:
         self.api_service_key = os.getenv('API_SERVICE_KEY', '')
         
         # 存储配置（可选）
-        self.storage_bucket = os.getenv('STORAGE_BUCKET', 'default-bucket')
-        self.storage_provider = os.getenv('STORAGE_PROVIDER', 'postgresql')
+        self.storage_bucket = os.getenv('STORAGE_BUCKET', '')
+        self.storage_provider = os.getenv('STORAGE_PROVIDER', 'unknown')
         
         # postgres 超级用户配置（仅在需要时使用）
         self.admin_config = {
@@ -125,6 +125,26 @@ class PostgreSQLHealthChecker:
             self.results['summary']['passed'] += 1
         else:
             self.results['summary']['failed'] += 1
+    
+    def _resolve_host_ipv6(self, hostname: str) -> str:
+        """尝试解析主机名为IPv6地址，如果失败则返回原主机名"""
+        try:
+            import socket
+            # 尝试IPv4
+            try:
+                info = socket.getaddrinfo(hostname, None, socket.AF_INET)
+                return hostname  # IPv4解析成功，返回原主机名
+            except:
+                # IPv4失败，尝试IPv6
+                info = socket.getaddrinfo(hostname, None, socket.AF_INET6)
+                if info:
+                    ipv6_addr = str(info[0][4][0])
+                    print(f"   🌐 检测到IPv6地址: {ipv6_addr}")
+                    return ipv6_addr
+                return hostname
+        except Exception as e:
+            print(f"   ⚠️ DNS解析警告: {e}")
+            return hostname
     
     def test_database_connection(self) -> bool:
         """测试数据库连接"""
@@ -343,8 +363,8 @@ class PostgreSQLHealthChecker:
             return False
         
         try:
-            # 测试存储桶列表（仅适用于支持的 API）
-            if self.storage_provider == 'supabase':
+            # 测试存储桶列表（支持Supabase风格的REST API）
+            if self.storage_provider.lower() in ['supabase', 'postgresql', 'postgres']:
                 storage_url = f"{self.api_url}/storage/v1/bucket"
                 headers = {
                     'apikey': self.api_service_key,
@@ -357,6 +377,18 @@ class PostgreSQLHealthChecker:
                 if response.status_code == 200:
                     buckets = response.json()
                     bucket_names = [bucket.get('name', 'unknown') for bucket in buckets]
+                    
+                    # 如果没有指定存储桶，只检查API可用性
+                    if not self.storage_bucket:
+                        details = {
+                            'available_buckets': bucket_names,
+                            'target_bucket': 'none_specified',
+                            'api_accessible': True
+                        }
+                        self.add_result('storage_access', True, 
+                                      f"✅ 存储API可访问，发现 {len(bucket_names)} 个存储桶", details)
+                        print(f"   ✅ 存储API可访问，发现存储桶: {bucket_names}")
+                        return True
                     
                     bucket_exists = self.storage_bucket in bucket_names
                     
@@ -452,7 +484,14 @@ class PostgreSQLHealthChecker:
         """保存检查报告"""
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"supabase_health_report_{timestamp}.json"
+            # 根据实际数据库类型生成报告文件名
+            db_type = "postgresql"
+            if self.storage_provider.lower() == 'supabase':
+                db_type = "supabase"
+            elif "postgres" in self.db_config.get('host', '').lower():
+                db_type = "postgres"
+            
+            filename = f"{db_type}_health_report_{timestamp}.json"
             
             with open(filename, 'w', encoding='utf-8') as f:
                 json.dump(self.results, f, ensure_ascii=False, indent=2)
@@ -492,7 +531,15 @@ class PostgreSQLHealthChecker:
     
     def run_all_checks(self) -> bool:
         """运行所有健康检查"""
-        print("🚀 开始 Supabase 数据库健康检查...")
+        # 根据配置确定数据库类型
+        if self.storage_provider.lower() == 'supabase':
+            db_name = "Supabase PostgreSQL"
+        elif "supabase" in self.db_config.get('host', '').lower():
+            db_name = "Supabase PostgreSQL"
+        else:
+            db_name = "PostgreSQL"
+            
+        print(f"🚀 开始 {db_name} 数据库健康检查...")
         print("="*50)
         
         # 必要检查
@@ -544,9 +591,10 @@ def main():
         print("   请设置 DATABASE_URL 或 (DB_HOST, DB_USER, DB_PASSWORD)")
         print()
         print("示例配置:")
-        print("DATABASE_URL=postgresql://user:pass@host:5432/dbname?sslmode=require")
+        print("DATABASE_URL=postgresql://user:pass@host:port/dbname?sslmode=require")
         print("或者:")
         print("DB_HOST=your-host")
+        print("DB_PORT=your-port")
         print("DB_USER=your-user")
         print("DB_PASSWORD=your-password")
         sys.exit(1)

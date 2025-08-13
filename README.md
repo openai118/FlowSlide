@@ -129,7 +129,7 @@ python run.py
 **使用方法**:
 ```bash
 # 使用 DATABASE_URL
-DATABASE_URL="postgresql://user:pass@host:5432/db" python database_health_check.py
+DATABASE_URL="postgresql://user:pass@host:port/db" python database_health_check.py
 
 # 使用分离的环境变量
 DB_HOST=host DB_USER=user DB_PASSWORD=pass python database_health_check.py
@@ -214,10 +214,10 @@ export R2_BUCKET_NAME=your-backup-bucket
 **连接失败**
 ```bash
 # 检查网络连通性
-telnet your-host 5432
+telnet your-host your-port
 
 # 检查 SSL 配置
-psql "postgresql://user:pass@host:5432/db?sslmode=disable"
+psql "postgresql://user:pass@host:port/db?sslmode=disable"
 ```
 
 **权限问题**
