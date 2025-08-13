@@ -20,24 +20,20 @@ services:
       - DATABASE_URL=postgresql://username:password@host:port/database?sslmode=require&options=-c%20search_path%3Dschema,public
       
       # Alternative: Separate database variables (if DATABASE_URL not set)
-      - DB_HOST=${DB_HOST:-your-supabase-host}
+      - DB_HOST=${DB_HOST:-your-database-host}
       - DB_PORT=${DB_PORT:-5432}
       - DB_NAME=${DB_NAME:-postgres}
       - DB_USER=${DB_USER:-your_db_user}
       - DB_PASSWORD=${DB_PASSWORD:-your_secure_password}
-      
+          
       # API settings (optional, for REST API testing)
-      - API_URL=${API_URL:-https://your-project-id.supabase.co}
+      - API_URL=${API_URL:-https://your-api-endpoint.example.com}
       - API_ANON_KEY=${API_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your-anon-key}
       - API_SERVICE_KEY=${API_SERVICE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your-service-key}
       
       # Storage settings (optional)
       - STORAGE_BUCKET=${STORAGE_BUCKET:-default-bucket}
       - STORAGE_PROVIDER=${STORAGE_PROVIDER:-postgresql}
-      
-      # Storage settings
-      - STORAGE_BUCKET=your-storage-bucket
-      - STORAGE_PROVIDER=supabase
       
       # Cloudflare R2 Backup Configuration
       - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
@@ -80,7 +76,7 @@ services:
     
     # Health check configuration
     healthcheck:
-      test: ["CMD", "./docker-healthcheck-enhanced.sh"]
+      test: ["CMD", "./docker-healthcheck.sh"]
       interval: 30s
       timeout: 15s
       retries: 3
@@ -97,17 +93,21 @@ services:
   db-monitor:
     build:
       context: .
-      dockerfile: Dockerfile.enhanced
+      dockerfile: Dockerfile
     container_name: landppt-db-monitor
-    entrypoint: ["python3", "/app/tools/database_health_check.py", "--non-interactive"]
+    entrypoint: ["python3", "/app/database_health_check.py", "--non-interactive"]
     environment:
-      - DB_HOST=your-supabase-host
+      # Use DATABASE_URL or separate variables
+      - DATABASE_URL=${DATABASE_URL}
+      - DB_HOST=${DB_HOST:-your-database-host}
       - DB_PORT=${DB_PORT:-5432}
       - DB_NAME=${DB_NAME:-postgres}
-      - DB_USER=your_db_user
-      - DB_PASSWORD=your_secure_password
-      - SUPABASE_URL=https://your-project.supabase.co
-      - SUPABASE_SERVICE_KEY=your_supabase_service_key
+      - DB_USER=${DB_USER:-your_db_user}
+      - DB_PASSWORD=${DB_PASSWORD:-your_secure_password}
+      
+      # API settings for monitoring
+      - API_URL=${API_URL}
+      - API_SERVICE_KEY=${API_SERVICE_KEY}
     volumes:
       - landppt_logs:/app/logs
     restart: "no"
