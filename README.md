@@ -101,7 +101,23 @@ docker-compose ps
 docker-compose logs -f landppt
 ```
 
-#### 方式二：本地开发
+#### 方式二：Docker Hub 镜像部署
+
+```bash
+# 从 Docker Hub 拉取最新镜像
+docker pull your-username/landppt:latest
+
+# 运行容器
+docker run -d \
+  --name landppt \
+  -p 8000:8000 \
+  -e DATABASE_URL="postgresql://user:pass@host:port/db?sslmode=require" \
+  -e API_URL="https://your-api-endpoint.com" \
+  -e API_ANON_KEY="your-api-key" \
+  your-username/landppt:latest
+```
+
+#### 方式三：本地开发
 
 ```bash
 # 安装依赖
@@ -245,6 +261,7 @@ SELECT query, mean_time FROM pg_stat_statements ORDER BY mean_time DESC LIMIT 10
 - [数据库监控指南](DATABASE_MONITORING_GUIDE.md)
 - [部署指南](DEPLOYMENT_GUIDE.md)
 - [集成指南](INTEGRATION_GUIDE.md)
+- [Docker Hub 自动发布配置](DOCKER_HUB_SETUP.md)
 
 ## 🤝 贡献
 
