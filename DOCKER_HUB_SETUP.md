@@ -322,8 +322,26 @@ DATABASE_URL=postgresql://username:password@host:5432/database
 # 应用会自动转换为异步格式
 # postgresql://... → postgresql+asyncpg://...
 
+# ⚠️ 重要：不要在URL中包含sslmode参数，asyncpg驱动不支持
+# ❌ 错误: postgresql://user:pass@host/db?sslmode=require
+# ✅ 正确: postgresql://user:pass@host/db
+
 # 使用完整的 PostgreSQL 环境
 docker-compose -f docker-compose.postgres.yml up -d
+```
+
+**9. PostgreSQL SSL连接错误**
+```
+TypeError: connect() got an unexpected keyword argument 'sslmode'
+```
+**解决**: asyncpg驱动不支持sslmode参数，应用会自动清理URL中的此参数:
+```bash
+# 如果您的DATABASE_URL包含sslmode参数，应用会自动移除
+# 自动转换: postgresql://user:pass@host/db?sslmode=require 
+# 变为: postgresql+asyncpg://user:pass@host/db
+
+# 对于需要SSL的连接，使用asyncpg的SSL配置方式
+# 在代码中通过连接参数而非URL参数配置SSL
 ```
 
 **7. 构建时间过长**

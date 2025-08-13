@@ -10,16 +10,33 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app/db/landppt.db")
 
 # 异步数据库URL配置
 def get_async_database_url(sync_url: str) -> str:
-    """将同步数据库URL转换为异步版本"""
-    if sync_url.startswith("sqlite:///"):
+    """将同步数据库URL转换为异步版本，并清理不兼容的参数"""
+    # 移除asyncpg不支持的参数
+    url = sync_url
+    if "sslmode=" in url:
+        # 移除sslmode参数，因为asyncpg不支持
+        import urllib.parse
+        parsed = urllib.parse.urlparse(url)
+        query_params = urllib.parse.parse_qs(parsed.query)
+        # 移除sslmode参数
+        if 'sslmode' in query_params:
+            del query_params['sslmode']
+        # 重新构造URL
+        new_query = urllib.parse.urlencode(query_params, doseq=True)
+        url = urllib.parse.urlunparse((
+            parsed.scheme, parsed.netloc, parsed.path,
+            parsed.params, new_query, parsed.fragment
+        ))
+    
+    if url.startswith("sqlite:///"):
         # SQLite异步URL
-        return sync_url.replace("sqlite:///", "sqlite+aiosqlite:///")
-    elif sync_url.startswith("postgresql://"):
+        return url.replace("sqlite:///", "sqlite+aiosqlite:///")
+    elif url.startswith("postgresql://"):
         # PostgreSQL异步URL
-        return sync_url.replace("postgresql://", "postgresql+asyncpg://")
-    elif sync_url.startswith("mysql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://")
+    elif url.startswith("mysql://"):
         # MySQL异步URL  
-        return sync_url.replace("mysql://", "mysql+aiomysql://")
+        return url.replace("mysql://", "mysql+aiomysql://")
     else:
         # 默认返回SQLite异步格式
         return "sqlite+aiosqlite:///app/db/landppt.db"
