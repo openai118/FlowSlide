@@ -157,11 +157,18 @@ Docker镜像支持智能平台选择：
 # 拉取最新镜像
 docker pull c1a200/land-ppt:latest
 
-# 运行容器
+# 使用 SQLite 运行容器 (默认)
 docker run -d \
   --name land-ppt \
   -p 8000:8000 \
   -e DATABASE_URL="sqlite:///app/db/landppt.db" \
+  c1a200/land-ppt:latest
+
+# 使用 PostgreSQL 运行容器
+docker run -d \
+  --name land-ppt \
+  -p 8000:8000 \
+  -e DATABASE_URL="postgresql://user:password@host:5432/database" \
   c1a200/land-ppt:latest
 ```
 
@@ -175,7 +182,13 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # SQLite 配置 (默认)
       - DATABASE_URL=sqlite:///app/db/landppt.db
+      
+      # PostgreSQL 配置 (推荐生产环境)
+      # - DATABASE_URL=postgresql://user:password@postgres:5432/database
+      
+      # 其他配置
       - API_URL=https://your-api-endpoint.com
       - API_ANON_KEY=your-api-key
     restart: unless-stopped
@@ -279,10 +292,12 @@ Error: failed to create async engine
 ```
 sqlalchemy.exc.InvalidRequestError: The asyncio extension requires an async driver to be used
 ```
-**解决**: 确保使用正确的异步数据库驱动:
-- SQLite: `sqlite+aiosqlite:///path/to/db.db`
-- PostgreSQL: `postgresql+asyncpg://user:pass@host/db`
-- MySQL: `mysql+aiomysql://user:pass@host/db`
+**解决**: 应用会自动将数据库URL转换为异步格式，请使用标准格式:
+- SQLite: `sqlite:///path/to/db.db` → 自动转换为 `sqlite+aiosqlite:///path/to/db.db`
+- PostgreSQL: `postgresql://user:pass@host/db` → 自动转换为 `postgresql+asyncpg://user:pass@host/db`  
+- MySQL: `mysql://user:pass@host/db` → 自动转换为 `mysql+aiomysql://user:pass@host/db`
+
+⚠️ **注意**: 无需手动添加 `+asyncpg` 等异步驱动标识，应用会自动处理！
 
 **7. PostgreSQL异步驱动缺失**
 ```
@@ -299,12 +314,15 @@ psycopg2-binary>=2.9.0  # PostgreSQL同步驱动 (向后兼容)
 ```
 Error: could not connect to server
 ```
-**解决**: 检查 PostgreSQL 数据库配置:
-```yaml
-# 环境变量配置
+**解决**: 检查 PostgreSQL 数据库配置，使用标准格式:
+```bash
+# 标准 PostgreSQL URL 格式 (推荐)
 DATABASE_URL=postgresql://username:password@host:5432/database
 
-# 或使用 docker-compose.postgres.yml 启动完整的PostgreSQL环境
+# 应用会自动转换为异步格式
+# postgresql://... → postgresql+asyncpg://...
+
+# 使用完整的 PostgreSQL 环境
 docker-compose -f docker-compose.postgres.yml up -d
 ```
 
