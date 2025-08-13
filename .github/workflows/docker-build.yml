@@ -33,7 +33,6 @@ jobs:
       run: |
         python -c "import src.landppt; print('✅ LandPPT module import successful')" || echo "⚠️ Module import completed with warnings"
         python -c "from src.landppt.core.config import Config; print('✅ Config import successful')" || echo "⚠️ Config import completed with warnings"
-        python validate_system.py || echo "⚠️ Validation completed with warnings"
 
   docker-build:
     runs-on: ubuntu-latest
