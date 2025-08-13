@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """
 ==============================================
-LandPPT 数据库压力测试工具
+LandPPT 数据库压力测试工�?
 ==============================================
-模拟真实应用场景的并发读写测试
+模拟真实应用场景的并发读写测�?
 """
 
 import os
@@ -22,19 +22,19 @@ try:
     from psycopg2.extras import RealDictCursor
     from psycopg2.pool import ThreadedConnectionPool
 except ImportError:
-    print("❌ 请安装: pip install psycopg2-binary")
+    print("�?请安�? pip install psycopg2-binary")
     sys.exit(1)
 
 try:
     import requests
 except ImportError:
-    print("❌ 请安装: pip install requests")
+    print("�?请安�? pip install requests")
     sys.exit(1)
 
 
 @dataclass
 class TestResult:
-    """测试结果数据类"""
+    """测试结果数据�?""
     operation: str
     success: bool
     duration: float
@@ -50,19 +50,19 @@ class DatabaseStressTester:
         self.results: List[TestResult] = []
         self.lock = threading.Lock()
         
-        # 连接池配置
+        # 连接池配�?
         self.pool_config = {
-            'host': 'db.fiuzetazperebuqwmrna.supabase.co',
+            'host': 'your-supabase-host',
             'port': 5432,
             'database': 'postgres',
-            'user': 'landppt_user',
-            'password': 'Openai9zLwR1sT4u',
+            'user': 'your_db_user',
+            'password': 'your_secure_password',
             'sslmode': 'require'
         }
         
         # 存储配置
         self.storage_config = {
-            'url': 'https://fiuzetazperebuqwmrna.supabase.co',
+            'url': 'https://your-project.supabase.co',
             'service_key': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDk1MjY2OCwiZXhwIjoyMDcwNTI4NjY4fQ.8vdb7DH860INPx5ZhDd9JTdsfJtDAhOizQNZgEqONNE',
             'bucket': 'landppt-files'
         }
@@ -70,27 +70,27 @@ class DatabaseStressTester:
         self.connection_pool = None
         
     def setup_connection_pool(self, min_connections: int = 5, max_connections: int = 20):
-        """设置连接池"""
+        """设置连接�?""
         try:
             self.connection_pool = ThreadedConnectionPool(
                 min_connections,
                 max_connections,
                 **self.pool_config
             )
-            print(f"✅ 连接池已创建 ({min_connections}-{max_connections} 连接)")
+            print(f"�?连接池已创建 ({min_connections}-{max_connections} 连接)")
             return True
         except Exception as e:
-            print(f"❌ 连接池创建失败: {e}")
+            print(f"�?连接池创建失�? {e}")
             return False
             
     def cleanup_connection_pool(self):
-        """清理连接池"""
+        """清理连接�?""
         if self.connection_pool:
             self.connection_pool.closeall()
-            print("✅ 连接池已清理")
+            print("�?连接池已清理")
             
     def add_result(self, result: TestResult):
-        """线程安全地添加测试结果"""
+        """线程安全地添加测试结�?""
         with self.lock:
             self.results.append(result)
             
@@ -107,7 +107,7 @@ class DatabaseStressTester:
                 start_time = time.time()
                 try:
                     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                        # 模拟不同类型的查询
+                        # 模拟不同类型的查�?
                         queries = [
                             "SELECT COUNT(*) FROM deployment_verification;",
                             "SELECT * FROM deployment_verification ORDER BY created_at DESC LIMIT 5;",
@@ -137,7 +137,7 @@ class DatabaseStressTester:
                         thread_id=thread_id
                     ))
                     
-                # 模拟真实应用的间隔
+                # 模拟真实应用的间�?
                 time.sleep(0.1)
                 
         finally:
@@ -251,9 +251,9 @@ class DatabaseStressTester:
             
     def run_concurrent_test(self, num_threads: int = 10, test_duration: int = 60):
         """运行并发压力测试"""
-        print(f"🚀 开始并发压力测试...")
-        print(f"   线程数: {num_threads}")
-        print(f"   测试时长: {test_duration} 秒")
+        print(f"🚀 开始并发压力测�?..")
+        print(f"   线程�? {num_threads}")
+        print(f"   测试时长: {test_duration} �?)
         print("-" * 50)
         
         if not self.setup_connection_pool(min_connections=5, max_connections=num_threads + 5):
@@ -264,10 +264,10 @@ class DatabaseStressTester:
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
             futures = []
             
-            # 启动不同类型的工作线程
+            # 启动不同类型的工作线�?
             for i in range(num_threads):
                 if i % 3 == 0:
-                    # 读取密集型线程
+                    # 读取密集型线�?
                     future = executor.submit(self.simulate_read_operations, i, 100)
                 elif i % 3 == 1:
                     # 写入线程
@@ -288,7 +288,7 @@ class DatabaseStressTester:
         elapsed_time = time.time() - start_time
         self.cleanup_connection_pool()
         
-        print(f"✅ 压力测试完成，耗时: {elapsed_time:.2f} 秒")
+        print(f"�?压力测试完成，耗时: {elapsed_time:.2f} �?)
         return True
         
     def analyze_results(self) -> Dict[str, Any]:
@@ -296,7 +296,7 @@ class DatabaseStressTester:
         if not self.results:
             return {'error': '没有测试结果'}
             
-        # 按操作类型分组
+        # 按操作类型分�?
         operations = {}
         for result in self.results:
             op_type = result.operation.split('_')[0]  # READ, WRITE, STORAGE
@@ -339,7 +339,7 @@ class DatabaseStressTester:
                     'avg_duration': f"{sum(durations) / len(durations):.3f}s",
                     'min_duration': f"{min(durations):.3f}s",
                     'max_duration': f"{max(durations):.3f}s",
-                    'errors': stats['errors'][:5]  # 只显示前5个错误
+                    'errors': stats['errors'][:5]  # 只显示前5个错�?
                 }
                 
         return analysis
@@ -357,15 +357,15 @@ class DatabaseStressTester:
         print(f"总操作数: {summary['total_operations']}")
         print(f"成功操作: {summary['total_success']}")
         print(f"失败操作: {summary['total_failed']}")
-        print(f"成功率: {summary['success_rate']}")
+        print(f"成功�? {summary['success_rate']}")
         
-        # 按操作类型分析
-        print("\n按操作类型分析:")
+        # 按操作类型分�?
+        print("\n按操作类型分�?")
         print("-" * 30)
         for op_type, stats in analysis['by_operation'].items():
             print(f"\n{op_type} 操作:")
             print(f"  总数: {stats['total']}")
-            print(f"  成功率: {stats['success_rate']}")
+            print(f"  成功�? {stats['success_rate']}")
             print(f"  平均耗时: {stats['avg_duration']}")
             print(f"  最短耗时: {stats['min_duration']}")
             print(f"  最长耗时: {stats['max_duration']}")
@@ -380,30 +380,30 @@ class DatabaseStressTester:
         elif total_success_rate >= 90:
             grade = "良好 👍"
         elif total_success_rate >= 80:
-            grade = "一般 ⚠️"
+            grade = "一�?⚠️"
         else:
-            grade = "需要优化 ❌"
+            grade = "需要优�?�?
             
         print(f"\n性能评级: {grade}")
         print("=" * 50)
 
 
 def main():
-    """主函数"""
-    print("🔥 LandPPT 数据库压力测试工具")
+    """主函�?""
+    print("🔥 LandPPT 数据库压力测试工�?)
     print("=" * 50)
     
     # 获取配置
     password = input("请输入数据库 postgres 用户密码: ").strip()
     if not password:
-        print("❌ 密码不能为空")
+        print("�?密码不能为空")
         return 1
         
     try:
-        num_threads = int(input("并发线程数 (默认10): ").strip() or "10")
-        test_duration = int(input("测试时长/秒 (默认60): ").strip() or "60")
+        num_threads = int(input("并发线程�?(默认10): ").strip() or "10")
+        test_duration = int(input("测试时长/�?(默认60): ").strip() or "60")
     except ValueError:
-        print("❌ 请输入有效数字")
+        print("�?请输入有效数�?)
         return 1
         
     # 运行测试
@@ -441,11 +441,11 @@ def main():
             return 1
             
     except KeyboardInterrupt:
-        print("\n⏹️ 测试被用户中断")
+        print("\n⏹️ 测试被用户中�?)
         tester.cleanup_connection_pool()
         return 130
     except Exception as e:
-        print(f"\n❌ 测试异常: {e}")
+        print(f"\n�?测试异常: {e}")
         tester.cleanup_connection_pool()
         return 1
 

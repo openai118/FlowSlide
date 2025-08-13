@@ -1,23 +1,23 @@
 # LandPPT Docker 部署指南
 
-这个增强版的 Docker 配置集成了数据库健康检查功能，确保 LandPPT 应用在生产环境中稳定运行。
+这个增强版的 Docker 配置集成了数据库健康检查功能，确保 LandPPT 应用在生产环境中稳定运行�?
 
 ## 📋 文件清单
 
 ### 核心文件
-- `Dockerfile.enhanced` - 增强版 Dockerfile，集成数据库检测工具
+- `Dockerfile.enhanced` - 增强�?Dockerfile，集成数据库检测工�?
 - `docker-compose.yml` - Docker Compose 配置
-- `docker-healthcheck-enhanced.sh` - 增强健康检查脚本
+- `docker-healthcheck-enhanced.sh` - 增强健康检查脚�?
 - `docker-entrypoint-enhanced.sh` - 增强启动脚本
 - `landppt-deploy.sh` - 部署管理脚本
 
-### 数据库工具
-- `database_health_check.py` - 完整数据库健康检查
-- `quick_db_check.py` - 快速数据库检查
-- `database_diagnosis.py` - 数据库诊断工具
+### 数据库工�?
+- `database_health_check.py` - 完整数据库健康检�?
+- `quick_db_check.py` - 快速数据库检�?
+- `database_diagnosis.py` - 数据库诊断工�?
 - `simple_performance_test.py` - 性能测试工具
 
-## 🚀 快速开始
+## 🚀 快速开�?
 
 ### 1. 准备环境
 
@@ -26,7 +26,7 @@
 - Docker Compose 2.0+
 - Python 3.11+ （用于本地测试）
 
-### 2. 克隆并配置
+### 2. 克隆并配�?
 
 ```bash
 # 克隆项目
@@ -47,10 +47,10 @@ chmod +x landppt-deploy.sh docker-healthcheck.sh docker-entrypoint.sh
 
 ### 3. 部署服务
 
-使用管理脚本进行部署：
+使用管理脚本进行部署�?
 
 ```bash
-# 运行数据库预检查
+# 运行数据库预检�?
 ./landppt-deploy.sh db-check
 
 # 构建镜像
@@ -59,14 +59,14 @@ chmod +x landppt-deploy.sh docker-healthcheck.sh docker-entrypoint.sh
 # 启动服务
 ./landppt-deploy.sh start
 
-# 查看状态
+# 查看状�?
 ./landppt-deploy.sh status
 ```
 
-或者直接使用 Docker Compose：
+或者直接使�?Docker Compose�?
 
 ```bash
-# 构建并启动
+# 构建并启�?
 docker-compose up -d --build
 
 # 查看日志
@@ -77,68 +77,68 @@ docker-compose logs -f
 
 ### 环境变量
 
-在 `docker-compose.yml` 中已预配置了以下环境变量：
+�?`docker-compose.yml` 中已预配置了以下环境变量�?
 
-#### 数据库配置
+#### 数据库配�?
 ```yaml
-- DB_HOST=db.fiuzetazperebuqwmrna.supabase.co
+- DB_HOST=your-supabase-host
 - DB_PORT=5432
 - DB_NAME=postgres
-- DB_USER=landppt_user
-- DB_PASSWORD=Openai9zLwR1sT4u
+- DB_USER=your_db_user
+- DB_PASSWORD=your_secure_password
 ```
 
 #### Supabase 配置
 ```yaml
-- SUPABASE_URL=https://fiuzetazperebuqwmrna.supabase.co
+- SUPABASE_URL=https://your-project.supabase.co
 - SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 - SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-#### 健康检查配置
+#### 健康检查配�?
 ```yaml
-- SKIP_DB_CHECK=false          # 是否跳过数据库检查
-- REQUIRE_DB=true              # 是否要求数据库连接成功
-- RUN_DB_SCHEMA_CHECK=true     # 是否运行 Schema 检查
+- SKIP_DB_CHECK=false          # 是否跳过数据库检�?
+- REQUIRE_DB=true              # 是否要求数据库连接成�?
+- RUN_DB_SCHEMA_CHECK=true     # 是否运行 Schema 检�?
 ```
 
-### 卷挂载
+### 卷挂�?
 
 持久化数据通过以下卷挂载：
 - `landppt_data` - 应用数据
 - `landppt_uploads` - 上传文件
 - `landppt_temp` - 临时文件
 - `landppt_logs` - 日志文件
-- `playwright_cache` - Playwright 浏览器缓存
+- `playwright_cache` - Playwright 浏览器缓�?
 
-## 🏥 健康检查
+## 🏥 健康检�?
 
-### 多层健康检查
+### 多层健康检�?
 
-1. **应用层检查** - 检查 HTTP 端点响应
-2. **数据库层检查** - 验证数据库连接和基本查询
-3. **系统层检查** - 监控磁盘空间、内存使用率
-4. **文件系统检查** - 验证关键目录权限
+1. **应用层检�?* - 检�?HTTP 端点响应
+2. **数据库层检�?* - 验证数据库连接和基本查询
+3. **系统层检�?* - 监控磁盘空间、内存使用率
+4. **文件系统检�?* - 验证关键目录权限
 
-### 健康检查时间
+### 健康检查时�?
 
-- **检查间隔**: 30秒
-- **超时时间**: 15秒
-- **启动期**: 60秒
-- **重试次数**: 3次
+- **检查间�?*: 30�?
+- **超时时间**: 15�?
+- **启动�?*: 60�?
+- **重试次数**: 3�?
 
-## 📊 监控和管理
+## 📊 监控和管�?
 
 ### 使用管理脚本
 
 ```bash
-# 查看服务状态
+# 查看服务状�?
 ./landppt-deploy.sh status
 
 # 查看实时日志
 ./landppt-deploy.sh logs
 
-# 运行数据库健康检查
+# 运行数据库健康检�?
 ./landppt-deploy.sh db-check
 
 # 运行性能测试
@@ -156,13 +156,13 @@ docker-compose logs -f
 
 ### 监控服务
 
-启动独立的数据库监控服务：
+启动独立的数据库监控服务�?
 
 ```bash
 # 启动监控服务
 ./landppt-deploy.sh monitor
 
-# 或使用 Docker Compose
+# 或使�?Docker Compose
 docker-compose --profile monitoring up -d db-monitor
 ```
 
@@ -170,35 +170,35 @@ docker-compose --profile monitoring up -d db-monitor
 
 ### 常见问题
 
-#### 1. 数据库连接失败
+#### 1. 数据库连接失�?
 
 **症状**: 容器启动失败，日志显示数据库连接错误
 
 **解决方案**:
 ```bash
-# 运行数据库诊断
+# 运行数据库诊�?
 python3 database_diagnosis.py
 
-# 检查网络连接
-docker-compose exec landppt ping db.fiuzetazperebuqwmrna.supabase.co
+# 检查网络连�?
+docker-compose exec landppt ping your-supabase-host
 
 # 验证环境变量
 docker-compose exec landppt env | grep DB_
 ```
 
-#### 2. 健康检查失败
+#### 2. 健康检查失�?
 
-**症状**: 容器显示 unhealthy 状态
+**症状**: 容器显示 unhealthy 状�?
 
 **解决方案**:
 ```bash
-# 查看健康检查日志
+# 查看健康检查日�?
 docker-compose logs landppt | grep health
 
-# 手动运行健康检查
+# 手动运行健康检�?
 docker-compose exec landppt ./docker-healthcheck-enhanced.sh
 
-# 检查应用状态
+# 检查应用状�?
 curl http://localhost:8000/health
 ```
 
@@ -211,7 +211,7 @@ curl http://localhost:8000/health
 # 运行性能测试
 ./landppt-deploy.sh db-test
 
-# 检查资源使用
+# 检查资源使�?
 docker stats
 
 # 查看详细日志
@@ -220,7 +220,7 @@ docker-compose logs --tail=100 landppt
 
 ### 调试模式
 
-启用详细日志记录：
+启用详细日志记录�?
 
 ```bash
 # 修改 docker-compose.yml
@@ -238,10 +238,10 @@ environment:
 
 1. **更换默认密码**
    ```bash
-   # 生成新密码
+   # 生成新密�?
    openssl rand -base64 32
    
-   # 在 Supabase 控制台更新 landppt_user 密码
+   # �?Supabase 控制台更�?your_db_user 密码
    # 更新 docker-compose.yml 中的 DB_PASSWORD
    ```
 
@@ -260,11 +260,11 @@ environment:
 
 3. **限制网络访问**
    ```bash
-   # 使用防火墙限制端口访问
+   # 使用防火墙限制端口访�?
    sudo ufw allow from trusted_ip to any port 8000
    ```
 
-### 备份和恢复
+### 备份和恢�?
 
 #### 自动备份
 
@@ -277,7 +277,7 @@ cd /path/to/landppt
 find backup_* -type d -mtime +7 -exec rm -rf {} \;
 EOF
 
-# 添加到 crontab
+# 添加�?crontab
 echo "0 2 * * * /path/to/backup-cron.sh" | crontab -
 ```
 
@@ -301,8 +301,8 @@ ls -la backup_*/
 deploy:
   resources:
     limits:
-      memory: 4G      # 根据需要调整
-      cpus: '2.0'     # 根据需要调整
+      memory: 4G      # 根据需要调�?
+      cpus: '2.0'     # 根据需要调�?
     reservations:
       memory: 1G
       cpus: '0.5'
@@ -312,24 +312,24 @@ deploy:
 
 ```yaml
 environment:
-  - PYTHONOPTIMIZE=2          # 启用最大优化
+  - PYTHONOPTIMIZE=2          # 启用最大优�?
   - PYTHONHASHSEED=random     # 随机哈希种子
   - PYTHONGC=1               # 启用垃圾回收
 ```
 
-## 🎯 生产部署检查清单
+## 🎯 生产部署检查清�?
 
-- [ ] 数据库初始化脚本已运行
+- [ ] 数据库初始化脚本已运�?
 - [ ] 数据库健康检查通过
-- [ ] 环境变量已正确配置
+- [ ] 环境变量已正确配�?
 - [ ] 存储桶权限已设置
-- [ ] 默认密码已更换
+- [ ] 默认密码已更�?
 - [ ] 防火墙规则已配置
-- [ ] 监控告警已设置
-- [ ] 备份策略已实施
+- [ ] 监控告警已设�?
+- [ ] 备份策略已实�?
 - [ ] SSL 证书已配置（如需要）
-- [ ] 日志轮转已设置
+- [ ] 日志轮转已设�?
 
 ---
 
-🎉 **恭喜！您的 LandPPT 应用现在具备了企业级的数据库健康检查和监控能力！**
+🎉 **恭喜！您�?LandPPT 应用现在具备了企业级的数据库健康检查和监控能力�?*

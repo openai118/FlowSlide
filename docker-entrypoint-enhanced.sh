@@ -18,7 +18,7 @@ log() {
     echo -e "${color}[$(date '+%Y-%m-%d %H:%M:%S')] ${message}${NC}"
 }
 
-log $BLUE "🚀 LandPPT 容器启动中..."
+log $BLUE "🚀 LandPPT 容器启动�?.."
 
 # Set default environment variables if not provided
 export PYTHONPATH="${PYTHONPATH:-/app/src:/opt/venv}"
@@ -36,7 +36,7 @@ chmod -R 755 /app/temp /app/uploads /app/data /app/logs 2>/dev/null || true
 
 # Database connectivity check and initialization
 if [ "${SKIP_DB_CHECK:-false}" != "true" ]; then
-    log $BLUE "🔍 执行数据库连接检查..."
+    log $BLUE "🔍 执行数据库连接检�?.."
     
     # Wait for database to be ready
     if [ -n "$DB_HOST" ] || [ -n "$SUPABASE_URL" ]; then
@@ -44,7 +44,7 @@ if [ "${SKIP_DB_CHECK:-false}" != "true" ]; then
         attempt=1
         
         while [ $attempt -le $max_attempts ]; do
-            log $YELLOW "尝试连接数据库 (第 $attempt/$max_attempts 次)..."
+            log $YELLOW "尝试连接数据�?(�?$attempt/$max_attempts �?..."
             
             if [ -f "/app/tools/quick_db_check.py" ]; then
                 # Run database health check
@@ -55,11 +55,11 @@ import os
 import psycopg2
 
 config = {
-    'host': os.getenv('DB_HOST', 'db.fiuzetazperebuqwmrna.supabase.co'),
+    'host': os.getenv('DB_HOST', 'your-supabase-host'),
     'port': int(os.getenv('DB_PORT', '5432')),
     'database': os.getenv('DB_NAME', 'postgres'),
-    'user': os.getenv('DB_USER', 'landppt_user'),
-    'password': os.getenv('DB_PASSWORD', 'Openai9zLwR1sT4u'),
+    'user': os.getenv('DB_USER', 'your_db_user'),
+    'password': os.getenv('DB_PASSWORD', 'your_secure_password'),
     'sslmode': 'require'
 }
 
@@ -69,12 +69,12 @@ try:
         cur.execute('SELECT 1;')
         cur.fetchone()
     conn.close()
-    print('数据库连接成功')
+    print('数据库连接成�?)
 except Exception as e:
-    print(f'数据库连接失败: {e}')
+    print(f'数据库连接失�? {e}')
     exit(1)
 " 2>/dev/null; then
-                log $GREEN "✅ 数据库连接成功"
+                log $GREEN "�?数据库连接成�?
                 break
             else
                 log $YELLOW "⚠️ 数据库连接失败，等待重试..."
@@ -85,40 +85,40 @@ except Exception as e:
         
         if [ $attempt -gt $max_attempts ]; then
             if [ "${REQUIRE_DB:-true}" = "true" ]; then
-                log $RED "❌ 数据库连接失败，无法启动应用"
+                log $RED "�?数据库连接失败，无法启动应用"
                 exit 1
             else
-                log $YELLOW "⚠️ 数据库连接失败，但允许应用启动"
+                log $YELLOW "⚠️ 数据库连接失败，但允许应用启�?
             fi
         fi
     else
-        log $YELLOW "⚠️ 未配置数据库连接信息，跳过数据库检查"
+        log $YELLOW "⚠️ 未配置数据库连接信息，跳过数据库检�?
     fi
 else
-    log $YELLOW "⚠️ 跳过数据库检查 (SKIP_DB_CHECK=true)"
+    log $YELLOW "⚠️ 跳过数据库检�?(SKIP_DB_CHECK=true)"
 fi
 
 # Run database schema verification if enabled
 if [ "${RUN_DB_SCHEMA_CHECK:-false}" = "true" ] && [ -f "/app/tools/database_health_check.py" ]; then
-    log $BLUE "🔍 执行数据库 Schema 验证..."
+    log $BLUE "🔍 执行数据�?Schema 验证..."
     if python3 /app/tools/database_health_check.py --non-interactive 2>/dev/null; then
-        log $GREEN "✅ 数据库 Schema 验证通过"
+        log $GREEN "�?数据�?Schema 验证通过"
     else
-        log $YELLOW "⚠️ 数据库 Schema 验证失败，但允许应用继续启动"
+        log $YELLOW "⚠️ 数据�?Schema 验证失败，但允许应用继续启动"
     fi
 fi
 
 # Check environment configuration
-log $BLUE "🔧 检查环境配置..."
+log $BLUE "🔧 检查环境配�?.."
 
 # Validate essential environment variables
 essential_vars=("PYTHONPATH")
 for var in "${essential_vars[@]}"; do
     if [ -z "${!var}" ]; then
-        log $RED "❌ 必需的环境变量未设置: $var"
+        log $RED "�?必需的环境变量未设置: $var"
         exit 1
     else
-        log $GREEN "✅ $var = ${!var}"
+        log $GREEN "�?$var = ${!var}"
     fi
 done
 
@@ -128,13 +128,13 @@ if [ -f "/app/.env" ]; then
     set -a  # automatically export all variables
     source /app/.env
     set +a
-    log $GREEN "✅ 环境配置已加载"
+    log $GREEN "�?环境配置已加�?
 else
-    log $YELLOW "⚠️ 未找到 .env 文件，使用默认配置"
+    log $YELLOW "⚠️ 未找�?.env 文件，使用默认配�?
 fi
 
 # Performance optimization
-log $BLUE "⚡ 应用性能优化..."
+log $BLUE "�?应用性能优化..."
 
 # Set Python optimizations
 export PYTHONOPTIMIZE=1
@@ -143,27 +143,27 @@ export PYTHONHASHSEED=random
 # Garbage collection tuning for better performance
 export PYTHONGC="0"
 
-log $GREEN "✅ 性能优化完成"
+log $GREEN "�?性能优化完成"
 
 # Final health check before starting main application
-log $BLUE "🏥 启动前最终健康检查..."
+log $BLUE "🏥 启动前最终健康检�?.."
 
 # Check if main application file exists
 if [ ! -f "/app/run.py" ]; then
-    log $RED "❌ 主应用文件 run.py 不存在"
+    log $RED "�?主应用文�?run.py 不存�?
     exit 1
 fi
 
 # Check Python import paths
 if ! python3 -c "import sys; print('Python path OK')" >/dev/null 2>&1; then
-    log $RED "❌ Python 环境配置错误"
+    log $RED "�?Python 环境配置错误"
     exit 1
 fi
 
-log $GREEN "✅ 启动前检查完成"
+log $GREEN "�?启动前检查完�?
 
 # Start the main application
-log $GREEN "🎯 启动 LandPPT 主应用..."
+log $GREEN "🎯 启动 LandPPT 主应�?.."
 log $BLUE "命令: $@"
 
 # Execute the main command

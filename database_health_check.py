@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ==============================================
-LandPPT Supabase 数据库健康检查工具
+LandPPT Supabase 数据库健康检查工�?
 ==============================================
 全面检测数据库连接、权限、存储等功能
 """
@@ -19,14 +19,14 @@ try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
 except ImportError:
-    print("❌ 错误: 请安装 psycopg2-binary")
+    print("�?错误: 请安�?psycopg2-binary")
     print("运行: pip install psycopg2-binary")
     sys.exit(1)
 
 try:
     import requests
 except ImportError:
-    print("❌ 错误: 请安装 requests")
+    print("�?错误: 请安�?requests")
     print("运行: pip install requests")
     sys.exit(1)
 
@@ -36,54 +36,54 @@ class SupabaseHealthChecker:
     
     def __init__(self):
         """初始化检查器，从环境变量或直接配置中读取设置"""
-        # 数据库配置（默认使用应用用户）
+        # 数据库配置（默认使用应用用户�?
         self.db_config = {
-            'host': 'db.fiuzetazperebuqwmrna.supabase.co',
+            'host': 'your-supabase-host',
             'port': 5432,
             'database': 'postgres',
-            'user': 'landppt_user',
-            'password': 'Openai9zLwR1sT4u',
+            'user': 'your_db_user',
+            'password': 'your_secure_password',
             'sslmode': 'require'
         }
         
-        # postgres 超级用户配置（仅在需要时使用）
+        # postgres 超级用户配置（仅在需要时使用�?
         self.admin_config = {
-            'host': 'db.fiuzetazperebuqwmrna.supabase.co',
+            'host': 'your-supabase-host',
             'port': 5432,
             'database': 'postgres',
             'user': 'postgres',
-            'password': None,  # 需要用户提供
+            'password': None,  # 需要用户提�?
             'sslmode': 'require'
         }
         
         # Supabase API 配置
-        self.supabase_url = "https://fiuzetazperebuqwmrna.supabase.co"
+        self.supabase_url = "https://your-project.supabase.co"
         self.anon_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NTI2NjgsImV4cCI6MjA3MDUyODY2OH0.aQwP7h_SFau6UsfsGbUHY3kf-RDYM8LEOLu0hsbv5Ns"
         self.service_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDk1MjY2OCwiZXhwIjoyMDcwNTI4NjY4fQ.8vdb7DH860INPx5ZhDd9JTdsfJtDAhOizQNZgEqONNE"
         self.storage_bucket = "landppt-files"
         
         # 应用用户配置
         self.app_user = {
-            'username': 'landppt_user',
-            'password': 'Openai9zLwR1sT4u'
+            'username': 'your_db_user',
+            'password': 'your_secure_password'
         }
         
         self.test_results = []
         
     def setup_password(self, non_interactive=False):
-        """设置数据库密码（仅在需要 postgres 超级用户时使用）"""
+        """设置数据库密码（仅在需�?postgres 超级用户时使用）"""
         if non_interactive:
             # 非交互模式，跳过 postgres 超级用户测试
             return False
             
-        print("⚠️  注意：通常情况下，LandPPT 应用使用 landppt_user 即可")
-        print("   只有在需要管理员权限时才需要 postgres 密码")
-        use_admin = input("是否需要测试 postgres 超级用户权限? (y/N): ").strip().lower()
+        print("⚠️  注意：通常情况下，LandPPT 应用使用 your_db_user 即可")
+        print("   只有在需要管理员权限时才需�?postgres 密码")
+        use_admin = input("是否需要测�?postgres 超级用户权限? (y/N): ").strip().lower()
         
         if use_admin in ['y', 'yes']:
-            password = input("请输入 Supabase postgres 用户密码: ").strip()
+            password = input("请输�?Supabase postgres 用户密码: ").strip()
             if not password:
-                print("❌ 密码不能为空")
+                print("�?密码不能为空")
                 sys.exit(1)
             self.admin_config['password'] = password
             return True
@@ -101,13 +101,13 @@ class SupabaseHealthChecker:
         self.test_results.append(result)
         
         # 实时输出
-        status = "✅" if success else "❌"
+        status = "�? if success else "�?
         print(f"{status} {test_name}: {message}")
         if details and not success:
             print(f"   详情: {details}")
             
     def test_basic_connection(self) -> bool:
-        """测试基本数据库连接（使用应用用户）"""
+        """测试基本数据库连接（使用应用用户�?""
         try:
             conn = psycopg2.connect(**self.db_config)
             with conn.cursor() as cur:
@@ -119,7 +119,7 @@ class SupabaseHealthChecker:
             self.log_test(
                 "应用用户连接测试",
                 True,
-                "landppt_user 连接成功",
+                "your_db_user 连接成功",
                 {
                     'version': result[0][:50] + "..." if len(result[0]) > 50 else result[0],
                     'database': result[1],
@@ -129,7 +129,7 @@ class SupabaseHealthChecker:
             return True
             
         except Exception as e:
-            self.log_test("应用用户连接测试", False, "landppt_user 连接失败", str(e))
+            self.log_test("应用用户连接测试", False, "your_db_user 连接失败", str(e))
             return False
             
     def test_schema_access(self) -> bool:
@@ -137,7 +137,7 @@ class SupabaseHealthChecker:
         try:
             conn = psycopg2.connect(**self.db_config)
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # 检查 schema 是否存在
+                # 检�?schema 是否存在
                 cur.execute("""
                     SELECT schema_name 
                     FROM information_schema.schemata 
@@ -146,7 +146,7 @@ class SupabaseHealthChecker:
                 schema_exists = cur.fetchone()
                 
                 if not schema_exists:
-                    raise Exception("landppt schema 不存在")
+                    raise Exception("landppt schema 不存�?)
                 
                 # 检查验证表
                 cur.execute("""
@@ -155,7 +155,7 @@ class SupabaseHealthChecker:
                 """)
                 count_result = cur.fetchone()
                 
-                # 检查测试函数
+                # 检查测试函�?
                 cur.execute("SELECT landppt.test_connection() as result;")
                 func_result = cur.fetchone()
                 
@@ -190,7 +190,7 @@ class SupabaseHealthChecker:
                 read_result = cur.fetchone()
                 
                 # 测试写入权限
-                test_message = f"健康检查测试 - {datetime.now().isoformat()}"
+                test_message = f"健康检查测�?- {datetime.now().isoformat()}"
                 cur.execute("""
                     INSERT INTO deployment_verification (message) 
                     VALUES (%s) RETURNING id;
@@ -230,17 +230,17 @@ class SupabaseHealthChecker:
     def test_storage_api(self) -> bool:
         """测试 Supabase Storage API"""
         try:
-            # 测试存储桶列表
+            # 测试存储桶列�?
             headers = {
                 'Authorization': f'Bearer {self.service_key}',
             }
             
-            # 获取存储桶信息
+            # 获取存储桶信�?
             bucket_url = f"{self.supabase_url}/storage/v1/bucket"
             response = requests.get(bucket_url, headers=headers)
             
             if response.status_code != 200:
-                raise Exception(f"获取存储桶失败: {response.status_code} - {response.text}")
+                raise Exception(f"获取存储桶失�? {response.status_code} - {response.text}")
                 
             buckets = response.json()
             landppt_bucket = None
@@ -258,7 +258,7 @@ class SupabaseHealthChecker:
             
             upload_url = f"{self.supabase_url}/storage/v1/object/{self.storage_bucket}/{test_filename}"
             
-            # 使用二进制模式上传
+            # 使用二进制模式上�?
             files = {'file': (test_filename, test_content.encode('utf-8'), 'text/plain')}
             upload_response = requests.post(upload_url, headers=headers, files=files)
             
@@ -272,7 +272,7 @@ class SupabaseHealthChecker:
             if download_response.status_code != 200:
                 raise Exception(f"文件下载失败: {download_response.status_code}")
                 
-            # 验证文件内容（使用字节比较更准确）
+            # 验证文件内容（使用字节比较更准确�?
             downloaded_content = download_response.content.decode('utf-8')
             if downloaded_content.strip() != test_content.strip():
                 raise Exception(f"上传和下载的文件内容不匹配\n上传: {test_content}\n下载: {downloaded_content}")
@@ -326,9 +326,9 @@ class SupabaseHealthChecker:
                 True,
                 "性能指标正常",
                 {
-                    '10次查询耗时': f"{query_time:.3f}秒",
-                    '单次延迟': f"{latency:.3f}秒",
-                    '平均查询时间': f"{query_time/10:.3f}秒"
+                    '10次查询耗时': f"{query_time:.3f}�?,
+                    '单次延迟': f"{latency:.3f}�?,
+                    '平均查询时间': f"{query_time/10:.3f}�?
                 }
             )
             return True
@@ -338,7 +338,7 @@ class SupabaseHealthChecker:
             return False
             
     def generate_report(self) -> Dict[str, Any]:
-        """生成完整的检查报告"""
+        """生成完整的检查报�?""
         total_tests = len(self.test_results)
         passed_tests = len([r for r in self.test_results if r['success']])
         failed_tests = total_tests - passed_tests
@@ -365,8 +365,8 @@ class SupabaseHealthChecker:
         return report
         
     def run_all_tests(self, non_interactive=False) -> bool:
-        """运行所有检查测试"""
-        print("🚀 开始 LandPPT Supabase 数据库健康检查...")
+        """运行所有检查测�?""
+        print("🚀 开�?LandPPT Supabase 数据库健康检�?..")
         print("=" * 60)
         
         # 询问是否需要管理员权限测试
@@ -374,7 +374,7 @@ class SupabaseHealthChecker:
         
         all_passed = True
         
-        # 执行所有测试
+        # 执行所有测�?
         tests = [
             ("应用用户连接", self.test_basic_connection),
             ("Schema 访问", self.test_schema_access),
@@ -394,7 +394,7 @@ class SupabaseHealthChecker:
                 all_passed = False
                 
         print("\n" + "=" * 60)
-        print("📊 生成检查报告...")
+        print("📊 生成检查报�?..")
         
         return all_passed
         
@@ -413,15 +413,15 @@ class SupabaseHealthChecker:
 
 
 def main():
-    """主函数"""
+    """主函�?""
     try:
-        # 检查是否为非交互模式
+        # 检查是否为非交互模�?
         non_interactive = "--non-interactive" in sys.argv
         
         checker = SupabaseHealthChecker()
         success = checker.run_all_tests(non_interactive)
         
-        # 生成并保存报告
+        # 生成并保存报�?
         report = checker.generate_report()
         report_file = checker.save_report()
         
@@ -431,21 +431,21 @@ def main():
         print(f"   总测试数: {report['summary']['total_tests']}")
         print(f"   通过数量: {report['summary']['passed']}")
         print(f"   失败数量: {report['summary']['failed']}")
-        print(f"   成功率: {report['summary']['success_rate']}")
-        print(f"   整体状态: {report['summary']['overall_health']}")
+        print(f"   成功�? {report['summary']['success_rate']}")
+        print(f"   整体状�? {report['summary']['overall_health']}")
         
         if success:
-            print("\n🎉 所有检查通过！数据库配置正常，可以部署 LandPPT 应用。")
+            print("\n🎉 所有检查通过！数据库配置正常，可以部�?LandPPT 应用�?)
             return 0
         else:
-            print("\n⚠️ 部分检查失败！请查看详细报告并修复问题。")
+            print("\n⚠️ 部分检查失败！请查看详细报告并修复问题�?)
             return 1
             
     except KeyboardInterrupt:
-        print("\n\n⏹️ 用户中断检查")
+        print("\n\n⏹️ 用户中断检�?)
         return 130
     except Exception as e:
-        print(f"\n❌ 检查器异常: {e}")
+        print(f"\n�?检查器异常: {e}")
         return 1
 
 

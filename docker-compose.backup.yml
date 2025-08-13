@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 主要的 LandPPT 服务
+  # 主要�?LandPPT 服务
   landppt:
     extends:
       file: docker-compose.yml
@@ -17,14 +17,14 @@ services:
       - landppt
     environment:
       # 继承主服务的环境变量
-      - DB_HOST=db.fiuzetazperebuqwmrna.supabase.co
+      - DB_HOST=your-supabase-host
       - DB_PORT=5432
       - DB_NAME=postgres
-      - DB_USER=landppt_user
-      - DB_PASSWORD=Openai9zLwR1sT4u
+      - DB_USER=your_db_user
+      - DB_PASSWORD=your_secure_password
       
       # Supabase settings
-      - SUPABASE_URL=https://fiuzetazperebuqwmrna.supabase.co
+      - SUPABASE_URL=https://your-project.supabase.co
       - SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NTI2NjgsImV4cCI6MjA3MDUyODY2OH0.aQwP7h_SFau6UsfsGbUHY3kf-RDYM8LEOLu0hsbv5Ns
       - SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDk1MjY2OCwiZXhwIjoyMDcwNTI4NjY4fQ.8vdb7DH860INPx5ZhDd9JTdsfJtDAhOizQNZgEqONNE
       
@@ -36,19 +36,19 @@ services:
       - BACKUP_WEBHOOK_URL=${BACKUP_WEBHOOK_URL}
       
       # 备份调度配置
-      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 2 * * *}  # 默认每天凌晨2点
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 2 * * *}  # 默认每天凌晨2�?
       - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-30}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # 访问主容器数据
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # 访问主容器数�?
       - landppt_data:/app/data:ro
       - landppt_reports:/app/research_reports:ro
       - landppt_logs:/app/logs:ro
     restart: unless-stopped
     command: >
       sh -c "
-        echo '备份调度器启动...'
+        echo '备份调度器启�?..'
         echo '$${BACKUP_SCHEDULE} /app/backup-active.sh' > /etc/crontabs/root
-        echo '定时任务已设置: $${BACKUP_SCHEDULE}'
+        echo '定时任务已设�? $${BACKUP_SCHEDULE}'
         crond -f -l 2
       "
     healthcheck:
@@ -66,15 +66,15 @@ services:
       context: .
       dockerfile: Dockerfile.ci-compatible
     container_name: landppt-manual-backup
-    profiles: ["backup"]  # 只在备份配置文件中启动
+    profiles: ["backup"]  # 只在备份配置文件中启�?
     environment:
-      # 继承相同的环境变量
-      - DB_HOST=db.fiuzetazperebuqwmrna.supabase.co
+      # 继承相同的环境变�?
+      - DB_HOST=your-supabase-host
       - DB_PORT=5432
       - DB_NAME=postgres
-      - DB_USER=landppt_user
-      - DB_PASSWORD=Openai9zLwR1sT4u
-      - SUPABASE_URL=https://fiuzetazperebuqwmrna.supabase.co
+      - DB_USER=your_db_user
+      - DB_PASSWORD=your_secure_password
+      - SUPABASE_URL=https://your-project.supabase.co
       - SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NTI2NjgsImV4cCI6MjA3MDUyODY2OH0.aQwP7h_SFau6UsfsGbUHY3kf-RDYM8LEOLu0hsbv5Ns
       - SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDk1MjY2OCwiZXhwIjoyMDcwNTI4NjY4fQ.8vdb7DH860INPx5ZhDd9JTdsfJtDAhOizQNZgEqONNE
       - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
@@ -91,7 +91,7 @@ services:
       - "landppt.service=manual-backup"
       - "landppt.description=On-demand backup service for LandPPT"
 
-# 重用主配置文件的卷
+# 重用主配置文件的�?
 volumes:
   landppt_data:
     external: true
