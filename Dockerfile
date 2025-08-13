@@ -19,18 +19,16 @@ RUN apt-get update && \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv for faster dependency management
-RUN pip install --no-cache-dir uv
+# Install uv for faster dependency management (optional)
+# RUN pip install --no-cache-dir uv
 
 # Set work directory and copy dependency files
 WORKDIR /app
-COPY pyproject.toml uv.lock* README.md ./
+COPY requirements.txt ./
 
 # Install Python dependencies to a specific directory
-RUN uv pip install --target=/opt/venv apryse-sdk>=11.5.0 --extra-index-url=https://pypi.apryse.com && \
-    uv pip install --target=/opt/venv -r pyproject.toml && \
-    # Install database health check dependencies
-    uv pip install --target=/opt/venv psycopg2-binary requests && \
+RUN pip install --target=/opt/venv psycopg2-binary requests && \
+    pip install --target=/opt/venv -r requirements.txt && \
     # Clean up build artifacts
     find /opt/venv -name "*.pyc" -delete && \
     find /opt/venv -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
@@ -87,7 +85,7 @@ RUN pip install --no-cache-dir playwright==1.40.0 && \
 WORKDIR /app
 
 # Copy application code (minimize layers)
-COPY run.py ./
+COPY run.py quick_db_check.py ./
 COPY src/ ./src/
 COPY template_examples/ ./template_examples/
 COPY .env.example ./.env
