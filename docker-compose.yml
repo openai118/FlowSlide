@@ -1,4 +1,4 @@
-# LandPPT Docker Compose Configuration
+﻿# LandPPT Docker Compose Configuration
 # Enhanced version with database health checks
 
 version: '3.8'
@@ -18,18 +18,18 @@ services:
       
       # Database settings
       - DB_HOST=your-supabase-host
-      - DB_PORT=5432
-      - DB_NAME=postgres
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-postgres}
       - DB_USER=your_db_user
       - DB_PASSWORD=your_secure_password
       
       # Supabase settings
       - SUPABASE_URL=https://your-project.supabase.co
-      - SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NTI2NjgsImV4cCI6MjA3MDUyODY2OH0.aQwP7h_SFau6UsfsGbUHY3kf-RDYM8LEOLu0hsbv5Ns
-      - SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDk1MjY2OCwiZXhwIjoyMDcwNTI4NjY4fQ.8vdb7DH860INPx5ZhDd9JTdsfJtDAhOizQNZgEqONNE
+      - SUPABASE_ANON_KEY=your_supabase_anon_key
+      - SUPABASE_SERVICE_KEY=your_supabase_service_key
       
       # Storage settings
-      - STORAGE_BUCKET=landppt-files
+      - STORAGE_BUCKET=your-storage-bucket
       - STORAGE_PROVIDER=supabase
       
       # Cloudflare R2 Backup Configuration
@@ -95,12 +95,12 @@ services:
     entrypoint: ["python3", "/app/tools/database_health_check.py", "--non-interactive"]
     environment:
       - DB_HOST=your-supabase-host
-      - DB_PORT=5432
-      - DB_NAME=postgres
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-postgres}
       - DB_USER=your_db_user
       - DB_PASSWORD=your_secure_password
       - SUPABASE_URL=https://your-project.supabase.co
-      - SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDk1MjY2OCwiZXhwIjoyMDcwNTI4NjY4fQ.8vdb7DH860INPx5ZhDd9JTdsfJtDAhOizQNZgEqONNE
+      - SUPABASE_SERVICE_KEY=your_supabase_service_key
     volumes:
       - landppt_logs:/app/logs
     restart: "no"

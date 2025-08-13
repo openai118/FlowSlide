@@ -1,11 +1,11 @@
-# 🚨 安全修复脚本
+﻿# 🚨 安全修复脚本
 # 此脚本将清理所有包含敏感信息的文件
 
 # 敏感信息占位符
-$OLD_HOST = "db.fiuzetazperebuqwmrna.supabase.co"
+$OLD_HOST = "your-supabase-host"
 $OLD_USER = "landppt_user"  
 $OLD_PASSWORD = "Openai9zLwR1sT4u"
-$OLD_URL = "https://fiuzetazperebuqwmrna.supabase.co"
+$OLD_URL = "https://your-project-id.supabase.co"
 
 # 新的占位符
 $NEW_HOST = "your-supabase-host"
