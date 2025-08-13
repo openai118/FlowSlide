@@ -1,4 +1,4 @@
-name: GitHub Container Registry Build
+name: Docker Build Test
 
 on:
   push:
@@ -51,7 +51,7 @@ jobs:
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
         
     - name: Extract metadata
       id: meta
@@ -64,24 +64,23 @@ jobs:
           type=sha,prefix={{branch}}-test-
           type=raw,value=latest,enable={{is_default_branch}}
           
-    - name: Build and push to GitHub Container Registry
+    - name: Build and optionally push to GitHub Container Registry
       uses: docker/build-push-action@v5
       with:
         context: .
         platforms: linux/amd64
-        push: ${{ github.event_name != 'pull_request' }}  # PR时只构建，推送时构建+推送到GHCR
+        push: false  # 暂时禁用推送，仅构建测试
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         # 临时禁用缓存以避免认证过期问题
         # cache-from: type=gha
         # cache-to: type=gha,mode=max
         
-    - name: Test GitHub Container Registry image
-      if: github.event_name != 'pull_request'
+    - name: Test Docker build completion
       run: |
-        echo "✅ GHCR build and push completed successfully"
+        echo "✅ Docker build completed successfully"
         echo "📦 Image repository: ghcr.io/${{ github.repository }}"
         echo "🏷️ Tags: ${{ steps.meta.outputs.tags }}"
         echo ""
-        echo "🧪 Testing image pull..."
-        docker pull ghcr.io/${{ github.repository }}:main-test || echo "⚠️ Pull test skipped (image might not be public)"
+        echo "ℹ️  Note: Push to GHCR disabled due to organization permissions"
+        echo "ℹ️  Main production images are pushed to Docker Hub via docker-hub-publish.yml"
