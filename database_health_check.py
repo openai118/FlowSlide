@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 """
 ==============================================
-LandPPT Supabase 数据库健康检查工具
+LandPPT PostgreSQL 数据库健康检查工具
 ==============================================
 全面检测数据库连接、权限、存储等功能
+支持 PostgreSQL 及其衍生产品（如 Supabase）
 """
 
 import os
@@ -32,8 +33,8 @@ except ImportError:
     sys.exit(1)
 
 
-class SupabaseHealthChecker:
-    """Supabase 数据库健康检查器"""
+class PostgreSQLHealthChecker:
+    """PostgreSQL 数据库健康检查器"""
     
     def __init__(self):
         """初始化检查器，从环境变量读取配置"""
@@ -54,14 +55,14 @@ class SupabaseHealthChecker:
                 'sslmode': 'require'
             }
         
-        # Supabase API 配置
-        self.supabase_url = os.getenv('SUPABASE_URL', '')
-        self.supabase_anon_key = os.getenv('SUPABASE_ANON_KEY', '')
-        self.supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY', '')
+        # API 配置（可选，用于 REST API 测试）
+        self.api_url = os.getenv('API_URL', '')
+        self.api_anon_key = os.getenv('API_ANON_KEY', '')
+        self.api_service_key = os.getenv('API_SERVICE_KEY', '')
         
-        # 存储配置
-        self.storage_bucket = os.getenv('STORAGE_BUCKET', 'landppt-files')
-        self.storage_provider = os.getenv('STORAGE_PROVIDER', 'supabase')
+        # 存储配置（可选）
+        self.storage_bucket = os.getenv('STORAGE_BUCKET', 'default-bucket')
+        self.storage_provider = os.getenv('STORAGE_PROVIDER', 'postgresql')
         
         # postgres 超级用户配置（仅在需要时使用）
         self.admin_config = {
@@ -294,91 +295,97 @@ class SupabaseHealthChecker:
             print(f"   ❌ 表操作测试失败: {str(e)}")
             return False
     
-    def test_supabase_api(self) -> bool:
-        """测试 Supabase API 连接"""
-        print("🌐 测试 Supabase API 连接...")
+    def test_api_connection(self) -> bool:
+        """测试 API 连接（如果配置了的话）"""
+        print("🌐 测试 API 连接...")
         
-        if not self.supabase_url or not self.supabase_anon_key:
-            self.add_result('supabase_api', False, 
-                          "❌ Supabase 配置缺失 (SUPABASE_URL 或 SUPABASE_ANON_KEY)")
-            print("   ❌ Supabase 配置缺失")
+        if not self.api_url or not self.api_anon_key:
+            self.add_result('api_connection', False, 
+                          "❌ API 配置缺失 (API_URL 或 API_ANON_KEY)", warning=True)
+            print("   ⚠️ API 配置缺失，跳过 API 测试")
             return False
         
         try:
             # 测试 API 健康状态
-            health_url = f"{self.supabase_url}/rest/v1/"
+            health_url = f"{self.api_url}/rest/v1/"
             headers = {
-                'apikey': self.supabase_anon_key,
-                'Authorization': f'Bearer {self.supabase_anon_key}',
+                'apikey': self.api_anon_key,
+                'Authorization': f'Bearer {self.api_anon_key}',
                 'Content-Type': 'application/json'
             }
             
             response = requests.get(health_url, headers=headers, timeout=10)
             
             if response.status_code == 200:
-                self.add_result('supabase_api', True, 
-                              f"✅ Supabase API 连接成功: {self.supabase_url}")
+                self.add_result('api_connection', True, 
+                              f"✅ API 连接成功: {self.api_url}")
                 print(f"   ✅ API 连接成功: {response.status_code}")
                 return True
             else:
-                self.add_result('supabase_api', False, 
-                              f"❌ Supabase API 响应异常: {response.status_code}")
+                self.add_result('api_connection', False, 
+                              f"❌ API 响应异常: {response.status_code}")
                 print(f"   ❌ API 响应异常: {response.status_code}")
                 return False
                 
         except requests.exceptions.RequestException as e:
-            self.add_result('supabase_api', False, f"❌ Supabase API 连接失败: {str(e)}")
+            self.add_result('api_connection', False, f"❌ API 连接失败: {str(e)}")
             print(f"   ❌ API 连接失败: {str(e)}")
             return False
     
     def test_storage_access(self) -> bool:
-        """测试存储访问"""
+        """测试存储访问（如果配置了的话）"""
         print("💾 测试存储访问...")
         
-        if not self.supabase_url or not self.supabase_service_key:
+        if not self.api_url or not self.api_service_key:
             self.add_result('storage_access', False, 
-                          "❌ 存储测试需要 SUPABASE_SERVICE_KEY", warning=True)
-            print("   ⚠️ 存储测试需要 SUPABASE_SERVICE_KEY")
+                          "❌ 存储测试需要 API_SERVICE_KEY", warning=True)
+            print("   ⚠️ 存储测试需要 API_SERVICE_KEY，跳过存储测试")
             return False
         
         try:
-            # 测试存储桶列表
-            storage_url = f"{self.supabase_url}/storage/v1/bucket"
-            headers = {
-                'apikey': self.supabase_service_key,
-                'Authorization': f'Bearer {self.supabase_service_key}',
-                'Content-Type': 'application/json'
-            }
-            
-            response = requests.get(storage_url, headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                buckets = response.json()
-                bucket_names = [bucket.get('name', 'unknown') for bucket in buckets]
-                
-                bucket_exists = self.storage_bucket in bucket_names
-                
-                details = {
-                    'available_buckets': bucket_names,
-                    'target_bucket': self.storage_bucket,
-                    'bucket_exists': bucket_exists
+            # 测试存储桶列表（仅适用于支持的 API）
+            if self.storage_provider == 'supabase':
+                storage_url = f"{self.api_url}/storage/v1/bucket"
+                headers = {
+                    'apikey': self.api_service_key,
+                    'Authorization': f'Bearer {self.api_service_key}',
+                    'Content-Type': 'application/json'
                 }
                 
-                if bucket_exists:
-                    self.add_result('storage_access', True, 
-                                  f"✅ 存储访问正常，目标桶存在: {self.storage_bucket}", details)
-                    print(f"   ✅ 存储桶存在: {self.storage_bucket}")
+                response = requests.get(storage_url, headers=headers, timeout=10)
+                
+                if response.status_code == 200:
+                    buckets = response.json()
+                    bucket_names = [bucket.get('name', 'unknown') for bucket in buckets]
+                    
+                    bucket_exists = self.storage_bucket in bucket_names
+                    
+                    details = {
+                        'available_buckets': bucket_names,
+                        'target_bucket': self.storage_bucket,
+                        'bucket_exists': bucket_exists
+                    }
+                    
+                    if bucket_exists:
+                        self.add_result('storage_access', True, 
+                                      f"✅ 存储访问正常，目标桶存在: {self.storage_bucket}", details)
+                        print(f"   ✅ 存储桶存在: {self.storage_bucket}")
+                    else:
+                        self.add_result('storage_access', False, 
+                                      f"⚠️ 目标存储桶不存在: {self.storage_bucket}", details, warning=True)
+                        print(f"   ⚠️ 目标存储桶不存在: {self.storage_bucket}")
+                        print(f"   📂 可用存储桶: {', '.join(bucket_names)}")
+                    
+                    return bucket_exists
                 else:
                     self.add_result('storage_access', False, 
-                                  f"⚠️ 目标存储桶不存在: {self.storage_bucket}", details, warning=True)
-                    print(f"   ⚠️ 目标存储桶不存在: {self.storage_bucket}")
-                    print(f"   📂 可用存储桶: {', '.join(bucket_names)}")
-                
-                return bucket_exists
+                                  f"❌ 存储API响应异常: {response.status_code}")
+                    print(f"   ❌ 存储API响应异常: {response.status_code}")
+                    return False
             else:
                 self.add_result('storage_access', False, 
-                              f"❌ 存储API响应异常: {response.status_code}")
-                print(f"   ❌ 存储API响应异常: {response.status_code}")
+                              f"⚠️ 存储提供商 '{self.storage_provider}' 不支持API测试", warning=True)
+                print(f"   ⚠️ 存储提供商 '{self.storage_provider}' 不支持API测试")
                 return False
                 
         except requests.exceptions.RequestException as e:
@@ -493,7 +500,7 @@ class SupabaseHealthChecker:
             self.test_database_connection,
             self.test_schema_access,
             self.test_table_operations,
-            self.test_supabase_api,
+            self.test_api_connection,
             self.test_storage_access,
             self.run_performance_test
         ]
@@ -520,8 +527,8 @@ class SupabaseHealthChecker:
 
 def main():
     """主函数"""
-    print("🏥 LandPPT Supabase 数据库健康检查工具")
-    print("版本: 2.0.0 | 支持 DATABASE_URL 和环境变量配置")
+    print("🏥 LandPPT PostgreSQL 数据库健康检查工具")
+    print("版本: 2.0.0 | 支持 PostgreSQL 及其衍生产品（如 Supabase）")
     print()
     
     # 检查必要的环境变量
@@ -545,7 +552,7 @@ def main():
         sys.exit(1)
     
     # 运行健康检查
-    checker = SupabaseHealthChecker()
+    checker = PostgreSQLHealthChecker()
     success = checker.run_all_checks()
     
     print(f"\n🎯 检查完成! {'成功' if success else '发现问题'}")
