@@ -4,13 +4,21 @@ on:
   push:
     branches: [ main ]
     tags: [ 'v*.*.*' ]
-  release:
+  r         echo "### 🚀 Quick Start" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "# Pull and run the latest image" >> $GITHUB_STEP_SUMMARY
+        echo "docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+        echo "docker run -d \\" >> $GITHUB_STEP_SUMMARY
+        echo "  --name land-ppt \\" >> $GITHUB_STEP_SUMMARY echo "        echo "# Pull and run the latest image" >> $GITHUB_STEP_SUMMARY
+        echo "docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+        echo "docker run -d \\" >> $GITHUB_STEP_SUMMARY
+        echo "  --name land-ppt \\" >> $GITHUB_STEP_SUMMARYse:
     types: [published]
   workflow_dispatch:
 
 env:
   DOCKER_HUB_REGISTRY: docker.io
-  IMAGE_NAME: landppt
+  IMAGE_NAME: land-ppt
 
 jobs:
   build-and-push:

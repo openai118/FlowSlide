@@ -10,7 +10,7 @@
 
 1. **创建Docker Hub账户**: 访问 [Docker Hub](https://hub.docker.com/)
 2. **创建仓库**: 
-   - 仓库名建议: `your-username/landppt`
+   - 仓库名建议: `your-username/land-ppt`
    - 设置为公开或私有仓库
 
 ### 2. 生成Docker Hub访问令牌
@@ -18,7 +18,7 @@
 1. 登录Docker Hub
 2. 进入 **Account Settings** → **Security**
 3. 点击 **New Access Token**
-4. 令牌名称: `github-actions-landppt`
+3. **令牌名称**: `github-actions-land-ppt`
 5. 权限: **Read, Write, Delete**
 6. **保存生成的令牌** (只显示一次!)
 
@@ -82,14 +82,14 @@ Docker镜像将构建为多平台:
 
 ```bash
 # 拉取最新镜像
-docker pull your-username/landppt:latest
+docker pull your-username/land-ppt:latest
 
 # 运行容器
 docker run -d \
-  --name landppt \
+  --name land-ppt \
   -p 8000:8000 \
   -e DATABASE_URL="postgresql://user:pass@host:port/db" \
-  your-username/landppt:latest
+  your-username/land-ppt:latest
 ```
 
 ### 使用Docker Compose:
@@ -97,8 +97,8 @@ docker run -d \
 ```yaml
 version: '3.8'
 services:
-  landppt:
-    image: your-username/landppt:latest
+  land-ppt:
+    image: your-username/land-ppt:latest
     ports:
       - "8000:8000"
     environment:
@@ -112,11 +112,11 @@ services:
 
 ```bash
 # 使用特定版本
-docker pull your-username/landppt:v2.0.0
-docker run -d your-username/landppt:v2.0.0
+docker pull your-username/land-ppt:v2.0.0
+docker run -d your-username/land-ppt:v2.0.0
 
 # 使用日期标签
-docker pull your-username/landppt:20250813-abc1234
+docker pull your-username/land-ppt:20250813-abc1234
 ```
 
 ## 🔧 自定义配置
@@ -193,11 +193,11 @@ Warning: Image size exceeds Docker Hub limits
 # 本地测试构建
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t your-username/landppt:test \
+  -t your-username/land-ppt:test \
   --push .
 
 # 测试镜像运行
-docker run --rm your-username/landppt:test python --version
+docker run --rm your-username/land-ppt:test python --version
 ```
 
 ## 🎯 最佳实践

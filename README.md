@@ -105,16 +105,16 @@ docker-compose logs -f landppt
 
 ```bash
 # 从 Docker Hub 拉取最新镜像
-docker pull your-username/landppt:latest
+docker pull your-username/land-ppt:latest
 
 # 运行容器
 docker run -d \
-  --name landppt \
+  --name land-ppt \
   -p 8000:8000 \
   -e DATABASE_URL="postgresql://user:pass@host:port/db?sslmode=require" \
   -e API_URL="https://your-api-endpoint.com" \
   -e API_ANON_KEY="your-api-key" \
-  your-username/landppt:latest
+  your-username/land-ppt:latest
 ```
 
 #### 方式三：本地开发
