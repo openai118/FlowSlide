@@ -15,8 +15,9 @@ aiohttp>=3.12.4
 # Database libraries
 sqlalchemy>=2.0.0
 alembic>=1.13.0
-aiosqlite>=0.19.0
-psycopg2-binary>=2.9.0
+aiosqlite>=0.19.0  # SQLite异步驱动
+psycopg2-binary>=2.9.0  # PostgreSQL同步驱动
+asyncpg>=0.29.0  # PostgreSQL异步驱动
 
 # Document processing
 markdown>=3.5.1

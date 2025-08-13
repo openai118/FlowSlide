@@ -1,0 +1,133 @@
+# LandPPT with PostgreSQL Database
+# Complete setup with PostgreSQL database included
+
+version: '3.8'
+
+services:
+  # PostgreSQL数据库服务
+  postgres:
+    image: postgres:15-alpine
+    container_name: landppt-postgres
+    environment:
+      POSTGRES_DB: landppt_db
+      POSTGRES_USER: landppt_user
+      POSTGRES_PASSWORD: landppt_pass
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U landppt_user -d landppt_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - landppt-network
+
+  # LandPPT应用服务
+  landppt:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: landppt-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      # Application settings
+      - PYTHONPATH=/app/src:/opt/venv
+      - PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
+      
+      # PostgreSQL数据库配置
+      - DATABASE_URL=postgresql://landppt_user:landppt_pass@postgres:5432/landppt_db
+      
+      # Alternative: Separate database variables
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=landppt_db
+      - DB_USER=landppt_user
+      - DB_PASSWORD=landppt_pass
+          
+      # API settings (optional)
+      - API_URL=${API_URL:-}
+      - API_ANON_KEY=${API_ANON_KEY:-}
+      - API_SERVICE_KEY=${API_SERVICE_KEY:-}
+      
+      # Storage settings (optional)
+      - STORAGE_BUCKET=${STORAGE_BUCKET:-}
+      - STORAGE_PROVIDER=${STORAGE_PROVIDER:-}
+      
+      # Cloudflare R2 Backup Configuration
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-}
+      - R2_ENDPOINT=${R2_ENDPOINT:-}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME:-}
+      - BACKUP_WEBHOOK_URL=${BACKUP_WEBHOOK_URL:-}
+      
+      # Health check settings
+      - SKIP_DB_CHECK=false
+      - REQUIRE_DB=true
+      - RUN_DB_SCHEMA_CHECK=true
+      
+      # Performance settings
+      - WORKERS=${WORKERS:-1}
+      - TIMEOUT=${TIMEOUT:-300}
+      
+      # Security settings
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-this-in-production}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      
+      # AI Provider settings (至少配置一个)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - ZHIPU_API_KEY=${ZHIPU_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+      - ./db:/app/db  # For backup purposes
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - landppt-network
+
+  # Redis缓存服务 (可选)
+  redis:
+    image: redis:7-alpine
+    container_name: landppt-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - landppt-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  landppt-network:
+    driver: bridge

@@ -284,6 +284,30 @@ sqlalchemy.exc.InvalidRequestError: The asyncio extension requires an async driv
 - PostgreSQL: `postgresql+asyncpg://user:pass@host/db`
 - MySQL: `mysql+aiomysql://user:pass@host/db`
 
+**7. PostgreSQL异步驱动缺失**
+```
+ModuleNotFoundError: No module named 'asyncpg'
+```
+**解决**: 确保在 `requirements.txt` 中包含 PostgreSQL 异步驱动:
+```bash
+# requirements.txt 中添加
+asyncpg>=0.29.0  # PostgreSQL异步驱动
+psycopg2-binary>=2.9.0  # PostgreSQL同步驱动 (向后兼容)
+```
+
+**8. PostgreSQL连接配置**
+```
+Error: could not connect to server
+```
+**解决**: 检查 PostgreSQL 数据库配置:
+```yaml
+# 环境变量配置
+DATABASE_URL=postgresql://username:password@host:5432/database
+
+# 或使用 docker-compose.postgres.yml 启动完整的PostgreSQL环境
+docker-compose -f docker-compose.postgres.yml up -d
+```
+
 **7. 构建时间过长**
 ```
 Docker build taking too long (15+ minutes)

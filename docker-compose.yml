@@ -16,8 +16,11 @@ services:
       - PYTHONPATH=/app/src:/opt/venv
       - PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
       
-      # Database settings (DATABASE_URL takes priority)
-      - DATABASE_URL=postgresql://username:password@host:port/database?sslmode=require&options=-c%20search_path%3Dschema,public
+      # Database settings (PostgreSQL配置)
+      - DATABASE_URL=${DATABASE_URL:-postgresql://landppt_user:landppt_pass@localhost:5432/landppt_db}
+      
+      # SQLite替代配置 (如需使用SQLite，请取消注释)
+      # - DATABASE_URL=sqlite:///app/db/landppt.db
       
       # Alternative: Separate database variables (if DATABASE_URL not set)
       - DB_HOST=${DB_HOST}
