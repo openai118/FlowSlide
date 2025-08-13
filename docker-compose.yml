@@ -1,0 +1,125 @@
+# LandPPT Docker Compose Configuration
+# Enhanced version with database health checks
+
+version: '3.8'
+
+services:
+  landppt:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: landppt-app
+    ports:
+      - "8000:8000"
+    environment:
+      # Application settings
+      - PYTHONPATH=/app/src:/opt/venv
+      - PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
+      
+      # Database settings
+      - DB_HOST=db.fiuzetazperebuqwmrna.supabase.co
+      - DB_PORT=5432
+      - DB_NAME=postgres
+      - DB_USER=landppt_user
+      - DB_PASSWORD=Openai9zLwR1sT4u
+      
+      # Supabase settings
+      - SUPABASE_URL=https://fiuzetazperebuqwmrna.supabase.co
+      - SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NTI2NjgsImV4cCI6MjA3MDUyODY2OH0.aQwP7h_SFau6UsfsGbUHY3kf-RDYM8LEOLu0hsbv5Ns
+      - SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDk1MjY2OCwiZXhwIjoyMDcwNTI4NjY4fQ.8vdb7DH860INPx5ZhDd9JTdsfJtDAhOizQNZgEqONNE
+      
+      # Storage settings
+      - STORAGE_BUCKET=landppt-files
+      - STORAGE_PROVIDER=supabase
+      
+      # Cloudflare R2 Backup Configuration
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_ENDPOINT=${R2_ENDPOINT}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - BACKUP_WEBHOOK_URL=${BACKUP_WEBHOOK_URL}
+      
+      # Health check settings
+      - SKIP_DB_CHECK=false
+      - REQUIRE_DB=true
+      - RUN_DB_SCHEMA_CHECK=true
+      
+      # Performance settings
+      - PYTHONOPTIMIZE=1
+      - PYTHONHASHSEED=random
+      - PYTHONGC=0
+      
+    volumes:
+      # Persistent data
+      - landppt_data:/app/data
+      - landppt_uploads:/app/uploads
+      - landppt_temp:/app/temp
+      - landppt_logs:/app/logs
+      
+      # Cache directories
+      - playwright_cache:/root/.cache/ms-playwright
+      
+    restart: unless-stopped
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.5'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    
+    # Health check configuration
+    healthcheck:
+      test: ["CMD", "./docker-healthcheck-enhanced.sh"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Database health monitoring service
+  db-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.enhanced
+    container_name: landppt-db-monitor
+    entrypoint: ["python3", "/app/tools/database_health_check.py", "--non-interactive"]
+    environment:
+      - DB_HOST=db.fiuzetazperebuqwmrna.supabase.co
+      - DB_PORT=5432
+      - DB_NAME=postgres
+      - DB_USER=landppt_user
+      - DB_PASSWORD=Openai9zLwR1sT4u
+      - SUPABASE_URL=https://fiuzetazperebuqwmrna.supabase.co
+      - SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDk1MjY2OCwiZXhwIjoyMDcwNTI4NjY4fQ.8vdb7DH860INPx5ZhDd9JTdsfJtDAhOizQNZgEqONNE
+    volumes:
+      - landppt_logs:/app/logs
+    restart: "no"
+    profiles:
+      - monitoring
+
+volumes:
+  landppt_data:
+    driver: local
+  landppt_uploads:
+    driver: local
+  landppt_temp:
+    driver: local
+  landppt_logs:
+    driver: local
+  playwright_cache:
+    driver: local
+
+# Network configuration
+networks:
+  default:
+    name: landppt-network

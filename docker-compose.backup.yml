@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # 主要的 LandPPT 服务
+  landppt:
+    extends:
+      file: docker-compose.yml
+      service: landppt
+    
+  # 定时备份服务
+  backup-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.ci-compatible
+    container_name: landppt-backup-scheduler
+    depends_on:
+      - landppt
+    environment:
+      # 继承主服务的环境变量
+      - DB_HOST=db.fiuzetazperebuqwmrna.supabase.co
+      - DB_PORT=5432
+      - DB_NAME=postgres
+      - DB_USER=landppt_user
+      - DB_PASSWORD=Openai9zLwR1sT4u
+      
+      # Supabase settings
+      - SUPABASE_URL=https://fiuzetazperebuqwmrna.supabase.co
+      - SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NTI2NjgsImV4cCI6MjA3MDUyODY2OH0.aQwP7h_SFau6UsfsGbUHY3kf-RDYM8LEOLu0hsbv5Ns
+      - SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDk1MjY2OCwiZXhwIjoyMDcwNTI4NjY4fQ.8vdb7DH860INPx5ZhDd9JTdsfJtDAhOizQNZgEqONNE
+      
+      # R2 备份配置
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_ENDPOINT=${R2_ENDPOINT}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - BACKUP_WEBHOOK_URL=${BACKUP_WEBHOOK_URL}
+      
+      # 备份调度配置
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 2 * * *}  # 默认每天凌晨2点
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-30}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # 访问主容器数据
+      - landppt_data:/app/data:ro
+      - landppt_reports:/app/research_reports:ro
+      - landppt_logs:/app/logs:ro
+    restart: unless-stopped
+    command: >
+      sh -c "
+        echo '备份调度器启动...'
+        echo '$${BACKUP_SCHEDULE} /app/backup-active.sh' > /etc/crontabs/root
+        echo '定时任务已设置: $${BACKUP_SCHEDULE}'
+        crond -f -l 2
+      "
+    healthcheck:
+      test: ["CMD", "pgrep", "crond"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "landppt.service=backup-scheduler"
+      - "landppt.description=Automated backup service for LandPPT"
+
+  # 按需备份服务
+  manual-backup:
+    build:
+      context: .
+      dockerfile: Dockerfile.ci-compatible
+    container_name: landppt-manual-backup
+    profiles: ["backup"]  # 只在备份配置文件中启动
+    environment:
+      # 继承相同的环境变量
+      - DB_HOST=db.fiuzetazperebuqwmrna.supabase.co
+      - DB_PORT=5432
+      - DB_NAME=postgres
+      - DB_USER=landppt_user
+      - DB_PASSWORD=Openai9zLwR1sT4u
+      - SUPABASE_URL=https://fiuzetazperebuqwmrna.supabase.co
+      - SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NTI2NjgsImV4cCI6MjA3MDUyODY2OH0.aQwP7h_SFau6UsfsGbUHY3kf-RDYM8LEOLu0hsbv5Ns
+      - SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdXpldGF6cGVyZWJ1cXdtcm5hIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDk1MjY2OCwiZXhwIjoyMDcwNTI4NjY4fQ.8vdb7DH860INPx5ZhDd9JTdsfJtDAhOizQNZgEqONNE
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_ENDPOINT=${R2_ENDPOINT}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - BACKUP_WEBHOOK_URL=${BACKUP_WEBHOOK_URL}
+    volumes:
+      - landppt_data:/app/data:ro
+      - landppt_reports:/app/research_reports:ro
+      - landppt_logs:/app/logs:ro
+    command: ["./backup-active.sh"]
+    labels:
+      - "landppt.service=manual-backup"
+      - "landppt.description=On-demand backup service for LandPPT"
+
+# 重用主配置文件的卷
+volumes:
+  landppt_data:
+    external: true
+  landppt_reports:
+    external: true
+  landppt_logs:
+    external: true
+
+networks:
+  default:
+    name: landppt_network

@@ -1,0 +1,3 @@
+# LandPPT Supabase 数据库检测工具依赖
+psycopg2-binary>=2.9.0
+requests>=2.25.0
