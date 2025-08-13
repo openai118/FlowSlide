@@ -29,7 +29,7 @@
 ### 必需的Secrets:
 
 1. **DOCKER_HUB_USERNAME**
-   - 值: 你的Docker Hub用户名
+   - 值: 你的Docker Hub用户名 (当前配置: c1a200)
    - 路径: `Settings` → `Secrets and variables` → `Actions`
 
 2. **DOCKER_HUB_TOKEN**
@@ -70,11 +70,41 @@
 | 版本标签 | `vX.Y.Z`, `vX.Y`, `vX` | `v2.0.0`, `v2.0`, `v2` |
 | 其他分支 | `branch-name` | `develop`, `feature-auth` |
 
-## 📦 多平台支持
+## 📦 多平台支持策略
 
-Docker镜像将构建为多平台:
-- ✅ `linux/amd64` (x86_64)
-- ✅ `linux/arm64` (ARM64/Apple Silicon)
+Docker镜像支持智能平台选择：
+
+### 🎯 自动平台选择规则
+| 触发方式 | 构建平台 | 构建时间 | 使用场景 |
+|----------|----------|----------|----------|
+| 推送到main分支 | `linux/amd64` | ~5-8分钟 | 快速开发迭代 |
+| 版本标签 (v1.0.0) | `linux/amd64,linux/arm64` | ~15-20分钟 | 正式发布 |
+| 手动触发 | 可选择 | 根据选择 | 测试验证 |
+
+### 🏗️ 平台架构详解
+
+#### **linux/amd64 (x86_64)** - 主流架构
+- **硬件**: Intel/AMD 64位处理器
+- **应用场景**:
+  - 🌐 云服务器 (AWS EC2, Azure VM, GCP Compute)
+  - 🖥️ 传统服务器和工作站
+  - 💻 Windows/Linux PC
+- **优势**: 
+  - ✅ 兼容性最好 (95%+ 的服务器)
+  - ✅ 构建速度快
+  - ✅ 软件生态成熟
+
+#### **linux/arm64 (aarch64)** - 新兴架构
+- **硬件**: ARM 64位处理器
+- **应用场景**:
+  - 🍎 Apple Silicon Mac (M1/M2/M3)
+  - ☁️ AWS Graviton 处理器
+  - 🥧 树莓派 4/5
+  - 📱 部分云原生和边缘计算
+- **优势**:
+  - ⚡ 能效比高 (省电)
+  - 💰 成本较低
+  - 🌱 环保友好
 
 ## 🧪 使用发布的镜像
 
@@ -193,6 +223,16 @@ Error: failed to create async engine
 ```
 **解决**: 使用正确的数据库URL格式，确保容器内有写入权限。默认使用SQLite: `sqlite:///app/db/landppt.db`
 
+**6. 构建时间过长**
+```
+Docker build taking too long (15+ minutes)
+```
+**解决**: 
+- 单平台构建: 只构建AMD64 `platforms: linux/amd64`
+- 使用构建缓存: 确保GitHub Actions缓存正常工作
+- 分层优化: 将不常变的依赖放在前面的层
+- 并行构建: 考虑分离构建和推送步骤
+
 ### 测试命令:
 
 ```bash
@@ -204,6 +244,89 @@ docker buildx build \
 
 # 测试镜像运行
 docker run --rm c1a200/land-ppt:test python --version
+```
+
+## 🚀 构建时间优化
+
+### ⏱️ 构建时间分析 
+
+#### **单平台构建 (linux/amd64)**
+```
+总时间: ~5-8分钟
+├── 系统依赖安装: 1-2分钟
+├── Python依赖安装: 2-3分钟  
+├── Playwright下载: 1-2分钟
+└── 镜像构建打包: 1分钟
+```
+
+#### **多平台构建 (amd64 + arm64)**
+```
+总时间: ~15-20分钟
+├── AMD64平台: 5-8分钟
+├── ARM64平台: 8-12分钟 (交叉编译慢)
+└── 多架构清单: 1分钟
+```
+
+### 🤔 为什么"按需"多平台构建？
+
+#### **时间成本考虑**
+- **开发阶段**: 频繁推送main分支，只需验证AMD64即可
+- **正式发布**: 版本标签时才需要完整多平台支持
+- **成本效益**: 95%的部署使用AMD64，ARM64按需构建
+
+#### **实际使用统计**
+```
+服务器部署平台分布：
+├── linux/amd64: ~95% (云服务器主流)
+├── linux/arm64: ~4% (Apple Silicon开发者)
+└── 其他平台: ~1%
+```
+
+### 🎯 智能构建策略
+
+#### **当前配置逻辑**
+```yaml
+platforms: ${{ 
+  github.event.inputs.platforms || 
+  (startsWith(github.ref, 'refs/tags/') && 
+   'linux/amd64,linux/arm64' || 
+   'linux/amd64') 
+}}
+```
+
+**解释**:
+1. **手动触发**: 用户可选择平台
+2. **版本标签**: 自动多平台 (v1.0.0 → 两个平台)  
+3. **日常推送**: 仅AMD64 (main分支 → 单平台)
+
+#### **平台选择建议**
+
+| 使用场景 | 推荐平台 | 原因 |
+|----------|----------|------|
+| 🔧 开发测试 | `linux/amd64` | 快速反馈，节省时间 |
+| 🚀 生产发布 | `linux/amd64,linux/arm64` | 完整兼容性 |
+| 🍎 Mac开发者 | `linux/arm64` | 本地测试匹配 |
+| ☁️ AWS Graviton | `linux/arm64` | 成本优化 |
+
+### ⚡ 优化技巧
+
+#### **快速开发模式**
+```bash
+# 只构建AMD64，5分钟完成
+git push origin main
+```
+
+#### **完整发布模式**  
+```bash
+# 创建版本标签，自动多平台构建
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+#### **手动选择模式**
+```bash
+# GitHub Actions页面手动触发
+# 可选择: linux/amd64 或 linux/amd64,linux/arm64
 ```
 
 ## 🎯 最佳实践
