@@ -43,26 +43,50 @@ ENV PYTHONUNBUFFERED=1 \
     PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright \
     HOME=/root
 
-# Install only essential runtime dependencies in one layer
+# Install essential runtime dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    libmagic1 \
+    libpq-dev \
+    postgresql-client \
+    unzip \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PDF and document processing tools
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     wkhtmltopdf \
     poppler-utils \
-    libmagic1 \
-    ca-certificates \
-    curl \
-    chromium \
-    libgomp1 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install fonts and display tools
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     fonts-liberation \
-    fonts-noto-cjk \
     fontconfig \
-    netcat-openbsd \
-    libpq-dev \
-    postgresql-client \
-    unzip \
     && fc-cache -fv \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /root/.cache
+    && rm -rf /var/lib/apt/lists/*
+
+# Install browser dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    chromium \
+    libgomp1 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install network tools (try different netcat packages)
+RUN apt-get update && \
+    (apt-get install -y --no-install-recommends netcat-traditional || \
+     apt-get install -y --no-install-recommends netcat-openbsd || \
+     apt-get install -y --no-install-recommends netcat) \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install rclone for backup functionality
 RUN curl https://rclone.org/install.sh | bash
