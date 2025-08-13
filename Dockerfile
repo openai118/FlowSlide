@@ -96,20 +96,17 @@ COPY .env.example ./.env
 COPY docker-healthcheck.sh docker-entrypoint.sh ./
 
 # Copy backup scripts
-COPY backup_to_r2.sh backup_to_r2_enhanced.sh ./
+COPY backup_to_r2_enhanced.sh ./
 
 # Create tools directory and copy database health check tools
 RUN mkdir -p tools
-COPY database_health_check.py quick_db_check.py database_diagnosis.py simple_performance_test.py ./tools/ 
+COPY database_health_check.py database_diagnosis.py ./tools/ 
 # Create placeholder if tools are missing
 RUN [ -f "tools/database_health_check.py" ] || echo "#!/usr/bin/env python3\nprint('Database tools not available')" > tools/placeholder.py
 
-# Copy enhanced scripts (create them if missing)
-COPY docker-healthcheck-enhanced.sh ./
-COPY docker-entrypoint-enhanced.sh ./
-# Create placeholder scripts if enhanced versions are missing
-RUN [ -f "docker-healthcheck-enhanced.sh" ] || cp docker-healthcheck.sh docker-healthcheck-enhanced.sh
-RUN [ -f "docker-entrypoint-enhanced.sh" ] || cp docker-entrypoint.sh docker-entrypoint-enhanced.sh
+# Create enhanced scripts from standard ones
+RUN cp docker-healthcheck.sh docker-healthcheck-enhanced.sh && \
+    cp docker-entrypoint.sh docker-entrypoint-enhanced.sh
 
 # Create directories and set permissions in one layer
 RUN chmod +x docker-healthcheck*.sh docker-entrypoint*.sh backup_to_r2*.sh 2>/dev/null || true && \
@@ -139,8 +136,9 @@ RUN chmod +x docker-healthcheck*.sh docker-entrypoint*.sh backup_to_r2*.sh 2>/de
         echo "Using enhanced backup script" && \
         ln -sf backup_to_r2_enhanced.sh backup-active.sh; \
     else \
-        echo "Using standard backup script" && \
-        ln -sf backup_to_r2.sh backup-active.sh; \
+        echo "No backup script available" && \
+        echo "#!/bin/bash\necho 'No backup script configured'" > backup-active.sh && \
+        chmod +x backup-active.sh; \
     fi
 
 # Keep landppt user but run as root to handle file permissions
