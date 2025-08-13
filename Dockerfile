@@ -26,9 +26,11 @@ RUN apt-get update && \
 WORKDIR /app
 COPY requirements.txt ./
 
-# Install Python dependencies to a specific directory
-RUN pip install --target=/opt/venv psycopg2-binary requests && \
-    pip install --target=/opt/venv -r requirements.txt && \
+# Install Python dependencies to a virtual environment
+RUN python -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /opt/venv/bin/pip install --no-cache-dir psycopg2-binary requests && \
+    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt && \
     # Clean up build artifacts
     find /opt/venv -name "*.pyc" -delete && \
     find /opt/venv -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
@@ -39,7 +41,8 @@ FROM python:3.11-slim AS production
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app/src:/opt/venv \
+    PYTHONPATH=/app/src \
+    PATH=/opt/venv/bin:$PATH \
     PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright \
     HOME=/root
 
@@ -103,8 +106,8 @@ RUN groupadd -r landppt && \
 COPY --from=builder /opt/venv /opt/venv
 
 # Install Playwright with minimal footprint
-RUN pip install --no-cache-dir playwright==1.40.0 && \
-    playwright install chromium && \
+RUN /opt/venv/bin/pip install --no-cache-dir playwright==1.40.0 && \
+    /opt/venv/bin/playwright install chromium && \
     chown -R landppt:landppt /home/landppt && \
     rm -rf /tmp/* /var/tmp/*
 

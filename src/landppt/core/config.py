@@ -52,6 +52,12 @@ class AIConfig(BaseSettings):
     # Hugging Face Configuration
     huggingface_api_token: Optional[str] = None
 
+    # General AI Configuration
+    default_ai_provider: str = "openai"
+    max_tokens: int = 2000
+    temperature: float = 0.7
+    top_p: float = 1.0
+
     # Search Engine Configuration
     tavily_api_key: Optional[str] = None
     tavily_max_results: int = 10
@@ -61,8 +67,24 @@ class AIConfig(BaseSettings):
 
     # SearXNG Configuration
     searxng_host: Optional[str] = None
+    searxng_max_results: int = 10
+    searxng_language: str = "en"
+    searxng_timeout: int = 10
+
+    # Research Configuration
+    research_provider: str = "tavily"
+    research_enable_content_extraction: bool = True
+    research_max_content_length: int = 50000
+    research_extraction_timeout: int = 30
+
+    # Apryse Configuration
+    apryse_license_key: Optional[str] = None
 
     model_config = {"case_sensitive": False, "extra": "ignore"}
+
+
+# Global AI configuration instance
+ai_config = AIConfig()
 
 
 def reload_ai_config():
