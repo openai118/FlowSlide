@@ -10,7 +10,7 @@
 
 1. **创建Docker Hub账户**: 访问 [Docker Hub](https://hub.docker.com/)
 2. **创建仓库**: 
-   - 仓库名建议: `your-username/land-ppt`
+   - 仓库名建议: `c1a200/land-ppt`
    - 设置为公开或私有仓库
 
 ### 2. 生成Docker Hub访问令牌
@@ -44,7 +44,7 @@
 2. 点击 Secrets and variables → Actions
 3. 点击 New repository secret
 4. 添加以下两个secrets:
-   - Name: DOCKER_HUB_USERNAME, Secret: your_dockerhub_username
+   - Name: DOCKER_HUB_USERNAME, Secret: c1a200
    - Name: DOCKER_HUB_TOKEN, Secret: your_dockerhub_token
 ```
 
@@ -82,14 +82,14 @@ Docker镜像将构建为多平台:
 
 ```bash
 # 拉取最新镜像
-docker pull your-username/land-ppt:latest
+docker pull c1a200/land-ppt:latest
 
 # 运行容器
 docker run -d \
   --name land-ppt \
   -p 8000:8000 \
-  -e DATABASE_URL="postgresql://user:pass@host:port/db" \
-  your-username/land-ppt:latest
+  -e DATABASE_URL="sqlite:///app/db/landppt.db" \
+  c1a200/land-ppt:latest
 ```
 
 ### 使用Docker Compose:
@@ -98,11 +98,11 @@ docker run -d \
 version: '3.8'
 services:
   land-ppt:
-    image: your-username/land-ppt:latest
+    image: c1a200/land-ppt:latest
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://user:pass@host:port/db
+      - DATABASE_URL=sqlite:///app/db/landppt.db
       - API_URL=https://your-api-endpoint.com
       - API_ANON_KEY=your-api-key
     restart: unless-stopped
@@ -112,11 +112,11 @@ services:
 
 ```bash
 # 使用特定版本
-docker pull your-username/land-ppt:v2.0.0
-docker run -d your-username/land-ppt:v2.0.0
+docker pull c1a200/land-ppt:v2.0.0
+docker run -d c1a200/land-ppt:v2.0.0
 
 # 使用日期标签
-docker pull your-username/land-ppt:20250813-abc1234
+docker pull c1a200/land-ppt:20250813-abc1234
 ```
 
 ## 🔧 自定义配置
@@ -187,17 +187,23 @@ Warning: Image size exceeds Docker Hub limits
 ```
 **解决**: 优化Dockerfile，使用多阶段构建，清理缓存
 
+**5. 数据库连接错误**
+```
+Error: failed to create async engine
+```
+**解决**: 使用正确的数据库URL格式，确保容器内有写入权限。默认使用SQLite: `sqlite:///app/db/landppt.db`
+
 ### 测试命令:
 
 ```bash
 # 本地测试构建
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t your-username/land-ppt:test \
+  -t c1a200/land-ppt:test \
   --push .
 
 # 测试镜像运行
-docker run --rm your-username/land-ppt:test python --version
+docker run --rm c1a200/land-ppt:test python --version
 ```
 
 ## 🎯 最佳实践
