@@ -55,13 +55,19 @@ RUN apt-get update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install PDF and document processing tools
+# Install PDF and document processing tools (minimal approach)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    wkhtmltopdf \
     poppler-utils \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Try to install wkhtmltopdf, but don't fail if it's not available
+RUN apt-get update && \
+    (apt-get install -y --no-install-recommends wkhtmltopdf 2>/dev/null || \
+     echo "⚠️ wkhtmltopdf not available, PDF generation may be limited") \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* 2>/dev/null || true
 
 # Install fonts and display tools
 RUN apt-get update && \
