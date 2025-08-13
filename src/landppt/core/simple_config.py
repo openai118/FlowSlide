@@ -8,6 +8,24 @@ from typing import Optional
 # 数据库配置 - 使用安全的Docker路径
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app/db/landppt.db")
 
+# 异步数据库URL配置
+def get_async_database_url(sync_url: str) -> str:
+    """将同步数据库URL转换为异步版本"""
+    if sync_url.startswith("sqlite:///"):
+        # SQLite异步URL
+        return sync_url.replace("sqlite:///", "sqlite+aiosqlite:///")
+    elif sync_url.startswith("postgresql://"):
+        # PostgreSQL异步URL
+        return sync_url.replace("postgresql://", "postgresql+asyncpg://")
+    elif sync_url.startswith("mysql://"):
+        # MySQL异步URL  
+        return sync_url.replace("mysql://", "mysql+aiomysql://")
+    else:
+        # 默认返回SQLite异步格式
+        return "sqlite+aiosqlite:///app/db/landppt.db"
+
+ASYNC_DATABASE_URL = get_async_database_url(DATABASE_URL)
+
 # 基础应用配置
 class SimpleConfig:
     def __init__(self):
