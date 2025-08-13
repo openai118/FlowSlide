@@ -16,7 +16,7 @@ import aiohttp
 from bs4 import BeautifulSoup, Comment
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-from ...core.config import ai_config
+from ...core.simple_config import ai_config
 
 logger = logging.getLogger(__name__)
 

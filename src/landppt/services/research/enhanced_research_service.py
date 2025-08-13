@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Union
 from langchain.schema import Document
 
 from ...ai import AIMessage, MessageRole, get_ai_provider
-from ...core.config import ai_config
+from ...core.simple_config import ai_config
 from ..deep_research_service import (DEEPResearchService, ResearchReport,
                                      ResearchStep)
 from .content_extractor import ExtractedContent, WebContentExtractor

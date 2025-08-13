@@ -13,7 +13,7 @@ from urllib.parse import urljoin, urlparse
 
 import aiohttp
 
-from ...core.config import ai_config
+from ...core.simple_config import ai_config
 
 logger = logging.getLogger(__name__)
 

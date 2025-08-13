@@ -30,7 +30,7 @@ from ..api.models import (FileOutlineGenerationRequest, PPTGenerationRequest,
                           PPTProject, TodoBoard)
 from ..auth.middleware import (get_current_user_optional,
                                get_current_user_required)
-from ..core.config import ai_config
+from ..core.simple_config import ai_config
 from ..database.models import User
 from ..services.enhanced_ppt_service import EnhancedPPTService
 from ..services.pdf_to_pptx_converter import get_pdf_to_pptx_converter

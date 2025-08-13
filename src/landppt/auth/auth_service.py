@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from ..core.config import app_config
+from ..core.simple_config import app_config
 from ..database.database import get_db
 from ..database.models import User, UserSession
 
