@@ -344,7 +344,32 @@ TypeError: connect() got an unexpected keyword argument 'sslmode'
 # 在代码中通过连接参数而非URL参数配置SSL
 ```
 
-**7. 构建时间过长**
+**10. PostgreSQL连接超时或不可达**
+```
+File "asyncpg/connection.py", line 2421, in connect
+    return await connect_utils._connect(
+```
+**解决**: PostgreSQL服务器连接问题，应用会自动回退到SQLite:
+```bash
+# 常见原因：
+1. PostgreSQL服务器未运行
+2. 网络连接问题  
+3. 连接参数错误
+4. 防火墙阻止连接
+
+# 应用自动处理：
+# ✅ 尝试连接PostgreSQL
+# ❌ 连接失败时自动回退到SQLite
+# ✅ 确保应用正常运行
+
+# 云平台部署建议：
+# - Render: 使用内置PostgreSQL或SQLite
+# - Railway: 使用PostgreSQL插件或SQLite
+# - Docker: 确保PostgreSQL容器正在运行
+
+# 本地开发快速启动：
+DATABASE_URL=sqlite:///app/db/landppt.db  # 使用SQLite
+```
 ```
 Docker build taking too long (15+ minutes)
 ```
