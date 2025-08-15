@@ -26,7 +26,7 @@ SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your-anon-key-payload.si
 SUPABASE_SERVICE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your-service-key-payload.signature"
 
 # 存储配置
-STORAGE_BUCKET="landppt-files"
+STORAGE_BUCKET="flowslide-files"
 STORAGE_PROVIDER="supabase"
 ```
 
@@ -46,7 +46,7 @@ SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your-anon-key-payload.si
 SUPABASE_SERVICE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your-service-key-payload.signature"
 
 # 存储配置
-STORAGE_BUCKET="landppt-files"
+STORAGE_BUCKET="flowslide-files"
 STORAGE_PROVIDER="supabase"
 ```
 

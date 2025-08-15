@@ -1,5 +1,5 @@
 """
-Authentication middleware for LandPPT
+Authentication middleware for FlowSlide
 """
 
 import logging

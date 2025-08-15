@@ -19,7 +19,7 @@ on:
 
 env:
   DOCKER_HUB_REGISTRY: docker.io
-  IMAGE_NAME: land-ppt
+  IMAGE_NAME: flowslide
 
 jobs:
   build-and-push:
@@ -42,7 +42,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}
+  images: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}
         tags: |
           # 为main分支生成latest标签
           type=raw,value=latest,enable={{is_default_branch}}
@@ -52,9 +52,9 @@ jobs:
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
         labels: |
-          org.opencontainers.image.title=LandPPT
-          org.opencontainers.image.description=AI-Powered Presentation Generator with PostgreSQL monitoring
-          org.opencontainers.image.vendor=LandPPT Team
+          org.opencontainers.image.title=FlowSlide
+          org.opencontainers.image.description=AI-powered presentation generator with PostgreSQL monitoring
+          org.opencontainers.image.vendor=FlowSlide Team
           
     - name: 🏗️ Build and push Docker image
       uses: docker/build-push-action@v5
@@ -101,7 +101,7 @@ jobs:
         echo "# Pull and run the latest image" >> $GITHUB_STEP_SUMMARY
         echo "docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
         echo "docker run -d \\" >> $GITHUB_STEP_SUMMARY
-        echo "  --name land-ppt \\" >> $GITHUB_STEP_SUMMARY
+  echo "  --name flowslide \\" >> $GITHUB_STEP_SUMMARY
         echo "  -p 8000:8000 \\" >> $GITHUB_STEP_SUMMARY
         echo "  -e DATABASE_URL=your_database_url \\" >> $GITHUB_STEP_SUMMARY
         echo "  ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY

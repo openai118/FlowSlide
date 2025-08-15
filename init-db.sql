@@ -1,4 +1,4 @@
--- LandPPT数据库初始化脚本
+-- FlowSlide数据库初始化脚本
 -- 创建必要的扩展和初始配置
 
 -- 创建UUID扩展 (如果需要)
@@ -11,7 +11,7 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 SET timezone = 'UTC';
 
 -- 创建应用用户的Schema (可选)
--- CREATE SCHEMA IF NOT EXISTS landppt AUTHORIZATION landppt_user;
+-- CREATE SCHEMA IF NOT EXISTS flowslide AUTHORIZATION flowslide_user;
 
 -- 输出初始化完成信息
-SELECT 'LandPPT数据库初始化完成' as message;
+SELECT 'FlowSlide数据库初始化完成' as message;

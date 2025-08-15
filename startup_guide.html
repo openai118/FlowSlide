@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowSlide 启动指南</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+        }
+        .step {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #00f2fe;
+        }
+        .command {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .note {
+            background: rgba(255, 193, 7, 0.2);
+            border: 1px solid rgba(255, 193, 7, 0.5);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        a {
+            color: #00f2fe;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 FlowSlide 启动指南</h1>
+        
+        <div class="step">
+            <h3>📋 步骤 1: 打开命令行</h3>
+            <p>在项目根目录 <code>E:\pyprojects\try1\flowslide</code> 打开PowerShell或命令提示符</p>
+        </div>
+
+        <div class="step">
+            <h3>🐍 步骤 2: 激活虚拟环境</h3>
+            <div class="command">
+                .\.venv\Scripts\Activate.ps1
+            </div>
+            <p>或者使用CMD:</p>
+            <div class="command">
+                .venv\Scripts\activate.bat
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>📦 步骤 3: 安装依赖 (如果还没安装)</h3>
+            <div class="command">
+                pip install -r requirements.txt
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>🚀 步骤 4: 启动服务器</h3>
+            <p>选择以下任一方式:</p>
+            
+            <h4>方式 1: 使用启动脚本 (推荐)</h4>
+            <div class="command">
+                python start_flowslide.py
+            </div>
+            
+            <h4>方式 2: 使用run.py</h4>
+            <div class="command">
+                python run.py
+            </div>
+            
+            <h4>方式 3: 直接使用uvicorn</h4>
+            <div class="command">
+                uvicorn src.flowslide.main:app --host 0.0.0.0 --port 8000 --reload
+            </div>
+        </div>
+
+        <div class="note">
+            <h3>📍 访问地址</h3>
+            <ul>
+                <li><strong>首页(公共):</strong> <a href="http://localhost:8000/home" target="_blank">http://localhost:8000/home</a></li>
+                <li><strong>主页:</strong> <a href="http://localhost:8000" target="_blank">http://localhost:8000</a></li>
+                <li><strong>Web界面(控制台):</strong> <a href="http://localhost:8000/web" target="_blank">http://localhost:8000/web</a></li>
+                <li><strong>API文档:</strong> <a href="http://localhost:8000/docs" target="_blank">http://localhost:8000/docs</a></li>
+                <li><strong>配置页面:</strong> <a href="http://localhost:8000/web/ai-config" target="_blank">http://localhost:8000/web/ai-config</a></li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>🔧 故障排除</h3>
+            <ul>
+                <li>确保Python虚拟环境已激活 (提示符前应有 <code>(.venv)</code>)</li>
+                <li>确保所有依赖已正确安装</li>
+                <li>检查端口8000是否被其他程序占用</li>
+                <li>如果遇到模板错误，确保工作目录在项目根目录</li>
+            </ul>
+        </div>
+
+        <div class="note">
+            <h3>💡 快速测试</h3>
+            <p>如果主应用启动有问题，可以先运行简单测试服务器:</p>
+            <div class="command">
+                python simple_test.py
+            </div>
+        </div>
+    </div>
+</body>
+</html>

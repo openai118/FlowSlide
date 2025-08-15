@@ -1,5 +1,5 @@
 """
-Web interface routes for LandPPT
+Web interface routes for FlowSlide
 """
 
 import asyncio
@@ -40,8 +40,23 @@ from ..utils.thread_pool import run_blocking_io, to_thread
 # Configure logger for this module
 logger = logging.getLogger(__name__)
 
+# Helper function for aspect ratio settings
+def get_aspect_ratio_settings() -> dict:
+    """Get aspect ratio related settings from config (defaults to 16:9)."""
+    try:
+        from ..services.config_service import get_config_service
+        cfg = get_config_service().get_all_config()
+        aspect = (cfg.get("aspect_ratio") or "16:9").strip()
+    except Exception:
+        aspect = "16:9"
+    
+    if aspect == "4:3":
+        return {"ratio_css": "4/3", "width": 1280, "height": 960, "vw_height": "75vw"}
+    # default 16:9
+    return {"ratio_css": "16/9", "width": 1280, "height": 720, "vw_height": "56.25vw"}
+
 router = APIRouter()
-templates = Jinja2Templates(directory="src/landppt/web/templates")
+templates = Jinja2Templates(directory="src/flowslide/web/templates")
 
 
 # Add custom filters
@@ -794,7 +809,11 @@ async def web_project_todo_board(
         )
 
         # Ensure project is not None for template
-        template_context = {"request": request, "todo_board": todo_board}
+        template_context = {
+            "request": request, 
+            "todo_board": todo_board,
+            "aspect_ratio_settings": get_aspect_ratio_settings()
+        }
 
         # Only add project if it exists
         if project:
@@ -903,7 +922,7 @@ async def serve_temp_file(
         # Construct the full path to the temp file using system temp directory
         import tempfile
 
-        temp_dir = Path(tempfile.gettempdir()) / "landppt"
+        temp_dir = Path(tempfile.gettempdir()) / "flowslide"
         full_path = temp_dir / file_path
 
         # Security check: ensure the file is within the temp directory
@@ -1815,7 +1834,11 @@ async def edit_project_ppt(
             project.slides_data = []
 
         return templates.TemplateResponse(
-            "project_slides_editor.html", {"request": request, "project": project}
+            "project_slides_editor.html", {
+                "request": request, 
+                "project": project,
+                "aspect_ratio_settings": get_aspect_ratio_settings()
+            }
         )
 
     except Exception as e:
@@ -5071,7 +5094,10 @@ async def global_master_templates_page(
     """Global master templates management page"""
     try:
         return templates.TemplateResponse(
-            "global_master_templates.html", {"request": request}
+            "global_master_templates.html", {
+                "request": request,
+                "aspect_ratio_settings": get_aspect_ratio_settings()
+            }
         )
     except Exception as e:
         logger.error(f"Error loading global master templates page: {e}")
@@ -5129,6 +5155,7 @@ async def template_selection_page(
                 "request": request,
                 "project_id": project_id,
                 "project_topic": project.topic,
+                "aspect_ratio_settings": get_aspect_ratio_settings()
             },
         )
     except Exception as e:

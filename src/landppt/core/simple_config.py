@@ -6,7 +6,7 @@ import os
 from typing import Optional
 
 # 数据库配置 - 使用安全的Docker路径
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app/db/landppt.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app/db/flowslide.db")
 
 # 异步数据库URL配置
 def get_async_database_url(sync_url: str) -> str:
@@ -39,7 +39,7 @@ def get_async_database_url(sync_url: str) -> str:
         return url.replace("mysql://", "mysql+aiomysql://")
     else:
         # 默认返回SQLite异步格式
-        return "sqlite+aiosqlite:///app/db/landppt.db"
+        return "sqlite+aiosqlite:///app/db/flowslide.db"
 
 ASYNC_DATABASE_URL = get_async_database_url(DATABASE_URL)
 

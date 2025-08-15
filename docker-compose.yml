@@ -1,14 +1,14 @@
-﻿# LandPPT Docker Compose Configuration
+﻿# FlowSlide Docker Compose Configuration
 # Enhanced version with database health checks
 
 version: '3.8'
 
 services:
-  landppt:
+  flowslide:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: landppt-app
+    container_name: flowslide-app
     ports:
       - "8000:8000"
     environment:
@@ -17,10 +17,10 @@ services:
       - PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
       
       # Database settings (PostgreSQL配置)
-      - DATABASE_URL=${DATABASE_URL:-postgresql://landppt_user:landppt_pass@localhost:5432/landppt_db}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://flowslide_user:flowslide_pass@localhost:5432/flowslide_db}
       
       # SQLite替代配置 (如需使用SQLite，请取消注释)
-      # - DATABASE_URL=sqlite:///app/db/landppt.db
+      # - DATABASE_URL=sqlite:///app/db/flowslide.db
       
       # Alternative: Separate database variables (if DATABASE_URL not set)
       - DB_HOST=${DB_HOST}
@@ -57,10 +57,10 @@ services:
       
     volumes:
       # Persistent data
-      - landppt_data:/app/data
-      - landppt_uploads:/app/uploads
-      - landppt_temp:/app/temp
-      - landppt_logs:/app/logs
+      - flowslide_data:/app/data
+      - flowslide_uploads:/app/uploads
+      - flowslide_temp:/app/temp
+      - flowslide_logs:/app/logs
       
       # Cache directories
       - playwright_cache:/root/.cache/ms-playwright
@@ -97,7 +97,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: landppt-db-monitor
+    container_name: flowslide-db-monitor
     entrypoint: ["python3", "/app/database_health_check.py", "--non-interactive"]
     environment:
       # Use DATABASE_URL or separate variables
@@ -112,19 +112,19 @@ services:
       - API_URL=${API_URL}
       - API_SERVICE_KEY=${API_SERVICE_KEY}
     volumes:
-      - landppt_logs:/app/logs
+      - flowslide_logs:/app/logs
     restart: "no"
     profiles:
       - monitoring
 
 volumes:
-  landppt_data:
+  flowslide_data:
     driver: local
-  landppt_uploads:
+  flowslide_uploads:
     driver: local
-  landppt_temp:
+  flowslide_temp:
     driver: local
-  landppt_logs:
+  flowslide_logs:
     driver: local
   playwright_cache:
     driver: local
@@ -132,4 +132,4 @@ volumes:
 # Network configuration
 networks:
   default:
-    name: landppt-network
+    name: flowslide-network

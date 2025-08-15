@@ -1,4 +1,4 @@
-# LandPPT with PostgreSQL Database
+# FlowSlide with PostgreSQL Database
 # Complete setup with PostgreSQL database included
 
 version: '3.8'
@@ -7,11 +7,11 @@ services:
   # PostgreSQL数据库服务
   postgres:
     image: postgres:15-alpine
-    container_name: landppt-postgres
+    container_name: flowslide-postgres
     environment:
-      POSTGRES_DB: landppt_db
-      POSTGRES_USER: landppt_user
-      POSTGRES_PASSWORD: landppt_pass
+      POSTGRES_DB: flowslide_db
+      POSTGRES_USER: flowslide_user
+      POSTGRES_PASSWORD: flowslide_pass
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -19,21 +19,21 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U landppt_user -d landppt_db"]
+      test: ["CMD-SHELL", "pg_isready -U flowslide_user -d flowslide_db"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
     restart: unless-stopped
     networks:
-      - landppt-network
+      - flowslide-network
 
-  # LandPPT应用服务
-  landppt:
+  # FlowSlide应用服务
+  flowslide:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: landppt-app
+    container_name: flowslide-app
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,14 +45,14 @@ services:
       - PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
       
       # PostgreSQL数据库配置
-      - DATABASE_URL=postgresql://landppt_user:landppt_pass@postgres:5432/landppt_db
+      - DATABASE_URL=postgresql://flowslide_user:flowslide_pass@postgres:5432/flowslide_db
       
       # Alternative: Separate database variables
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_NAME=landppt_db
-      - DB_USER=landppt_user
-      - DB_PASSWORD=landppt_pass
+      - DB_NAME=flowslide_db
+      - DB_USER=flowslide_user
+      - DB_PASSWORD=flowslide_pass
           
       # API settings (optional)
       - API_URL=${API_URL:-}
@@ -103,12 +103,12 @@ services:
       start_period: 60s
     restart: unless-stopped
     networks:
-      - landppt-network
+      - flowslide-network
 
   # Redis缓存服务 (可选)
   redis:
     image: redis:7-alpine
-    container_name: landppt-redis
+    container_name: flowslide-redis
     ports:
       - "6379:6379"
     volumes:
@@ -120,7 +120,7 @@ services:
       retries: 3
     restart: unless-stopped
     networks:
-      - landppt-network
+      - flowslide-network
 
 volumes:
   postgres_data:
@@ -129,5 +129,5 @@ volumes:
     driver: local
 
 networks:
-  landppt-network:
+  flowslide-network:
     driver: bridge

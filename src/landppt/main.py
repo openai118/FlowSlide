@@ -15,7 +15,7 @@ from .api.config_api import router as config_router
 from .api.database_api import router as database_router
 from .api.global_master_template_api import router as template_api_router
 from .api.image_api import router as image_router
-from .api.landppt_api import router as landppt_router
+from .api.flowslide_api import router as flowslide_router
 from .api.openai_compat import router as openai_router
 from .auth import auth_router, create_auth_middleware
 from .database.create_default_template import \
@@ -36,7 +36,7 @@ logging.getLogger("sqlalchemy.dialects").setLevel(logging.WARNING)
 
 # Create FastAPI app
 app = FastAPI(
-    title="LandPPT API",
+    title="FlowSlide API",
     description="AI-powered PPT generation platform with OpenAI-compatible API",
     version="0.1.0",
     docs_url="/docs",
@@ -51,7 +51,7 @@ async def startup_event():
         # Check if database file exists before initialization
         import os
 
-        db_file_path = "landppt.db"  # 默认数据库文件路径
+        db_file_path = "flowslide.db"  # 默认数据库文件路径
         db_exists = os.path.exists(db_file_path)
 
         logger.info("Initializing database...")
@@ -104,7 +104,7 @@ app.include_router(config_router, prefix="", tags=["Configuration Management"])
 app.include_router(image_router, prefix="", tags=["Image Service"])
 
 app.include_router(openai_router, prefix="/v1", tags=["OpenAI Compatible"])
-app.include_router(landppt_router, prefix="/api", tags=["LandPPT API"])
+app.include_router(flowslide_router, prefix="/api", tags=["FlowSlide API"])
 app.include_router(template_api_router, tags=["Global Master Templates"])
 app.include_router(database_router, tags=["Database Management"])
 app.include_router(web_router, prefix="", tags=["Web Interface"])
@@ -135,10 +135,10 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "service": "LandPPT API"}
+    return {"status": "healthy", "service": "FlowSlide API"}
 
 
 if __name__ == "__main__":
     uvicorn.run(
-        "src.landppt.main:app", host="0.0.0.0", port=8000, reload=True, log_level="info"
+        "src.flowslide.main:app", host="0.0.0.0", port=8000, reload=True, log_level="info"
     )

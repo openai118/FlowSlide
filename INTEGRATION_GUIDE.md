@@ -1,8 +1,8 @@
-# LandPPT 项目整合指南
+# FlowSlide 项目整合指南
 
 ## 🎯 整合目标
 
-将原始 LandPPT 项目与我们开发的数据库监控和 R2 备份功能进行完整整合，形成功能完备的企业级 AI PPT 生成平台。
+将原始 FlowSlide 项目与我们开发的数据库监控和 R2 备份功能进行完整整合，形成功能完备的企业级 AI PPT 生成平台。
 
 ## 📊 当前状况分析
 
@@ -45,9 +45,9 @@
 
 ## 🔄 整合策略
 
-### 第一阶段：获取原项目文件
-1. 手动下载原项目到 `f:\projects\landppt-original`
-2. 分析原项目结构和依赖
+### 第一阶段：准备 FlowSlide 项目文件
+1. 获取 FlowSlide 源码到本地工作目录（例如 `f:\projects\flowslide`）
+2. 分析项目结构和依赖
 3. 识别关键文件和配置
 
 ### 第二阶段：代码整合
@@ -112,9 +112,9 @@
 
 1. **手动下载原项目**
    ```bash
-   # 访问 https://github.com/sligter/LandPPT
-   # 点击 "Code" -> "Download ZIP"
-   # 解压到 f:\projects\landppt-original\
+   # 克隆或下载 FlowSlide 源码
+   # 建议直接使用当前仓库（openai118/FlowSlide）
+   # 将根目录命名为 flowslide 以保持与仓库名一致
    ```
 
 2. **执行整合脚本**

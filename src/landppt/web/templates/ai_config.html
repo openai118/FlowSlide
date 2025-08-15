@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}系统配置管理 - LandPPT{% endblock %}
+{% block title %}系统配置管理 - FlowSlide{% endblock %}
 
 {% block content %}
 <div style="text-align: center; margin-bottom: 40px;">
     <h2 style="color: #2c3e50; margin-bottom: 20px;">⚙️ 系统配置管理</h2>
     <p style="font-size: 1.1em; color: #7f8c8d;">
-        配置和管理 LandPPT 的所有系统参数，包括 AI 提供者、生成参数、应用配置等
+        配置和管理 FlowSlide 的所有系统参数，包括 AI 提供者、生成参数、应用配置等
     </p>
 </div>
 
@@ -229,6 +229,56 @@
 
         <!-- 主要配置区域 -->
         <div style="display: flex; flex-direction: column; gap: 30px;">
+
+            <!-- 新增：质量预设与结构控制 -->
+            <div style="background: #fff; padding: 25px; border-radius: 12px; border: 1px solid #e9ecef; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <h4 style="color: #2c3e50; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                    <span>🧭</span> 质量预设与结构控制
+                </h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+                    <div class="form-group">
+                        <label style="font-weight: 600; color: #495057;">质量预设</label>
+                        <select name="generation_quality_preset">
+                            <option value="conservative">稳健（低温度、低发散）</option>
+                            <option value="balanced" selected>均衡（推荐）</option>
+                            <option value="creative">创意（高温度、更多变化）</option>
+                        </select>
+                        <small style="color:#6c757d;">选择后将自动调整温度/Top-P/Max Tokens</small>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 600; color: #495057;">画面比例</label>
+                        <select name="aspect_ratio">
+                            <option value="16:9" selected>16:9（推荐）</option>
+                            <option value="4:3">4:3</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 600; color: #495057;">页数模式</label>
+                        <select name="page_count_mode" onchange="onPageCountModeChange(this.value)">
+                            <option value="ai_decide" selected>AI 决定</option>
+                            <option value="fixed">固定页数</option>
+                            <option value="custom_range">范围限制</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="fixedPagesGroup" style="display:none;">
+                        <label style="font-weight: 600; color: #495057;">固定页数</label>
+                        <input type="number" name="fixed_pages" min="1" placeholder="10">
+                    </div>
+                    <div class="form-group" id="rangePagesGroup" style="display:none;">
+                        <label style="font-weight: 600; color: #495057;">页数范围</label>
+                        <div style="display:flex; gap:8px;">
+                            <input type="number" name="min_pages" min="1" placeholder="10" style="flex:1;">
+                            <input type="number" name="max_pages" min="1" placeholder="20" style="flex:1;">
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top:16px; display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
+                    <label style="display:flex; align-items:center; gap:10px;"><input type="checkbox" name="require_toc" checked> 必含目录页</label>
+                    <label style="display:flex; align-items:center; gap:10px;"><input type="checkbox" name="require_summary" checked> 必含总结页</label>
+                    <label style="display:flex; align-items:center; gap:10px;"><input type="checkbox" name="require_action_plan"> 必含行动计划</label>
+                    <label style="display:flex; align-items:center; gap:10px;"><input type="checkbox" name="require_qa"> 必含Q&A</label>
+                </div>
+            </div>
 
             <!-- AI 生成参数 -->
             <div style="background: #fff; padding: 25px; border-radius: 12px; border: 1px solid #e9ecef; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
@@ -495,9 +545,15 @@
 
                 <div class="form-group">
                     <label>数据库URL (DATABASE_URL):</label>
-                    <input type="text" name="database_url"
-                           placeholder="sqlite:///./landppt.db">
-                    <small style="color: #7f8c8d;">支持SQLite、PostgreSQL、MySQL等</small>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <input type="password" name="database_url"
+                               placeholder="sqlite:///./flowslide.db"
+                               data-sensitive="true" style="flex:1;">
+                        <button type="button" class="btn btn-info" onclick="toggleSecretVisibility('database_url', this)" title="显示/隐藏">
+                            👁️
+                        </button>
+                    </div>
+                    <small style="color: #7f8c8d;">支持SQLite、PostgreSQL、MySQL等。出于安全考虑，已保存的值在页面上以密文显示。</small>
                 </div>
             </div>
         </div>
@@ -578,7 +634,7 @@
                                 </div>
                             </label>
                         </div>
-                        <div style="margin-top: 15px; padding: 12px; background: #e7f3ff; border-radius: 6px; border-left: 3px solid #007bff;">
+                        <div style="margin-top: 15px; padding: 12px; background: #e7f3ff; border-radius: 6px; border-left: 4px solid #007bff;">
                             <small style="color: #0056b3; font-weight: 500;">💡 提示：可以同时启用多种方式，AI会根据页面内容智能选择最合适的图片来源</small>
                         </div>
                     </div>
@@ -1327,7 +1383,7 @@
     cursor: pointer;
     font-size: 14px;
     display: flex;
-    align-items: center;
+ align-items: center;
     justify-content: center;
     transition: all 0.3s ease;
     color: #6c757d;
@@ -1817,6 +1873,14 @@
 let currentConfig = {};
 let availableProviders = ['openai', 'anthropic', 'google', 'azure_openai', 'ollama'];
 
+// 密文显示/隐藏
+function toggleSecretVisibility(fieldName, btn){
+    const input = document.querySelector(`#app-config input[name="${fieldName}"]`);
+    if(!input) return;
+    input.type = (input.type === 'password') ? 'text' : 'password';
+    btn.textContent = (input.type === 'password') ? '👁️' : '🙈';
+}
+
 // 初始化
 document.addEventListener('DOMContentLoaded', function() {
     // 加载初始配置
@@ -1892,13 +1956,17 @@ function populateTabForm(tabName, config) {
             if (input.type === 'checkbox') {
                 input.checked = config[name];
             } else if (input.type === 'password') {
-                // 对于密码字段，如果有配置值且输入框为空，则显示配置值
-                if (!input.value && config[name]) {
-                    input.value = config[name];
-                }
-                // 如果有配置值，更新placeholder为掩码显示
-                if (config[name]) {
+                // 对数据库URL等敏感字段，不回填真实值，只显示占位掩码
+                if (name === 'database_url') {
+                    input.value = '';
                     input.placeholder = '••••••••';
+                } else {
+                    if (!input.value && config[name]) {
+                        input.value = config[name];
+                    }
+                    if (config[name]) {
+                        input.placeholder = '••••••••';
+                    }
                 }
             } else {
                 input.value = config[name];
@@ -3381,5 +3449,60 @@ document.addEventListener('DOMContentLoaded', function() {
         initOpenAIModelInput();
     }, 100);
 });
+
+// 质量预设映射
+const QUALITY_PRESETS = {
+    conservative: { temperature: 0.2, top_p: 0.8, max_tokens: 1500 },
+    balanced:     { temperature: 0.7, top_p: 1.0, max_tokens: 2000 },
+    creative:     { temperature: 1.1, top_p: 1.0, max_tokens: 2400 },
+};
+
+function onPageCountModeChange(mode){
+    const fixedGroup = document.getElementById('fixedPagesGroup');
+    const rangeGroup = document.getElementById('rangePagesGroup');
+    if(mode === 'fixed'){
+        fixedGroup.style.display = '';
+        rangeGroup.style.display = 'none';
+    }else if(mode === 'custom_range'){
+        fixedGroup.style.display = 'none';
+        rangeGroup.style.display = '';
+    }else{
+        fixedGroup.style.display = 'none';
+        rangeGroup.style.display = 'none';
+    }
+}
+
+// 预设选择时自动带出参数但不强制覆盖用户手动输入
+(function bindQualityPreset(){
+    document.addEventListener('change', function(e){
+        if(e.target && e.target.name === 'generation_quality_preset'){
+            const p = QUALITY_PRESETS[e.target.value];
+            if(!p) return;
+            const temp = document.querySelector('#generation-params input[name="temperature"]');
+            const topP = document.querySelector('#generation-params input[name="top_p"]');
+            const maxT = document.querySelector('#generation-params input[name="max_tokens"]');
+            if(temp && !temp.dataset.userEdited){ temp.value = p.temperature; temp.dispatchEvent(new Event('input')); }
+            if(topP && !topP.dataset.userEdited){ topP.value = p.top_p; topP.dispatchEvent(new Event('input')); }
+            if(maxT && !maxT.dataset.userEdited){ maxT.value = p.max_tokens; maxT.dispatchEvent(new Event('input')); }
+        }
+    });
+
+    ['temperature','top_p','max_tokens'].forEach(name =>{
+        const el = document.querySelector(`#generation-params input[name="${name}"]`);
+        if(el){ el.addEventListener('input', ()=>{ el.dataset.userEdited = '1'; }); }
+    });
+})();
+
+// 在加载配置后，根据 page_count_mode 控制显示
+(function patchPopulate(){
+    const orig = populateGenerationParams;
+    window.populateGenerationParams = function(){
+        orig.apply(this, arguments);
+        const tab = document.getElementById('generation-params');
+        if(!tab) return;
+        const modeEl = tab.querySelector('select[name="page_count_mode"]');
+        if(modeEl){ onPageCountModeChange(modeEl.value); }
+    }
+})();
 </script>
 {% endblock %}

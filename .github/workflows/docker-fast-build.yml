@@ -10,7 +10,7 @@ on:
 
 env:
   DOCKER_HUB_REGISTRY: docker.io
-  IMAGE_NAME: land-ppt
+  IMAGE_NAME: flowslide
 
 jobs:
   fast-build:

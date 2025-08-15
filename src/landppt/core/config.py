@@ -1,5 +1,5 @@
 """
-Configuration management for LandPPT AI features
+Configuration management for FlowSlide AI features
 """
 
 import os
@@ -199,7 +199,7 @@ class AppConfig(BaseSettings):
     reload: bool = True
 
     # Database Configuration (for future use)
-    database_url: str = "sqlite:///app/db/landppt.db"
+    database_url: str = "sqlite:///app/db/flowslide.db"
 
     # Security Configuration
     secret_key: str = "your-secret-key-here"

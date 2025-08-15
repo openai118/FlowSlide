@@ -1,15 +1,15 @@
-# LandPPT - AI-Powered Presentation Generator
+# FlowSlide - AI-Powered Presentation Generator
 
-![LandPPT Logo](https://img.shields.io/badge/LandPPT-AI%20Presentation-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/version-2.0.0-green)
+![FlowSlide Logo](https://img.shields.io/badge/FlowSlide-AI%20Presentation-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.1.0-green)
 ![Python](https://img.shields.io/badge/python-3.11+-blue)
 ![PostgreSQL](https://img.shields.io/badge/database-PostgreSQL-blue)
 ![Docker](https://img.shields.io/badge/deployment-Docker-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue)
 
 > 🚀 **Enterprise-ready AI presentation generator with universal PostgreSQL monitoring and automated backup**
 
-一个功能强大的 AI 演示文稿生成器，集成了企业级数据库监控和自动备份功能。支持多种 AI 模型，自动图像配图，智能研究功能，并提供完整的运维监控体系。
+一个功能强大的 AI 演示文稿生成器，提供流畅的幻灯片创作体验。集成了企业级数据库监控和自动备份功能，支持多种 AI 模型，自动图像配图，智能研究功能，并提供完整的运维监控体系。
 
 ## ✨ 主要特性
 
@@ -52,8 +52,8 @@
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/openai118/landppt-integrated.git
-cd landppt-integrated
+git clone https://github.com/openai118/FlowSlide.git
+cd FlowSlide
 ```
 
 ### 2. 配置环境变量
@@ -81,9 +81,14 @@ API_URL=https://your-api-endpoint.com
 API_ANON_KEY=your-api-key
 API_SERVICE_KEY=your-service-key
 
-# 存储配置
+# 存储配置（可选）
 STORAGE_BUCKET=your-bucket-name
 STORAGE_PROVIDER=postgresql  # 或 supabase, aws-s3 等
+
+提示：
+- 未设置 DATABASE_URL 时，系统将默认使用本地 SQLite（./data/flowslide.db），可直接运行；
+- 设置了有效的 DATABASE_URL（如 PostgreSQL）后将自动使用该数据库；
+- 未配置 R2 备份相关变量时，备份脚本会跳过备份并正常退出，不影响程序运行。
 ```
 
 ### 3. 部署方式
@@ -98,23 +103,23 @@ docker-compose up -d
 docker-compose ps
 
 # 查看日志
-docker-compose logs -f landppt
+docker logs flowslide
 ```
 
 #### 方式二：Docker Hub 镜像部署
 
 ```bash
 # 从 Docker Hub 拉取最新镜像
-docker pull your-username/land-ppt:latest
+docker pull openai118/flowslide:latest
 
 # 运行容器
 docker run -d \
-  --name land-ppt \
+  --name flowslide \
   -p 8000:8000 \
   -e DATABASE_URL="postgresql://user:pass@host:port/db?sslmode=require" \
   -e API_URL="https://your-api-endpoint.com" \
   -e API_ANON_KEY="your-api-key" \
-  your-username/land-ppt:latest
+  openai118/flowslide:latest
 ```
 
 #### 方式三：本地开发
@@ -129,6 +134,13 @@ python database_health_check.py
 # 启动应用
 python run.py
 ```
+
+## 🚪 访问入口
+
+- 🏠 首页(公共): http://localhost:8000/home
+- 🌐 Web界面(控制台): http://localhost:8000/web
+- 📚 API 文档: http://localhost:8000/docs
+- 🩺 健康检查: http://localhost:8000/health
 
 ## 📊 数据库监控工具
 
@@ -194,7 +206,7 @@ export R2_BUCKET_NAME=your-backup-bucket
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   LandPPT App   │────│  PostgreSQL DB   │────│  Monitoring     │
+│   FlowSlide App │────│  PostgreSQL DB   │────│  Monitoring     │
 │                 │    │                  │    │  Tools          │
 │ • AI Generation │    │ • User Data      │    │                 │
 │ • Image Search  │    │ • Sessions       │    │ • Health Check  │
@@ -273,7 +285,21 @@ SELECT query, mean_time FROM pg_stat_statements ORDER BY mean_time DESC LIMIT 10
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 打开 Pull Request
 
+### 致谢与来源
+
+本项目基于开源项目 LandPPT（Apache-2.0）进行二次开发与重构：
+- 原始项目仓库：https://github.com/sligter/LandPPT
+- 许可证：Apache License 2.0
+
+我们在遵循 Apache-2.0 许可条款的前提下，对架构、路由、鉴权、主题与文档进行了深度改造与增强。
+
 ## 📝 更新日志
+
+### v2.1.0 (2025-08-15)
+- ✨ 新增网页底部版本动态展示与“发现新版本”提示
+- ✨ 登录页支持可选的人机验证（Cloudflare Turnstile/hCaptcha），防爆破
+- ✨ 默认管理员从环境变量注入（ADMIN_USERNAME/ADMIN_PASSWORD/ADMIN_EMAIL），缺省为 admin/admin123456
+- 🧹 进一步清理与规范文案；小幅UI细节打磨
 
 ### v2.0.0 (2025-08-13)
 - ✨ 新增通用 PostgreSQL 数据库监控系统
@@ -290,14 +316,14 @@ SELECT query, mean_time FROM pg_stat_statements ORDER BY mean_time DESC LIMIT 10
 
 ## 📄 许可证
 
-本项目基于 MIT 许可证开源 - 查看 [LICENSE](LICENSE) 文件了解详情。
+本项目基于 Apache License 2.0 开源 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
 ## 🆘 支持
 
 如果您遇到问题或有疑问：
 
 1. 查看 [PostgreSQL 兼容性指南](POSTGRESQL_COMPATIBILITY_GUIDE.md)
-2. 搜索 [Issues](https://github.com/openai118/landppt-integrated/issues)
+2. 搜索 [Issues](https://github.com/openai118/FlowSlide/issues)
 3. 创建新的 Issue
 4. 联系维护者
 

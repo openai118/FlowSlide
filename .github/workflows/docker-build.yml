@@ -31,8 +31,8 @@ jobs:
         
     - name: Run basic tests
       run: |
-        python -c "import src.landppt; print('✅ LandPPT module import successful')" || echo "⚠️ Module import completed with warnings"
-        python -c "from src.landppt.core.config import Config; print('✅ Config import successful')" || echo "⚠️ Config import completed with warnings"
+        python -c "import src.flowslide; print('✅ FlowSlide module import successful')" || echo "⚠️ Module import completed with warnings"
+        python -c "from src.flowslide.core.config import AppConfig as _; print('✅ Config import successful')" || echo "⚠️ Config import completed with warnings"
 
   docker-build:
     runs-on: ubuntu-latest
@@ -71,7 +71,9 @@ jobs:
         platforms: linux/amd64
         push: ${{ github.event_name != 'pull_request' }}  # PR时只构建，推送时构建+推送到GHCR
         tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
+        labels: |
+          ${{ steps.meta.outputs.labels }}
+          org.opencontainers.image.licenses=Apache-2.0
         # 临时禁用缓存以避免认证过期问题
         # cache-from: type=gha
         # cache-to: type=gha,mode=max

@@ -10,7 +10,7 @@
 
 1. **创建Docker Hub账户**: 访问 [Docker Hub](https://hub.docker.com/)
 2. **创建仓库**: 
-   - 仓库名建议: `c1a200/land-ppt`
+  - 仓库名建议: `openai118/flowslide`
    - 设置为公开或私有仓库
 
 ### 2. 生成Docker Hub访问令牌
@@ -18,7 +18,7 @@
 1. 登录Docker Hub
 2. 进入 **Account Settings** → **Security**
 3. 点击 **New Access Token**
-3. **令牌名称**: `github-actions-land-ppt`
+3. **令牌名称**: `github-actions-flowslide`
 5. 权限: **Read, Write, Delete**
 6. **保存生成的令牌** (只显示一次!)
 
@@ -66,14 +66,14 @@
 
 | 工作流 | Registry | 目的 | 推送 | 构建时间 | 触发条件 |
 |--------|----------|------|------|----------|----------|
-| `docker-hub-publish.yml` | Docker Hub | 正式发布到公开镜像仓库 | ✅ 推送到 c1a200/land-ppt | ~8-12分钟 | main分支+版本标签 |
-| `docker-build.yml` | GitHub Container Registry | 开发测试镜像 | ✅ 推送到 ghcr.io/openai118/landppt-integrated | ~5-8分钟 | 每次推送+PR |
+| `docker-hub-publish.yml` | Docker Hub | 正式发布到公开镜像仓库 | ✅ 推送到 openai118/flowslide | ~8-12分钟 | main分支+版本标签 |
+| `docker-build.yml` | GitHub Container Registry | 开发测试镜像 | ✅ 推送到 ghcr.io/openai118/flowslide | ~5-8分钟 | 每次推送+PR |
 | `docker-fast-build.yml` | Docker Hub | 开发分支测试 | ✅ 推送开发标签 | ~3-4分钟 | develop分支 |
 
 ### 🎯 Registry选择策略：
 
 #### **Docker Hub (docker.io)**
-- ✅ **公开访问**: 任何人都可以 `docker pull c1a200/land-ppt:latest`
+- ✅ **公开访问**: 任何人都可以 `docker pull openai118/flowslide:latest`
 - ✅ **正式发布**: 生产环境使用的稳定版本
 - ✅ **版本管理**: 语义化版本标签 (v1.0.0, v2.0.0)
 - ⏱️ **触发条件**: main分支推送和版本标签
@@ -155,21 +155,21 @@ Docker镜像支持智能平台选择：
 
 ```bash
 # 拉取最新镜像
-docker pull c1a200/land-ppt:latest
+docker pull openai118/flowslide:latest
 
 # 使用 SQLite 运行容器 (默认)
 docker run -d \
-  --name land-ppt \
+  --name flowslide \
   -p 8000:8000 \
-  -e DATABASE_URL="sqlite:///app/db/landppt.db" \
-  c1a200/land-ppt:latest
+  -e DATABASE_URL="sqlite:///app/db/flowslide.db" \
+  openai118/flowslide:latest
 
 # 使用 PostgreSQL 运行容器
 docker run -d \
-  --name land-ppt \
+  --name flowslide \
   -p 8000:8000 \
   -e DATABASE_URL="postgresql://user:password@host:5432/database" \
-  c1a200/land-ppt:latest
+  openai118/flowslide:latest
 ```
 
 ### 使用Docker Compose:
@@ -177,13 +177,13 @@ docker run -d \
 ```yaml
 version: '3.8'
 services:
-  land-ppt:
-    image: c1a200/land-ppt:latest
+  flowslide:
+  image: openai118/flowslide:latest
     ports:
       - "8000:8000"
     environment:
       # SQLite 配置 (默认)
-      - DATABASE_URL=sqlite:///app/db/landppt.db
+  - DATABASE_URL=sqlite:///app/db/flowslide.db
       
       # PostgreSQL 配置 (推荐生产环境)
       # - DATABASE_URL=postgresql://user:password@postgres:5432/database
@@ -198,11 +198,11 @@ services:
 
 ```bash
 # 使用特定版本
-docker pull c1a200/land-ppt:v2.0.0
-docker run -d c1a200/land-ppt:v2.0.0
+docker pull openai118/flowslide:v2.0.0
+docker run -d openai118/flowslide:v2.0.0
 
 # 使用日期标签
-docker pull c1a200/land-ppt:20250813-abc1234
+docker pull openai118/flowslide:20250813-abc1234
 ```
 
 ## 🔧 自定义配置
@@ -245,7 +245,7 @@ on:
 ### 验证发布:
 
 #### Docker Hub验证:
-1. 访问 [Docker Hub仓库页面](https://hub.docker.com/r/c1a200/land-ppt)
+1. 访问 [Docker Hub仓库页面](https://hub.docker.com/r/openai118/flowslide)
 2. 检查 Tags 标签页
 3. 确认镜像大小和更新时间
 
@@ -286,7 +286,7 @@ Warning: Image size exceeds Docker Hub limits
 ```
 Error: failed to create async engine
 ```
-**解决**: 使用正确的数据库URL格式，确保容器内有写入权限。默认使用SQLite: `sqlite:///app/db/landppt.db`
+**解决**: 使用正确的数据库URL格式，确保容器内有写入权限。默认使用SQLite: `sqlite:///app/db/flowslide.db`
 
 **6. SQLAlchemy异步驱动错误**
 ```
@@ -368,7 +368,7 @@ File "asyncpg/connection.py", line 2421, in connect
 # - Docker: 确保PostgreSQL容器正在运行
 
 # 本地开发快速启动：
-DATABASE_URL=sqlite:///app/db/landppt.db  # 使用SQLite
+DATABASE_URL=sqlite:///app/db/flowslide.db  # 使用SQLite
 ```
 ```
 Docker build taking too long (15+ minutes)
@@ -385,11 +385,11 @@ Docker build taking too long (15+ minutes)
 # 本地测试构建
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t c1a200/land-ppt:test \
+  -t openai118/flowslide:test \
   --push .
 
 # 测试镜像运行
-docker run --rm c1a200/land-ppt:test python --version
+docker run --rm openai118/flowslide:test python --version
 ```
 
 ## 🚀 构建时间优化

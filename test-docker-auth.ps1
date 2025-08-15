@@ -33,10 +33,10 @@ try {
         Write-Host "✅ Docker Hub 认证成功!" -ForegroundColor Green
         
         # 检查仓库是否存在
-        Write-Host "`n📦 检查仓库 $env:DOCKER_HUB_USERNAME/land-ppt..." -ForegroundColor Cyan
+        Write-Host "`n📦 检查仓库 $env:DOCKER_HUB_USERNAME/flowslide..." -ForegroundColor Cyan
         
         # 尝试拉取仓库信息（如果仓库不存在会失败）
-        $pullResult = docker pull "$env:DOCKER_HUB_USERNAME/land-ppt:latest" 2>&1
+        $pullResult = docker pull "$env:DOCKER_HUB_USERNAME/flowslide:latest" 2>&1
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host "✅ 仓库存在且可访问" -ForegroundColor Green

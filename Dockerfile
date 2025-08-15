@@ -1,4 +1,4 @@
-# LandPPT Docker Image with Enhanced Database Health Check
+# FlowSlide Docker Image with Enhanced Database Health Check
 # Compatible with GitHub Actions and local builds
 # Multi-stage build for minimal image size
 
@@ -98,9 +98,9 @@ RUN apt-get update && \
 RUN curl https://rclone.org/install.sh | bash
 
 # Create non-root user (for compatibility, but run as root)
-RUN groupadd -r landppt && \
-    useradd -r -g landppt -m -d /home/landppt landppt && \
-    mkdir -p /home/landppt/.cache/ms-playwright /root/.cache/ms-playwright
+RUN groupadd -r flowslide && \
+    useradd -r -g flowslide -m -d /home/flowslide flowslide && \
+    mkdir -p /home/flowslide/.cache/ms-playwright /root/.cache/ms-playwright
 
 # Copy Python packages from builder
 COPY --from=builder /opt/venv /opt/venv
@@ -108,7 +108,7 @@ COPY --from=builder /opt/venv /opt/venv
 # Install Playwright with minimal footprint
 RUN /opt/venv/bin/pip install --no-cache-dir playwright==1.40.0 && \
     /opt/venv/bin/playwright install chromium && \
-    chown -R landppt:landppt /home/landppt && \
+    chown -R flowslide:flowslide /home/flowslide && \
     rm -rf /tmp/* /var/tmp/*
 
 # Set work directory
@@ -141,8 +141,8 @@ RUN chmod +x docker-healthcheck*.sh docker-entrypoint*.sh backup_to_r2*.sh 2>/de
     chmod +x tools/*.py 2>/dev/null || true && \
     mkdir -p temp/ai_responses_cache temp/style_genes_cache temp/summeryanyfile_cache temp/templates_cache \
              research_reports lib/Linux lib/MacOS lib/Windows uploads data tools logs db && \
-    chown -R landppt:landppt /app /home/landppt && \
-    chmod -R 755 /app /home/landppt && \
+    chown -R flowslide:flowslide /app /home/flowslide && \
+    chmod -R 755 /app /home/flowslide && \
     chmod 777 /app/db && \
     chmod 666 /app/.env && \
     # Create smart script selection
@@ -170,8 +170,8 @@ RUN chmod +x docker-healthcheck*.sh docker-entrypoint*.sh backup_to_r2*.sh 2>/de
         chmod +x backup-active.sh; \
     fi
 
-# Keep landppt user but run as root to handle file permissions
-# USER landppt
+# Keep flowslide user but run as root to handle file permissions
+# USER flowslide
 
 # Expose port
 EXPOSE 8000
@@ -185,10 +185,11 @@ ENTRYPOINT ["./docker-entrypoint-active.sh"]
 CMD ["python", "run.py"]
 
 # Metadata labels
-LABEL maintainer="LandPPT Team" \
-      description="LandPPT with enhanced database health check capabilities" \
+LABEL maintainer="FlowSlide Team" \
+      description="FlowSlide with enhanced database health check capabilities" \
       version="enhanced" \
-      org.opencontainers.image.title="LandPPT Enhanced" \
-      org.opencontainers.image.description="LandPPT application with integrated database monitoring" \
-      org.opencontainers.image.vendor="LandPPT" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.title="FlowSlide Enhanced" \
+      org.opencontainers.image.description="FlowSlide application with integrated database monitoring" \
+      org.opencontainers.image.vendor="FlowSlide" \
+      org.opencontainers.image.source="https://github.com/openai118/FlowSlide" \
+    org.opencontainers.image.licenses="Apache-2.0"

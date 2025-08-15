@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# LandPPT Docker Health Check Script
-# This script performs comprehensive health checks for the LandPPT application
+# FlowSlide Docker Health Check Script
+# This script performs comprehensive health checks for the FlowSlide application
 
 set -e
 
@@ -59,7 +59,7 @@ check_api_docs() {
 check_database() {
     log "Checking database connectivity..."
     
-    if [ -f "/app/data/landppt.db" ]; then
+    if [ -f "/app/data/flowslide.db" ]; then
         log "✅ Database file exists"
         return 0
     else
@@ -106,7 +106,7 @@ check_python_process() {
 
 # Main health check function
 main() {
-    log "Starting LandPPT health check..."
+    log "Starting FlowSlide health check..."
     
     local exit_code=0
     

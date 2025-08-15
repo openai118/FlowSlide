@@ -86,6 +86,7 @@ node_modules/
 generated/
 output/
 exports/
+docs/_site/
 
 # Test coverage
 .coverage

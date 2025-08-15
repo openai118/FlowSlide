@@ -22,8 +22,8 @@ def get_safe_database_urls():
     primary_async_url = ASYNC_DATABASE_URL
     
     # SQLite fallback
-    fallback_db_url = "sqlite:///app/db/landppt.db"
-    fallback_async_url = "sqlite+aiosqlite:///app/db/landppt.db"
+    fallback_db_url = "sqlite:///app/db/flowslide.db"
+    fallback_async_url = "sqlite+aiosqlite:///app/db/flowslide.db"
     
     # If PostgreSQL URL is provided but we're in a container/cloud environment
     # where the PostgreSQL server might not be available, prepare fallback
@@ -84,11 +84,11 @@ except Exception as e:
     # Final fallback to SQLite
     logger.info("🔄 Using final SQLite fallback...")
     engine = create_engine(
-        "sqlite:///app/db/landppt.db",
+        "sqlite:///app/db/flowslide.db",
         connect_args={"check_same_thread": False},
         echo=False,
     )
-    async_engine = create_async_engine("sqlite+aiosqlite:///app/db/landppt.db", echo=False)
+    async_engine = create_async_engine("sqlite+aiosqlite:///app/db/flowslide.db", echo=False)
     DATABASE_TYPE = "sqlite"
     logger.info("✅ Final SQLite fallback ready")
 

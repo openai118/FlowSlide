@@ -125,7 +125,7 @@ class CompletionResponse(BaseModel):
     usage: Usage
 
 
-# LandPPT Specific Models
+# FlowSlide Specific Models
 
 
 class PPTScenario(BaseModel):

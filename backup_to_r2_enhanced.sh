@@ -1,6 +1,7 @@
 #!/bin/bash
-# LandPPT 增强版备份脚本 - 支持数据库和文件备份到 Cloudflare R2
+# FlowSlide 增强版备份脚本 - 支持数据库和文件备份到 Cloudflare R2
 # 包含数据库监控集成功能
+# 注意：未配置 R2 环境变量时将跳过备份并正常退出，不影响主程序运行。
 
 set -e
 
@@ -171,7 +172,7 @@ backup_logs() {
     
     local log_dirs=(
         "/app/logs"
-        "/var/log/landppt"
+    "/var/log/flowslide"
     )
     
     for log_dir in "${log_dirs[@]}"; do
@@ -195,7 +196,7 @@ create_backup_manifest() {
 {
     "backup_date": "${BACKUP_DATE}",
     "backup_timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-    "landppt_version": "$(cat /app/VERSION 2>/dev/null || echo 'unknown')",
+    "flowslide_version": "$(cat /app/VERSION 2>/dev/null || echo 'unknown')",
     "components": {
         "database": $([ -n "$DB_HOST" ] && echo "true" || echo "false"),
         "application_data": $([ -d "/app/data" ] && echo "true" || echo "false"),
@@ -247,7 +248,7 @@ send_backup_notification() {
         
         local payload=$(cat << EOF
 {
-    "text": "LandPPT 备份完成",
+    "text": "FlowSlide 备份完成",
     "attachments": [
         {
             "color": "good",
@@ -277,15 +278,14 @@ EOF
 
 # 主备份函数
 main() {
-    echo "🔄 开始 LandPPT 增强版备份到 Cloudflare R2..."
+    echo "🔄 开始 FlowSlide 增强版备份到 Cloudflare R2..."
     echo "备份时间: $(date)"
     echo "========================================"
     
-    # 检查必要的环境变量
+    # 检查必要的环境变量（未配置则跳过备份并正常退出）
     if [ -z "$R2_ACCESS_KEY_ID" ] || [ -z "$R2_SECRET_ACCESS_KEY" ] || [ -z "$R2_ENDPOINT" ] || [ -z "$R2_BUCKET_NAME" ]; then
-        log_error "R2 环境变量未完整配置"
-        log_info "需要配置: R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT, R2_BUCKET_NAME"
-        exit 1
+        log_warning "R2 环境变量未配置，跳过备份（此行为不会影响应用运行）"
+        exit 0
     fi
     
     # 生成备份时间戳

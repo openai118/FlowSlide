@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# LandPPT Docker Entrypoint Script
-# This script handles initialization and startup of the LandPPT application
+# FlowSlide Docker Entrypoint Script
+# This script handles initialization and startup of the FlowSlide application
 
 set -e
 
@@ -33,7 +33,7 @@ info() {
 print_banner() {
     echo -e "${BLUE}"
     echo "╔══════════════════════════════════════════════════════════════════════════════╗"
-    echo "║                                   LandPPT                                   ║"
+    echo "║                                   FlowSlide                                 ║"
     echo "║                        AI-Powered PPT Generation Platform                   ║"
     echo "║                                Docker Container                             ║"
     echo "╚══════════════════════════════════════════════════════════════════════════════╝"
@@ -195,7 +195,7 @@ fix_env_permissions() {
 main() {
     print_banner
 
-    log "Starting LandPPT initialization..."
+    log "Starting FlowSlide initialization..."
 
     check_environment
     fix_env_permissions
@@ -203,8 +203,9 @@ main() {
     wait_for_dependencies
     import_templates
 
-    log "🚀 Starting LandPPT application..."
+    log "🚀 Starting FlowSlide application..."
     info "📍 Server will be available at: http://0.0.0.0:${PORT:-8000}"
+    info "🏠 Public Home: http://0.0.0.0:${PORT:-8000}/home"
     info "📚 API Documentation: http://0.0.0.0:${PORT:-8000}/docs"
     info "🌐 Web Interface: http://0.0.0.0:${PORT:-8000}/web"
 

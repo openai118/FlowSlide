@@ -1,5 +1,5 @@
 """
-Authentication service for LandPPT
+Authentication service for FlowSlide
 """
 
 import hashlib

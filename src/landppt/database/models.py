@@ -1,5 +1,5 @@
 """
-SQLAlchemy database models for LandPPT
+SQLAlchemy database models for FlowSlide
 """
 
 import hashlib

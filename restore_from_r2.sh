@@ -1,5 +1,5 @@
 #!/bin/bash
-# LandPPT R2 备份恢复脚本
+# FlowSlide R2 备份恢复脚本
 
 set -e
 
@@ -34,7 +34,7 @@ log_header() {
 
 # 显示使用帮助
 show_help() {
-    echo "LandPPT R2 备份恢复脚本"
+    echo "FlowSlide R2 备份恢复脚本"
     echo ""
     echo "用法:"
     echo "  $0 [选项] <备份日期>"
@@ -192,7 +192,7 @@ import json, sys
 try:
     data = json.load(sys.stdin)
     print(f\"  备份时间: {data.get('backup_timestamp', '未知')}\")
-    print(f\"  LandPPT 版本: {data.get('landppt_version', '未知')}\")
+    print(f\"  FlowSlide 版本: {data.get('flowslide_version', '未知')}\")
     print(f\"  R2 存储桶: {data.get('r2_bucket', '未知')}\")
     
     components = data.get('components', {})
@@ -255,7 +255,7 @@ confirm_restore() {
     echo "恢复类型: $restore_type"
     echo ""
     echo "建议在继续前:"
-    echo "1. 停止 LandPPT 服务"
+    echo "1. 停止 FlowSlide 服务"
     echo "2. 创建当前数据的备份"
     echo "3. 确认要恢复的备份数据正确"
     echo ""
@@ -486,7 +486,7 @@ perform_restore() {
         echo ""
         log_info "下一步:"
         echo "1. 检查恢复的数据是否正确"
-        echo "2. 重启 LandPPT 服务"
+        echo "2. 重启 FlowSlide 服务"
         echo "3. 执行健康检查验证系统状态"
     else
         log_error "恢复过程中出现错误"

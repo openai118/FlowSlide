@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ==============================================
-LandPPT PostgreSQL 数据库健康检查工具
+FlowSlide PostgreSQL 数据库健康检查工具
 ==============================================
 全面检测数据库连接、权限、存储等功能
 支持 PostgreSQL 及其衍生产品（如 Supabase）
@@ -207,7 +207,7 @@ class PostgreSQLHealthChecker:
                 SELECT schema_name 
                 FROM information_schema.schemata 
                 WHERE schema_owner = current_user 
-                   OR schema_name IN ('public', 'landppt')
+                   OR schema_name IN ('public', 'flowslide')
                 ORDER BY schema_name;
             """)
             schemas = [row['schema_name'] for row in cursor.fetchall()]
@@ -219,18 +219,18 @@ class PostgreSQLHealthChecker:
             details = {
                 'accessible_schemas': schemas,
                 'search_path': search_path,
-                'landppt_schema_exists': 'landppt' in schemas
+                'flowslide_schema_exists': 'flowslide' in schemas
             }
             
-            if 'landppt' in schemas:
+            if 'flowslide' in schemas:
                 self.add_result('schema_access', True, 
                               f"✅ 模式访问正常，可访问模式: {', '.join(schemas)}", details)
                 print(f"   ✅ 可访问模式: {', '.join(schemas)}")
                 print(f"   🔍 搜索路径: {search_path}")
             else:
                 self.add_result('schema_access', False, 
-                              f"⚠️ landppt 模式不存在或无权限", details, warning=True)
-                print("   ⚠️ landppt 模式不存在或无权限")
+                              f"⚠️ flowslide 模式不存在或无权限", details, warning=True)
+                print("   ⚠️ flowslide 模式不存在或无权限")
             
             cursor.close()
             conn.close()
@@ -574,7 +574,7 @@ class PostgreSQLHealthChecker:
 
 def main():
     """主函数"""
-    print("🏥 LandPPT PostgreSQL 数据库健康检查工具")
+    print("🏥 FlowSlide PostgreSQL 数据库健康检查工具")
     print("版本: 2.0.0 | 支持 PostgreSQL 及其衍生产品（如 Supabase）")
     print()
     

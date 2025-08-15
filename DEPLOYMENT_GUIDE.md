@@ -1,74 +1,70 @@
-# Land### 核心文件
-- `Dockerfile` - Docker 镜像构建文件，集成数据库检测工具
-- `docker-compose.yml` - Docker Compose 配置
-- `docker-healthcheck.sh` - 健康检查脚本
-- `docker-entrypoint.sh` - 启动脚本cker 部署指南
+# FlowSlide 部署指南（增强版节选）
 
-这个增强版的 Docker 配置集成了数据库健康检查功能，确保 LandPPT 应用在生产环境中稳定运行�?
+- Dockerfile - Docker 镜像构建文件，集成数据库检测工具
+- docker-compose.yml - Docker Compose 配置
+- docker-healthcheck.sh - 健康检查脚本
+- docker-entrypoint.sh - 启动脚本
+
+本增强版 Docker 配置集成了数据库健康检查功能，确保 FlowSlide 应用在生产环境中稳定运行。
 
 ## 📋 文件清单
 
 ### 核心文件
-- `Dockerfile.enhanced` - 增强�?Dockerfile，集成数据库检测工�?
-- `docker-compose.yml` - Docker Compose 配置
-- `docker-healthcheck-enhanced.sh` - 增强健康检查脚�?
-- `docker-entrypoint-enhanced.sh` - 增强启动脚本
-- `landppt-deploy.sh` - 部署管理脚本
+- Dockerfile.enhanced - 增强版 Dockerfile，集成数据库检测工具
+- docker-compose.yml - Docker Compose 配置
+- docker-healthcheck-enhanced.sh - 增强健康检查脚本
+- docker-entrypoint-enhanced.sh - 增强启动脚本
+- flowslide-deploy.sh - 部署管理脚本（如适用）
 
-### 数据库工�?
-- `database_health_check.py` - 完整数据库健康检�?
-- `quick_db_check.py` - 快速数据库检�?
-- `database_diagnosis.py` - 数据库诊断工�?
-- `simple_performance_test.py` - 性能测试工具
+### 数据库工具
+- database_health_check.py - 完整数据库健康检查
+- quick_db_check.py - 快速数据库检查
+- database_diagnosis.py - 数据库诊断工具
+- simple_performance_test.py - 性能测试工具
 
-## 🚀 快速开�?
+## 🚀 快速开始
 
 ### 1. 准备环境
-
 确保系统已安装：
 - Docker 20.10+
 - Docker Compose 2.0+
-- Python 3.11+ （用于本地测试）
+- Python 3.11+（用于本地测试）
 
-### 2. 克隆并配�?
-
+### 2. 克隆并配置
 ```bash
 # 克隆项目
 git clone <your-repo>
-cd landppt
+cd flowslide
 
 # 复制数据库检测工具到项目目录
 cp database_health_check.py database_diagnosis.py ./
 
-# 配置文件已经是最新版本，无需复制
-# Dockerfile, docker-healthcheck.sh, docker-entrypoint.sh 已经是增强版本
+# 配置文件已是增强版
+# Dockerfile, docker-healthcheck.sh, docker-entrypoint.sh
 
 # 设置执行权限
 chmod +x docker-healthcheck.sh docker-entrypoint.sh
 ```
 
 ### 3. 部署服务
-
-使用管理脚本进行部署�?
-
+使用管理脚本进行部署：
 ```bash
-# 运行数据库预检�?
-./landppt-deploy.sh db-check
+# 运行数据库预检查
+./flowslide-deploy.sh db-check
 
 # 构建镜像
-./landppt-deploy.sh build
+./flowslide-deploy.sh build
 
 # 启动服务
-./landppt-deploy.sh start
+./flowslide-deploy.sh start
 
-# 查看状�?
-./landppt-deploy.sh status
+# 查看状态
+./flowslide-deploy.sh status
 ```
 
-或者直接使�?Docker Compose�?
-
+或直接使用 Docker Compose：
 ```bash
-# 构建并启�?
+# 构建并启动
 docker-compose up -d --build
 
 # 查看日志
@@ -78,10 +74,9 @@ docker-compose logs -f
 ## 🔧 配置说明
 
 ### 环境变量
+在 docker-compose.yml 中已预配置以下环境变量：
 
-�?`docker-compose.yml` 中已预配置了以下环境变量�?
-
-#### 数据库配�?
+#### 数据库配置
 ```yaml
 - DB_HOST=your-supabase-host
 - DB_PORT=5432
@@ -93,78 +88,71 @@ docker-compose logs -f
 #### Supabase 配置
 ```yaml
 - SUPABASE_URL=https://your-project.supabase.co
-- SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-- SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+- SUPABASE_ANON_KEY=...
+- SUPABASE_SERVICE_KEY=...
 ```
 
-#### 健康检查配�?
+#### 健康检查配置
 ```yaml
-- SKIP_DB_CHECK=false          # 是否跳过数据库检�?
-- REQUIRE_DB=true              # 是否要求数据库连接成�?
-- RUN_DB_SCHEMA_CHECK=true     # 是否运行 Schema 检�?
+- SKIP_DB_CHECK=false          # 是否跳过数据库检查
+- REQUIRE_DB=true              # 是否要求数据库连接成功
+- RUN_DB_SCHEMA_CHECK=true     # 是否运行 Schema 检查
 ```
 
-### 卷挂�?
-
+### 卷挂载
 持久化数据通过以下卷挂载：
-- `landppt_data` - 应用数据
-- `landppt_uploads` - 上传文件
-- `landppt_temp` - 临时文件
-- `landppt_logs` - 日志文件
-- `playwright_cache` - Playwright 浏览器缓�?
+- flowslide_data - 应用数据
+- flowslide_uploads - 上传文件
+- flowslide_temp - 临时文件
+- flowslide_logs - 日志文件
+- playwright_cache - Playwright 浏览器缓存
 
-## 🏥 健康检�?
+## 🏥 健康检查
 
-### 多层健康检�?
+### 多层健康检查
+1. 应用层检查 - 检查 HTTP 端点响应
+2. 数据库层检查 - 验证数据库连接和基本查询
+3. 系统层检查 - 监控磁盘空间、内存使用率
+4. 文件系统检查 - 验证关键目录权限
 
-1. **应用层检�?* - 检�?HTTP 端点响应
-2. **数据库层检�?* - 验证数据库连接和基本查询
-3. **系统层检�?* - 监控磁盘空间、内存使用率
-4. **文件系统检�?* - 验证关键目录权限
+### 健康检查时序
+- 检查间隔：30 秒
+- 超时时间：15 秒
+- 启动等待：60 秒
+- 重试次数：3 次
 
-### 健康检查时�?
-
-- **检查间�?*: 30�?
-- **超时时间**: 15�?
-- **启动�?*: 60�?
-- **重试次数**: 3�?
-
-## 📊 监控和管�?
+## 📈 监控和管理
 
 ### 使用管理脚本
-
 ```bash
-# 查看服务状�?
-./landppt-deploy.sh status
+# 查看服务状态
+./flowslide-deploy.sh status
 
 # 查看实时日志
-./landppt-deploy.sh logs
+./flowslide-deploy.sh logs
 
-# 运行数据库健康检�?
-./landppt-deploy.sh db-check
+# 运行数据库健康检查
+./flowslide-deploy.sh db-check
 
 # 运行性能测试
-./landppt-deploy.sh db-test
+./flowslide-deploy.sh db-test
 
 # 重启服务
-./landppt-deploy.sh restart
+./flowslide-deploy.sh restart
 
 # 备份数据
-./landppt-deploy.sh backup
+./flowslide-deploy.sh backup
 
 # 清理资源
-./landppt-deploy.sh cleanup
+./flowslide-deploy.sh cleanup
 ```
 
 ### 监控服务
-
-启动独立的数据库监控服务�?
-
 ```bash
 # 启动监控服务
-./landppt-deploy.sh monitor
+./flowslide-deploy.sh monitor
 
-# 或使�?Docker Compose
+# 或使用 Docker Compose
 docker-compose --profile monitoring up -d db-monitor
 ```
 
@@ -172,58 +160,47 @@ docker-compose --profile monitoring up -d db-monitor
 
 ### 常见问题
 
-#### 1. 数据库连接失�?
-
-**症状**: 容器启动失败，日志显示数据库连接错误
-
-**解决方案**:
+#### 1. 数据库连接失败
+症状：容器启动失败，日志显示数据库连接错误
 ```bash
-# 运行数据库诊�?
+# 运行数据库诊断
 python3 database_diagnosis.py
 
-# 检查网络连�?
-docker-compose exec landppt ping your-supabase-host
+# 检查网络连接
+docker-compose exec flowslide ping your-supabase-host
 
 # 验证环境变量
-docker-compose exec landppt env | grep DB_
+docker-compose exec flowslide env | grep DB_
 ```
 
-#### 2. 健康检查失�?
-
-**症状**: 容器显示 unhealthy 状�?
-
-**解决方案**:
+#### 2. 健康检查失败
+症状：容器显示 unhealthy 状态
 ```bash
-# 查看健康检查日�?
-docker-compose logs landppt | grep health
+# 查看健康检查日志
+docker-compose logs flowslide | grep health
 
-# 手动运行健康检�?
-docker-compose exec landppt ./docker-healthcheck-enhanced.sh
+# 手动运行健康检查
+docker-compose exec flowslide ./docker-healthcheck-enhanced.sh
 
-# 检查应用状�?
+# 检查应用状态
 curl http://localhost:8000/health
 ```
 
 #### 3. 性能问题
-
-**症状**: 应用响应缓慢
-
-**解决方案**:
+症状：应用响应缓慢
 ```bash
 # 运行性能测试
-./landppt-deploy.sh db-test
+./flowslide-deploy.sh db-test
 
-# 检查资源使�?
+# 检查资源使用
 docker stats
 
 # 查看详细日志
-docker-compose logs --tail=100 landppt
+docker-compose logs --tail=100 flowslide
 ```
 
 ### 调试模式
-
-启用详细日志记录�?
-
+启用详细日志记录：
 ```bash
 # 修改 docker-compose.yml
 environment:
@@ -231,107 +208,106 @@ environment:
   - LOG_LEVEL=DEBUG
 
 # 重启服务
-./landppt-deploy.sh restart
+./flowslide-deploy.sh restart
 ```
 
 ## 🔒 安全注意事项
 
 ### 生产环境配置
+1. 更换默认密码
+```bash
+# 生成新密码
+openssl rand -base64 32
 
-1. **更换默认密码**
-   ```bash
-   # 生成新密�?
-   openssl rand -base64 32
-   
-   # �?Supabase 控制台更�?your_db_user 密码
-   # 更新 docker-compose.yml 中的 DB_PASSWORD
-   ```
+# 在 Supabase 控制台更改 your_db_user 密码
+# 更新 docker-compose.yml 中的 DB_PASSWORD
+```
 
-2. **使用环境文件**
-   ```bash
-   # 创建 .env 文件
-   cat > .env << EOF
-   DB_PASSWORD=your_secure_password
-   SUPABASE_SERVICE_KEY=your_service_key
-   EOF
-   
-   # 修改 docker-compose.yml 使用 env_file
-   env_file:
-     - .env
-   ```
+2. 使用环境文件
+```bash
+# 创建 .env 文件
+cat > .env << EOF
+DB_PASSWORD=your_secure_password
+SUPABASE_SERVICE_KEY=your_service_key
+EOF
 
-3. **限制网络访问**
-   ```bash
-   # 使用防火墙限制端口访�?
-   sudo ufw allow from trusted_ip to any port 8000
-   ```
+# 修改 docker-compose.yml 使用 env_file
+env_file:
+  - .env
+```
 
-### 备份和恢�?
+3. 限制网络访问
+```bash
+# 使用防火墙限制端口访问
+sudo ufw allow from trusted_ip to any port 8000
+```
+
+### 备份和恢复
 
 #### 自动备份
-
 ```bash
 # 创建定时备份脚本
 cat > backup-cron.sh << 'EOF'
 #!/bin/bash
-cd /path/to/landppt
-./landppt-deploy.sh backup
+cd /path/to/flowslide
+./flowslide-deploy.sh backup
 find backup_* -type d -mtime +7 -exec rm -rf {} \;
 EOF
 
-# 添加�?crontab
+# 添加到 crontab
 echo "0 2 * * * /path/to/backup-cron.sh" | crontab -
 ```
 
 #### 恢复数据
-
 ```bash
 # 列出备份
 ls -la backup_*/
 
 # 恢复指定备份
-./landppt-deploy.sh restore backup_20241213_020000/landppt_data.tar.gz
+./flowslide-deploy.sh restore backup_20241213_020000/flowslide_data.tar.gz
 ```
 
 ## 📈 性能优化
 
 ### 资源限制
-
 根据服务器配置调整资源限制：
-
 ```yaml
 deploy:
   resources:
     limits:
-      memory: 4G      # 根据需要调�?
-      cpus: '2.0'     # 根据需要调�?
+      memory: 4G
+      cpus: '2.0'
     reservations:
       memory: 1G
       cpus: '0.5'
 ```
 
 ### 缓存优化
-
 ```yaml
 environment:
-  - PYTHONOPTIMIZE=2          # 启用最大优�?
+  - PYTHONOPTIMIZE=2          # 启用最大优化
   - PYTHONHASHSEED=random     # 随机哈希种子
-  - PYTHONGC=1               # 启用垃圾回收
+  - PYTHONGC=1                # 启用垃圾回收
 ```
 
-## 🎯 生产部署检查清�?
-
-- [ ] 数据库初始化脚本已运�?
+## 🎯 生产部署检查清单
+- [ ] 数据库初始化脚本已运行
 - [ ] 数据库健康检查通过
-- [ ] 环境变量已正确配�?
+- [ ] 环境变量已正确配置
 - [ ] 存储桶权限已设置
-- [ ] 默认密码已更�?
+- [ ] 默认密码已更改
 - [ ] 防火墙规则已配置
-- [ ] 监控告警已设�?
-- [ ] 备份策略已实�?
+- [ ] 监控告警已设置
+- [ ] 备份策略已实施
 - [ ] SSL 证书已配置（如需要）
-- [ ] 日志轮转已设�?
+- [ ] 日志轮转已设置
 
 ---
 
-🎉 **恭喜！您�?LandPPT 应用现在具备了企业级的数据库健康检查和监控能力�?*
+🎉 恭喜！FlowSlide 应用现在具备了企业级的数据库健康检查和监控能力。
+
+## 🚪 访问入口
+- 🏠 首页(公共): http://localhost:8000/home
+- 🌐 Web界面(控制台): http://localhost:8000/web
+- 📚 API 文档: http://localhost:8000/docs
+- 🩺 健康检查: http://localhost:8000/health

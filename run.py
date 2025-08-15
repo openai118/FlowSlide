@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-LandPPT Application Runner
+FlowSlide Application Runner
 
-This script starts the LandPPT FastAPI application with proper configuration.
+This script starts the FlowSlide FastAPI application with proper configuration.
 """
 
 import uvicorn
@@ -34,7 +34,7 @@ def main():
 
     # Configuration
     config = {
-        "app": "landppt.main:app",
+        "app": "flowslide.main:app",
         "host": host,
         "port": port,
         "reload": reload,
@@ -42,14 +42,14 @@ def main():
         "access_log": True,
     }
     
-    print("🚀 Starting LandPPT Server...")
-    print(f"📍 Host: {config['host']}")
+    print("🚀 Starting FlowSlide Server...")
+    print(f"🏷️ Host: {config['host']}")
     print(f"🔌 Port: {config['port']}")
     print(f"🔄 Reload: {config['reload']}")
     print(f"📊 Log Level: {config['log_level']}")
-    print(f"📍 Server will be available at: http://localhost:{config['port']}")
-    print(f"📚 API Documentation: http://localhost:{config['port']}/docs")
-    print(f"🌐 Web Interface: http://localhost:{config['port']}/web")
+    print(f"🔗 Server: http://localhost:{config['port']}")
+    print(f"🏠 Home (public): http://localhost:{config['port']}/home")
+    print(f"📚 API Docs: http://localhost:{config['port']}/docs")
     print("=" * 60)
     
     try:

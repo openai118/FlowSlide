@@ -1,5 +1,5 @@
 """
-Configuration management service for LandPPT
+Configuration management service for FlowSlide
 """
 
 import json
@@ -100,6 +100,57 @@ class ConfigService:
                 "category": "generation_params",
                 "default": "1.0",
             },
+            "generation_quality_preset": {
+                "type": "select",
+                "category": "generation_params",
+                "default": "balanced",
+            },
+            "require_toc": {
+                "type": "boolean",
+                "category": "generation_params",
+                "default": "true",
+            },
+            "require_summary": {
+                "type": "boolean",
+                "category": "generation_params",
+                "default": "true",
+            },
+            "require_action_plan": {
+                "type": "boolean",
+                "category": "generation_params",
+                "default": "false",
+            },
+            "require_qa": {
+                "type": "boolean",
+                "category": "generation_params",
+                "default": "false",
+            },
+            "aspect_ratio": {
+                "type": "select",
+                "category": "generation_params",
+                "default": "16:9",
+            },
+            "page_count_mode": {
+                "type": "select",
+                "category": "generation_params",
+                "default": "ai_decide",
+            },
+            "min_pages": {
+                "type": "number",
+                "category": "generation_params",
+                "default": "10",
+            },
+            "max_pages": {
+                "type": "number",
+                "category": "generation_params",
+                "default": "20",
+            },
+            "fixed_pages": {
+                "type": "number",
+                "category": "generation_params",
+                "default": "10",
+            },
+            # -----------------------------------------------
             "tavily_api_key": {"type": "password", "category": "generation_params"},
             "tavily_max_results": {
                 "type": "number",
@@ -216,9 +267,9 @@ class ConfigService:
                 "default": "3600",
             },
             "database_url": {
-                "type": "text",
+                "type": "password",
                 "category": "app_config",
-                "default": "sqlite:///./landppt.db",
+                "default": "sqlite:///./flowslide.db",
             },
             # Image Service Configuration
             "enable_image_service": {
@@ -640,8 +691,56 @@ class ConfigService:
                 ):
                     field_errors.append(f"{key} must be a valid URL")
 
+            # Enum validation for new fields
+            if key == "generation_quality_preset":
+                if str(value) not in {"conservative", "balanced", "creative"}:
+                    field_errors.append(
+                        "generation_quality_preset must be one of conservative/balanced/creative"
+                    )
+            if key == "aspect_ratio":
+                if str(value) not in {"16:9", "4:3"}:
+                    field_errors.append("aspect_ratio must be one of 16:9/4:3")
+            if key == "page_count_mode":
+                if str(value) not in {"ai_decide", "fixed", "custom_range"}:
+                    field_errors.append(
+                        "page_count_mode must be one of ai_decide/fixed/custom_range"
+                    )
+
             if field_errors:
                 errors[key] = field_errors
+
+        # Cross-field validation (only when related keys are present in this update)
+        pcm = config.get("page_count_mode")
+        if pcm == "fixed":
+            fp = config.get("fixed_pages")
+            try:
+                if fp is None or int(fp) <= 0:
+                    errors.setdefault("fixed_pages", []).append(
+                        "fixed_pages must be a positive integer when page_count_mode=fixed"
+                    )
+            except Exception:
+                errors.setdefault("fixed_pages", []).append(
+                    "fixed_pages must be a positive integer"
+                )
+        elif pcm == "custom_range":
+            mn = config.get("min_pages")
+            mx = config.get("max_pages")
+            try:
+                if mn is None or mx is None:
+                    errors.setdefault("min_pages", []).append(
+                        "min_pages/max_pages are required when page_count_mode=custom_range"
+                    )
+                else:
+                    mn_i = int(mn)
+                    mx_i = int(mx)
+                    if mn_i <= 0 or mx_i <= 0 or mn_i > mx_i:
+                        errors.setdefault("min_pages", []).append(
+                            "min_pages/max_pages must be positive and min_pages <= max_pages"
+                        )
+            except Exception:
+                errors.setdefault("min_pages", []).append(
+                    "min_pages/max_pages must be integers"
+                )
 
         return errors
 

@@ -1,5 +1,5 @@
 """
-Authentication routes for LandPPT
+Authentication routes for FlowSlide
 """
 
 import logging
@@ -17,7 +17,7 @@ from .middleware import get_current_user_optional, get_current_user_required
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-templates = Jinja2Templates(directory="src/landppt/web/templates")
+templates = Jinja2Templates(directory="src/flowslide/web/templates")
 
 
 @router.get("/auth/login", response_class=HTMLResponse)

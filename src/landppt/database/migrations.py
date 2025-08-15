@@ -1,5 +1,5 @@
 """
-Database migration utilities for LandPPT
+Database migration utilities for FlowSlide
 """
 
 import logging
