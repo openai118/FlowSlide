@@ -31,15 +31,15 @@
 - **分支**: `main`
 
 ### Docker Hub Registry
-- **目标**: `openai118/flowslide`
-- **状态**: 准备就绪 ✅
-- **标签**: `latest`, `v2.0.0`
+**标签**: `latest`, `v1.0.0`
 
 ## 📋 部署前准备工作
 
 ### 1. GitHub Repository 设置
 ```bash
-# 1. 在 GitHub 创建新仓库 openai118/FlowSlide
+git tag -a v1.0.0 -m "FlowSlide v1.0.0 - Initial Release"
+git push origin v1.0.0
+```
 # 2. 设置以下 Secrets:
 #    - DOCKERHUB_USERNAME: openai118
 #    - DOCKERHUB_TOKEN: <Docker Hub Access Token>
@@ -47,8 +47,8 @@
 
 ### 2. Docker Hub 设置
 ```bash
-# 1. 在 Docker Hub 创建仓库 openai118/flowslide
-# 2. 确保仓库为 Public (便于用户拉取)
+docker tag openai118/flowslide:latest openai118/flowslide:v1.0.0
+docker push openai118/flowslide:v1.0.0
 # 3. 配置自动构建 (可选)
 ```
 
@@ -89,7 +89,7 @@ git commit -m "feat: FlowSlide deployment configuration and branding
 - Add GitHub Actions for automated CI/CD
 - Prepare for Docker Hub deployment as openai118/flowslide
 - Update documentation and deployment guides
-- Version bump to 2.0.0"
+- Version bump to 1.0.0"
 
 # 推送到 GitHub
 git branch -M main
@@ -99,8 +99,8 @@ git push -u origin main
 ### 步骤 2: 创建发布标签
 ```bash
 # 创建并推送版本标签
-git tag -a v2.0.0 -m "FlowSlide v2.0.0 - Enterprise AI Presentation Generator"
-git push origin v2.0.0
+git tag -a v1.0.0 -m "FlowSlide v1.0.0 - Initial Release"
+git push origin v1.0.0
 ```
 
 ### 步骤 3: 验证自动部署
@@ -113,9 +113,9 @@ git push origin v2.0.0
 # 如果自动部署失败，手动构建推送
 docker login
 docker build -t openai118/flowslide:latest .
-docker tag openai118/flowslide:latest openai118/flowslide:v2.0.0
+docker tag openai118/flowslide:latest openai118/flowslide:v1.0.0
 docker push openai118/flowslide:latest
-docker push openai118/flowslide:v2.0.0
+docker push openai118/flowslide:v1.0.0
 ```
 
 ## 🔍 部署后验证

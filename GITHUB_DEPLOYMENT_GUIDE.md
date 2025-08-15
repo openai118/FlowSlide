@@ -50,7 +50,7 @@ DOCKER_PASSWORD=<your-docker-hub-access-token>
 
 ```bash
 # 确保在项目根目录
-cd "e:\pyprojects\try1\flowslide"
+cd "e:\pyprojects\try1\landppt-integrated"
 
 # 初始化 Git（如果还未初始化）
 git init
@@ -65,7 +65,7 @@ git status
 git add .
 
 # 提交更改
-git commit -m "feat: FlowSlide v2.0.0 - Enterprise AI Presentation Platform
+git commit -m "feat: FlowSlide v1.0.0 - Enterprise AI Presentation Platform
 
 🚀 Features:
 - FlowSlide branding and enterprise packaging
@@ -87,7 +87,7 @@ git commit -m "feat: FlowSlide v2.0.0 - Enterprise AI Presentation Platform
 - Modernized Docker compose setup
 - Enhanced security and monitoring
 - Comprehensive documentation
-- Version bump to 2.0.0"
+- Version bump to 1.0.0"
 
 # 设置主分支
 git branch -M main
@@ -100,9 +100,9 @@ git push -u origin main
 
 ```bash
 # 创建版本标签
-git tag -a v2.0.0 -m "FlowSlide v2.0.0 - Initial Release
+git tag -a v1.0.0 -m "FlowSlide v1.0.0 - Initial Release
 
-🎉 FlowSlide 2.0.0 正式发布！
+🎉 FlowSlide 1.0.0 正式发布！
 
 ✨ 主要特性:
 - AI 驱动的演示文稿生成器
@@ -119,7 +119,7 @@ docker run -p 8000:8000 openai118/flowslide:latest
 🐳 Docker Hub: https://hub.docker.com/r/openai118/flowslide"
 
 # 推送标签（这将触发自动构建和发布）
-git push origin v2.0.0
+git push origin v1.0.0
 ```
 
 ### 步骤 3: 验证自动构建
@@ -139,7 +139,7 @@ git push origin v2.0.0
 3. **预期结果:**
    - ✅ Docker Hub: https://hub.docker.com/r/openai118/flowslide
    - ✅ GitHub Release: https://github.com/openai118/FlowSlide/releases
-   - ✅ 镜像标签: `latest`, `v2.0.0`, `2.0`, `2`
+   - ✅ 镜像标签: `latest`, `v1.0.0`, `1.0`, `1`
 
 ## 🔍 部署验证
 

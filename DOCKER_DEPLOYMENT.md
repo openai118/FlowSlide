@@ -12,11 +12,11 @@
 docker build -t openai118/flowslide:latest .
 
 # Tag for specific version
-docker tag openai118/flowslide:latest openai118/flowslide:v2.0.0
+docker tag openai118/flowslide:latest openai118/flowslide:v1.0.0
 
 # Push to Docker Hub
 docker push openai118/flowslide:latest
-docker push openai118/flowslide:v2.0.0
+docker push openai118/flowslide:v1.0.0
 ```
 
 ### Using Docker Compose

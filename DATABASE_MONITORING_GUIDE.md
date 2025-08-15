@@ -39,7 +39,7 @@
 ```bash
 # 克隆项目
 git clone <your-repo>
-cd try1
+cd FlowSlide
 
 # 复制环境配置
 cp .env.example .env
@@ -55,10 +55,10 @@ DB_NAME=postgres
 DB_USER=your_db_user
 DB_PASSWORD=your-secure-password
 
-# Supabase API（如使用）
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+# 通用 API（如使用 Supabase，可将 API_URL 设置为项目 URL）
+API_URL=https://your-project.supabase.co
+API_ANON_KEY=your-anon-key
+API_SERVICE_KEY=your-service-role-key
 ```
 
 ### 3. 本地运行数据库检查
@@ -79,7 +79,8 @@ python simple_performance_test.py
 ### 4. Docker 部署
 ```bash
 # 构建增强版镜像
-docker build -f Dockerfile.ci-compatible -t flowslide-enhanced .
+# 使用标准 Dockerfile 构建
+docker build -t flowslide-enhanced .
 
 # 使用 docker-compose 部署
 docker-compose up -d

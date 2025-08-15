@@ -10,11 +10,10 @@
 ## 📋 文件清单
 
 ### 核心文件
-- Dockerfile.enhanced - 增强版 Dockerfile，集成数据库检测工具
+- Dockerfile - 标准 Dockerfile（已集成健康检查钩子）
 - docker-compose.yml - Docker Compose 配置
-- docker-healthcheck-enhanced.sh - 增强健康检查脚本
-- docker-entrypoint-enhanced.sh - 增强启动脚本
-- flowslide-deploy.sh - 部署管理脚本（如适用）
+- docker-healthcheck.sh - 健康检查脚本
+- docker-entrypoint.sh - 启动脚本
 
 ### 数据库工具
 - database_health_check.py - 完整数据库健康检查
@@ -47,22 +46,7 @@ chmod +x docker-healthcheck.sh docker-entrypoint.sh
 ```
 
 ### 3. 部署服务
-使用管理脚本进行部署：
-```bash
-# 运行数据库预检查
-./flowslide-deploy.sh db-check
-
-# 构建镜像
-./flowslide-deploy.sh build
-
-# 启动服务
-./flowslide-deploy.sh start
-
-# 查看状态
-./flowslide-deploy.sh status
-```
-
-或直接使用 Docker Compose：
+使用 Docker Compose：
 ```bash
 # 构建并启动
 docker-compose up -d --build
@@ -85,11 +69,11 @@ docker-compose logs -f
 - DB_PASSWORD=your_secure_password
 ```
 
-#### Supabase 配置
+#### API/Supabase 配置
 ```yaml
-- SUPABASE_URL=https://your-project.supabase.co
-- SUPABASE_ANON_KEY=...
-- SUPABASE_SERVICE_KEY=...
+- API_URL=https://your-project.supabase.co
+- API_ANON_KEY=...
+- API_SERVICE_KEY=...
 ```
 
 #### 健康检查配置
@@ -180,7 +164,7 @@ docker-compose exec flowslide env | grep DB_
 docker-compose logs flowslide | grep health
 
 # 手动运行健康检查
-docker-compose exec flowslide ./docker-healthcheck-enhanced.sh
+docker-compose exec flowslide ./docker-healthcheck.sh
 
 # 检查应用状态
 curl http://localhost:8000/health
@@ -228,7 +212,7 @@ openssl rand -base64 32
 # 创建 .env 文件
 cat > .env << EOF
 DB_PASSWORD=your_secure_password
-SUPABASE_SERVICE_KEY=your_service_key
+API_SERVICE_KEY=your_service_key
 EOF
 
 # 修改 docker-compose.yml 使用 env_file

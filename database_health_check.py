@@ -575,7 +575,7 @@ class PostgreSQLHealthChecker:
 def main():
     """主函数"""
     print("🏥 FlowSlide PostgreSQL 数据库健康检查工具")
-    print("版本: 2.0.0 | 支持 PostgreSQL 及其衍生产品（如 Supabase）")
+    print("版本: 1.0.0 | 支持 PostgreSQL 及其衍生产品（如 Supabase）")
     print()
     
     # 检查必要的环境变量

@@ -45,13 +45,13 @@ deploy-to-github.bat
 git init
 git remote add origin https://github.com/openai118/FlowSlide.git
 git add .
-git commit -m "feat: FlowSlide v2.0.0 - Enterprise AI Presentation Generator"
+git commit -m "feat: FlowSlide v1.0.0 - Initial Release"
 git branch -M main
 git push -u origin main
 
 # 2. 创建发布标签（触发自动构建）
-git tag -a v2.0.0 -m "FlowSlide v2.0.0 - Initial Release"
-git push origin v2.0.0
+git tag -a v1.0.0 -m "FlowSlide v1.0.0 - Initial Release"
+git push origin v1.0.0
 ```
 
 ### 2. GitHub 仓库准备

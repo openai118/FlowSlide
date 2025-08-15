@@ -53,7 +53,7 @@ if errorlevel 1 (
 )
 
 echo [信息] 提交更改...
-git commit -m "feat: FlowSlide v2.0.0 - Enterprise AI Presentation Platform
+git commit -m "feat: FlowSlide v1.0.0 - Enterprise AI Presentation Platform
 
 🚀 Features:
 - FlowSlide branding and enterprise packaging
@@ -75,7 +75,7 @@ git commit -m "feat: FlowSlide v2.0.0 - Enterprise AI Presentation Platform
 - Modernized Docker compose setup
 - Enhanced security and monitoring
 - Comprehensive documentation
-- Version bump to 2.0.0"
+- Version bump to 1.0.0"
 
 if errorlevel 1 (
     echo [警告] 提交可能失败（可能没有新的更改）
@@ -100,9 +100,9 @@ echo [成功] 代码推送完成！
 
 echo.
 echo [信息] 创建发布标签...
-git tag -a v2.0.0 -m "FlowSlide v2.0.0 - Initial Release
+git tag -a v1.0.0 -m "FlowSlide v1.0.0 - Initial Release
 
-🎉 FlowSlide 2.0.0 正式发布！
+🎉 FlowSlide 1.0.0 正式发布！
 
 ✨ 主要特性:
 - AI 驱动的演示文稿生成器
@@ -122,7 +122,7 @@ if errorlevel 1 (
     echo [警告] 标签创建失败（可能已存在）
 ) else (
     echo [信息] 推送标签（这将触发自动构建）...
-    git push origin v2.0.0
+    git push origin v1.0.0
     if errorlevel 1 (
         echo [错误] 标签推送失败
         pause
