@@ -1,6 +1,6 @@
 [project]
 name = "flowslide"
-version = "2.1.0"
+version = "1.0.0"
 description = "AI-powered presentation generator with enterprise-grade monitoring and backup"
 readme = "README.md"
 requires-python = ">=3.11"
