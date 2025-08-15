@@ -1,3 +1,11 @@
+# ⚠️ 已废弃：FlowSlide 项目整合指南（Deprecated）
+
+注意：自 v1.0.0 起，本文件已废弃，仅保留历史参考。请改用下列文档：
+- DEPLOYMENT_GUIDE.md（部署指导）
+- GITHUB_DEPLOYMENT_GUIDE.md（GitHub/Docker Hub 指南）
+
+本文件中提到的部分脚本/路径已不存在，请勿按此执行。
+
 # FlowSlide 项目整合指南
 
 ## 🎯 整合目标
