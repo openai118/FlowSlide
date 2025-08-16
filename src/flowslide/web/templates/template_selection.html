@@ -207,13 +207,15 @@
 
 <!-- Template Preview Modal -->
 <div id="previewModal" class="modal" style="display: none;">
-    <div class="modal-content" style="max-width: 95%; width: 95%; max-height: 95vh;">
+    <div class="modal-content" style="max-width: 96vw; width: 96vw; height: 96vh;">
         <div class="modal-header">
             <h2 id="previewTitle">模板预览</h2>
             <span class="close" id="closePreviewModal">&times;</span>
         </div>
-        <div class="modal-body" style="text-align: center;">
-            <iframe id="previewFrame" width="{{ aspect_ratio_settings.width }}" height="{{ aspect_ratio_settings.height }}" style="border: 1px solid var(--glass-border); background: var(--panel-bg); transform: scale(0.8); transform-origin: top center; margin: 0 auto;"></iframe>
+        <div class="modal-body" style="padding: 16px;">
+            <div id="previewFrameContainer" style="display:flex; align-items:center; justify-content:center; width:100%; height: calc(96vh - 80px);">
+                <iframe id="previewFrame" width="{{ aspect_ratio_settings.width }}" height="{{ aspect_ratio_settings.height }}" style="border: 1px solid var(--glass-border); background: var(--panel-bg); transform-origin: top center; margin: 0 auto;"></iframe>
+            </div>
         </div>
     </div>
 </div>
@@ -236,6 +238,10 @@
     display: grid;
     place-items: center;
     padding: 16px;
+
+/* 预览自适应：根据窗口自动缩放 iframe，保持最大高度占比 */
+#previewFrame { transform: scale(1); transition: transform .15s ease; }
+
     overflow: auto;
 }
 
@@ -1000,7 +1006,7 @@ function renderTemplates(templatesToRender) {
         `;
         return;
     }
-    
+
     grid.innerHTML = templatesToRender.map(template => `
         <div class="template-card" data-template-id="${template.id}" onclick="selectTemplate(${template.id})">
             <div class="template-preview" id="preview-${template.id}">
@@ -1104,7 +1110,7 @@ async function previewTemplate(templateId) {
         if (!response.ok) {
             throw new Error('Failed to load template preview');
         }
-        
+
         const data = await response.json();
         showPreview(data.html_template, data.template_name);
     } catch (error) {
@@ -1117,16 +1123,18 @@ function showPreview(htmlContent, templateName) {
     const modal = document.getElementById('previewModal');
     const frame = document.getElementById('previewFrame');
     const title = document.getElementById('previewTitle');
-    
+
     title.textContent = `模板预览 - ${templateName}`;
-    
+
     // Create blob URL for the HTML content
     const blob = new Blob([htmlContent], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
-    
+
     frame.src = url;
+    setTimeout(adjustPreviewScale, 0);
+
     modal.style.display = 'grid';
-    
+
     // Clean up the blob URL after a delay
     setTimeout(() => {
         URL.revokeObjectURL(url);
@@ -1138,6 +1146,28 @@ function closePreviewModal() {
 }
 
 function selectAndStart(templateId) {
+
+// 预览缩放：根据可用区域计算最佳 scale，消除“高度太小、比例怪”的问题
+function adjustPreviewScale(){
+  try{
+    const frame=document.getElementById('previewFrame');
+    const container=document.getElementById('previewFrameContainer');
+    if (!frame || !container) return;
+    const naturalW=frame.getAttribute('width')?parseInt(frame.getAttribute('width'),10):1280;
+    const naturalH=frame.getAttribute('height')?parseInt(frame.getAttribute('height'),10):720;
+    const availableW=container.clientWidth||container.offsetWidth||window.innerWidth;
+    const availableH=container.clientHeight||container.offsetHeight||window.innerHeight;
+    const scale=Math.max(0.1, Math.min(availableW/naturalW, availableH/naturalH));
+    frame.style.transform=`scale(${scale})`;
+    container.style.height=Math.max(200, availableH)+"px";
+  }catch(e){ console.warn('adjustPreviewScale error', e); }
+}
+
+window.addEventListener('resize', function(){
+  const modal=document.getElementById('previewModal');
+  if (modal && modal.style.display && modal.style.display !== 'none') adjustPreviewScale();
+});
+
     console.log('selectAndStart called with templateId:', templateId);
     selectTemplate(templateId);
     setTimeout(() => {

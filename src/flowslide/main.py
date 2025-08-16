@@ -45,6 +45,32 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# 安全响应头中间件（添加 X-Content-Type-Options 等）
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    # 最重要：防止 MIME 嗅探
+    if "X-Content-Type-Options" not in response.headers:
+        response.headers["X-Content-Type-Options"] = "nosniff"
+    # 点击劫持防护（不影响当前站内 iframe 使用）
+    if "X-Frame-Options" not in response.headers:
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    # 引用策略，尽量少暴露来源
+    if "Referrer-Policy" not in response.headers:
+        response.headers["Referrer-Policy"] = "no-referrer"
+    # COOP/COEP，提升隔离（如有第三方跨源资源可按需放宽）
+    if "Cross-Origin-Opener-Policy" not in response.headers:
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    if "Cross-Origin-Embedder-Policy" not in response.headers:
+        response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+    # 权限策略，按需最小化
+    if "Permissions-Policy" not in response.headers:
+        response.headers[
+            "Permissions-Policy"
+        ] = "geolocation=(), microphone=(), camera=()"
+    return response
+
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -53,7 +79,7 @@ async def startup_event():
         # Get database path from config
         from .core.simple_config import DATABASE_URL
         import urllib.parse
-        
+
         # Extract database file path from URL
         parsed = urllib.parse.urlparse(DATABASE_URL)
         if parsed.scheme == "sqlite":
@@ -63,7 +89,7 @@ async def startup_event():
             os.makedirs(os.path.dirname(db_file_path), exist_ok=True)
         else:
             db_file_path = None
-        
+
         db_exists = db_file_path and os.path.exists(db_file_path)
 
         logger.info(f"Initializing database... URL: {DATABASE_URL}")
