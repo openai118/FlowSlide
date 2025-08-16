@@ -37,6 +37,12 @@ class AuthMiddleware:
             "/openapi.json",
             "/static",
             "/favicon.ico",
+            "/health",
+            "/api/health",
+            "/api/database/health",
+            "/api/database/health/quick",
+            "/version.txt",
+            "/api/version",
         }
         # 不需要认证的路径前缀
         self.public_prefixes = [

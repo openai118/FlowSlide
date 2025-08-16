@@ -4,6 +4,7 @@ Main FastAPI application entry point
 
 import asyncio
 import logging
+import os
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -160,6 +161,5 @@ async def health_check():
 
 
 if __name__ == "__main__":
-    uvicorn.run(
-    "src.flowslide.main:app", host="0.0.0.0", port=8000, reload=True, log_level="info"
-    )
+    # Prefer passing the app object to avoid import path issues
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True, log_level="info")

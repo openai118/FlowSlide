@@ -136,7 +136,8 @@ class EnhancedPPTService(PPTService):
                     f"Available research providers: {', '.join(available_providers)}"
                 )
             else:
-                logger.warning(
+                # 改为 info 级别，避免在未配置研究服务时产生误导性的告警
+                logger.info(
                     "Enhanced research service not available - check API configurations"
                 )
 
