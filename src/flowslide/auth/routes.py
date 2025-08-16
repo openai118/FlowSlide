@@ -147,8 +147,8 @@ async def login(
         # Create session
         session_id = auth_service.create_session(db, user)
 
-    # Redirect to home
-    response = RedirectResponse(url="/home", status_code=302)
+        # Redirect to home
+        response = RedirectResponse(url="/home", status_code=302)
 
         # Set cookie max_age based on session expiration
         # If session_expire_minutes is 0, set cookie to never expire (None means session cookie)
@@ -225,7 +225,7 @@ async def register(
         user = auth_service.authenticate_user(db, username, password)
         session_id = auth_service.create_session(db, user)
 
-    response = RedirectResponse(url="/home", status_code=302)
+        response = RedirectResponse(url="/home", status_code=302)
 
         current_expire_minutes = auth_service._get_current_expire_minutes()
         cookie_max_age = None if current_expire_minutes == 0 else current_expire_minutes * 60
