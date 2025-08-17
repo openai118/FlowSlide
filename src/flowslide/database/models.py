@@ -34,12 +34,16 @@ class User(Base):
     last_login: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     def set_password(self, password: str):
-        """Set password hash"""
-        self.password_hash = hashlib.sha256(password.encode()).hexdigest()
+        """Set password hash using bcrypt"""
+        from passlib.context import CryptContext
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        self.password_hash = pwd_context.hash(password)
 
     def check_password(self, password: str) -> bool:
-        """Check if password is correct"""
-        return self.password_hash == hashlib.sha256(password.encode()).hexdigest()
+        """Check if password is correct using bcrypt"""
+        from passlib.context import CryptContext
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        return pwd_context.verify(password, self.password_hash)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""

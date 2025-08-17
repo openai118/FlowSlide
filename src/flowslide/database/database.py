@@ -41,16 +41,35 @@ primary_url, primary_async_url, fallback_url, fallback_async_url = get_safe_data
 # Create engines with error handling
 try:
     # Try primary database first
-    engine = create_engine(
-        primary_url,
-        connect_args={"check_same_thread": False} if "sqlite" in primary_url else {},
-        echo=False,
-    )
-    
-    async_engine = create_async_engine(
-        primary_async_url, 
-        echo=False
-    )
+    if "sqlite" in primary_url:
+        # SQLite configuration
+        engine = create_engine(
+            primary_url,
+            connect_args={"check_same_thread": False},
+            echo=False,
+        )
+        async_engine = create_async_engine(
+            primary_async_url,
+            echo=False
+        )
+    else:
+        # PostgreSQL configuration with connection pooling
+        engine = create_engine(
+            primary_url,
+            pool_size=10,
+            max_overflow=20,
+            pool_pre_ping=True,
+            pool_recycle=3600,
+            echo=False,
+        )
+        async_engine = create_async_engine(
+            primary_async_url,
+            pool_size=10,
+            max_overflow=20,
+            pool_pre_ping=True,
+            pool_recycle=3600,
+            echo=False
+        )
     
     # Test connection for PostgreSQL
     if primary_url.startswith("postgresql://"):
@@ -70,7 +89,10 @@ try:
                     connect_args={"check_same_thread": False},
                     echo=False,
                 )
-                async_engine = create_async_engine(fallback_async_url, echo=False)
+                async_engine = create_async_engine(
+                    fallback_async_url,
+                    echo=False
+                )
                 DATABASE_TYPE = "sqlite"
                 logger.info("✅ SQLite fallback successful")
             else:

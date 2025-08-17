@@ -42,6 +42,13 @@ class SimpleConfig:
 
         # Security
         self.secret_key = os.getenv("SECRET_KEY", "your-secret-key-here")
+        # Warn if using default secret key
+        if self.secret_key == "your-secret-key-here":
+            import warnings
+            warnings.warn(
+                "Using default SECRET_KEY! Please set a secure SECRET_KEY environment variable in production.",
+                UserWarning
+            )
         self.access_token_expire_minutes = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
         # Uploads

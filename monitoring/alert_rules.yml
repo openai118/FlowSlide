@@ -1,0 +1,193 @@
+# Prometheus alert rules for FlowSlide
+
+groups:
+  - name: flowslide.rules
+    rules:
+      # Application health alerts
+      - alert: FlowSlideDown
+        expr: up{job="flowslide-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "FlowSlide application is down"
+          description: "FlowSlide application has been down for more than 1 minute."
+
+      - alert: FlowSlideHighErrorRate
+        expr: rate(http_requests_total{job="flowslide-app",status=~"5.."}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate in FlowSlide"
+          description: "FlowSlide error rate is {{ $value }} errors per second."
+
+      - alert: FlowSlideHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="flowslide-app"}[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency in FlowSlide"
+          description: "FlowSlide 95th percentile latency is {{ $value }} seconds."
+
+      # Database alerts
+      - alert: DatabaseConnectionsHigh
+        expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High database connections"
+          description: "Database connections are at {{ $value }}% of maximum."
+
+      - alert: DatabaseDown
+        expr: up{job="postgres-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database is down"
+          description: "PostgreSQL database has been down for more than 1 minute."
+
+      - alert: DatabaseSlowQueries
+        expr: rate(pg_stat_database_tup_fetched[5m]) / rate(pg_stat_database_tup_returned[5m]) < 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database slow queries detected"
+          description: "Database query efficiency is low: {{ $value }}."
+
+      # System resource alerts
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}% on {{ $labels.instance }}."
+
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}% on {{ $labels.instance }}."
+
+      - alert: DiskSpaceLow
+        expr: (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space"
+          description: "Disk usage is {{ $value }}% on {{ $labels.instance }}:{{ $labels.mountpoint }}."
+
+      - alert: DiskSpaceCritical
+        expr: (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100 > 95
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical disk space"
+          description: "Disk usage is {{ $value }}% on {{ $labels.instance }}:{{ $labels.mountpoint }}."
+
+      # Application-specific alerts
+      - alert: HighActiveUsers
+        expr: flowslide_active_users > 100
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "High number of active users"
+          description: "There are {{ $value }} active users in FlowSlide."
+
+      - alert: PPTGenerationFailures
+        expr: rate(flowslide_ppt_generation_failures_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High PPT generation failure rate"
+          description: "PPT generation failure rate is {{ $value }} failures per second."
+
+      - alert: AIServiceDown
+        expr: flowslide_ai_service_available == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI service unavailable"
+          description: "AI service {{ $labels.provider }} has been unavailable for more than 2 minutes."
+
+      - alert: FileUploadFailures
+        expr: rate(flowslide_file_upload_failures_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High file upload failure rate"
+          description: "File upload failure rate is {{ $value }} failures per second."
+
+      # Security alerts
+      - alert: HighFailedLogins
+        expr: rate(flowslide_failed_logins_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High failed login rate"
+          description: "Failed login rate is {{ $value }} attempts per second."
+
+      - alert: SuspiciousActivity
+        expr: rate(flowslide_suspicious_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Suspicious activity detected"
+          description: "Suspicious request rate is {{ $value }} requests per second."
+
+  - name: infrastructure.rules
+    rules:
+      # Container alerts
+      - alert: ContainerDown
+        expr: up{job="cadvisor"} == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container monitoring down"
+          description: "cAdvisor has been down for more than 1 minute."
+
+      - alert: ContainerHighCPU
+        expr: rate(container_cpu_usage_seconds_total[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container high CPU usage"
+          description: "Container {{ $labels.name }} CPU usage is {{ $value }}%."
+
+      - alert: ContainerHighMemory
+        expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container high memory usage"
+          description: "Container {{ $labels.name }} memory usage is {{ $value }}%."
+
+      # Network alerts
+      - alert: HighNetworkTraffic
+        expr: rate(node_network_receive_bytes_total[5m]) > 100000000  # 100MB/s
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "High network traffic"
+          description: "Network receive traffic is {{ $value }} bytes/s on {{ $labels.instance }}."

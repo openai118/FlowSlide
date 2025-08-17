@@ -24,6 +24,7 @@ from .database.create_default_template import \
 from .database.database import init_db
 from .web import router as web_router
 from . import __version__ as FS_VERSION
+from .monitoring import metrics_endpoint, metrics_collector
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -124,11 +125,13 @@ async def shutdown_event():
 
 
 # Add CORS middleware
+import os
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000,http://127.0.0.1:8000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify actual origins
+    allow_origins=allowed_origins,  # Restrict origins in production
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -153,13 +156,45 @@ import os
 static_dir = os.path.join(os.path.dirname(__file__), "web", "static")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-# Mount temp directory for image cache
+# Mount temp directory for image cache with caching headers
 temp_dir = os.path.join(os.getcwd(), "temp")
 if os.path.exists(temp_dir):
     app.mount("/temp", StaticFiles(directory=temp_dir), name="temp")
     logger.info(f"Mounted temp directory: {temp_dir}")
 else:
     logger.warning(f"Temp directory not found: {temp_dir}")
+
+# Add request monitoring middleware
+@app.middleware("http")
+async def monitor_requests(request, call_next):
+    import time
+    start_time = time.time()
+
+    response = await call_next(request)
+
+    # Track request metrics
+    duration = time.time() - start_time
+    metrics_collector.track_http_request(
+        method=request.method,
+        endpoint=request.url.path,
+        status_code=response.status_code,
+        duration=duration
+    )
+
+    return response
+
+# Add caching middleware for static files
+@app.middleware("http")
+async def add_cache_headers(request, call_next):
+    response = await call_next(request)
+
+    # Add cache headers for static files
+    if request.url.path.startswith(("/static/", "/temp/")):
+        # Cache static files for 1 hour
+        response.headers["Cache-Control"] = "public, max-age=3600"
+        response.headers["ETag"] = f'"{hash(request.url.path)}"'
+
+    return response
 
 
 @app.get("/")
@@ -184,6 +219,12 @@ async def version_txt():
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "FlowSlide API"}
+
+
+@app.get("/metrics")
+async def get_metrics():
+    """Prometheus metrics endpoint"""
+    return metrics_endpoint()
 
 
 if __name__ == "__main__":
