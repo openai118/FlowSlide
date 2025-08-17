@@ -1,3 +1,12 @@
+<script>
+// 兜底：确保关闭按钮始终可用
+window.closeImageDetailModal = window.closeImageDetailModal || function(){
+    try{
+        var modal=document.getElementById('image-detail-modal');
+        if(modal) modal.style.display='none';
+    }catch(e){ console.error('closeImageDetailModal error', e); }
+};
+</script>
 {% extends "base.html" %}
 
 {% block title %}本地图床管理 - FlowSlide{% endblock %}

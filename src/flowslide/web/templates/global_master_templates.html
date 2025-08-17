@@ -237,7 +237,7 @@ select {
     </div>
 
     <!-- Templates Grid -->
-    <div id="templatesGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: var(--spacing-lg);">
+    <div id="templatesGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: var(--spacing-lg);">
         <!-- Templates will be loaded here -->
     </div>
 
@@ -603,8 +603,8 @@ select {
 }
 
 .template-preview {
-    width: 100%;
-    height: 200px;
+    width: 356px !important; /* 16:9比例，宽度大于高度 */
+    height: 200px !important;
     background: var(--panel-bg);
     position: relative;
     border-bottom: 1px solid var(--glass-border);
@@ -979,7 +979,7 @@ select {
     }
 
     .template-preview {
-        height: 180px !important;
+        /* 移除多余的高度覆盖，统一用 200px */
     }
 
     .template-preview-iframe {
@@ -1680,15 +1680,30 @@ function adjustPreviewScale() {
     const availableHeight = contentRect.height - (headerRect.height || 64) - bodyPaddingV - 8;
 
     // 自然尺寸（由模板宽高定义）
-    const naturalW = parseInt(frame.getAttribute('width') || '1280', 10);
-    const naturalH = parseInt(frame.getAttribute('height') || '720', 10);
+    // 强制 16:9 比例
+    const naturalW = 1280;
+    const naturalH = 720;
+    frame.setAttribute('width', naturalW);
+    frame.setAttribute('height', naturalH);
     if (!naturalW || !naturalH) return;
 
     const scale = Math.max(0.1, Math.min(availableWidth / naturalW, availableHeight / naturalH));
     frame.style.transform = `scale(${scale})`;
 
-    // 调整容器高度以便垂直居中
-    container.style.height = Math.max(200, availableHeight) + 'px';
+    // 优化：容器高度按宽度和16:9比例自适应，保证预览最大化居中显示
+    const containerWidth = availableWidth;
+    const containerHeight = containerWidth * naturalH / naturalW;
+    // 如果高度超出可用空间，则按高度缩放
+    if (containerHeight > availableHeight) {
+        container.style.height = availableHeight + 'px';
+        container.style.width = availableHeight * naturalW / naturalH + 'px';
+    } else {
+        container.style.width = containerWidth + 'px';
+        container.style.height = containerHeight + 'px';
+    }
+    container.style.display = 'flex';
+    container.style.alignItems = 'center';
+    container.style.justifyContent = 'center';
 }
 
 // 窗口大小变化时重新计算缩放
