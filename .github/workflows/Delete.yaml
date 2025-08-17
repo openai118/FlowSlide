@@ -2,33 +2,22 @@ name: Delete Workflow Runs
 
 on:
   schedule:
-    - cron: "0 0 * * SUN"      # 每周日自动运行
-  
-  workflow_dispatch:           # 允许手动触发
+    - cron: "0 0 * * SUN"
+  workflow_dispatch:
     inputs:
       runs_to_keep:
-        description: '要保留的最新运行条数 (默认: 5)'
-        required: true         # 手动触发时必须输入
-        default: '5'
+        description: '要保留的最新运行条数 (默认: 20)'
+        required: false
+        default: '20'
 
 jobs:
   del_runs:
     runs-on: ubuntu-latest
     steps:
-      # 步骤一：仅在定时触发时运行
-      - name: Delete by Days (Scheduled)
-        if: github.event_name == 'schedule'
+      - name: Delete Workflow Runs by Count
         uses: GitRML/delete-workflow-runs@main
         with:
           token: ${{ github.token }}
           repository: ${{ github.repository }}
-          retain_days: 7 # 定时任务保留7天的日志
-
-      # 步骤二：仅在手动触发时运行
-      - name: Delete by Count (Manual)
-        if: github.event_name == 'workflow_dispatch'
-        uses: GitRML/delete-workflow-runs@main
-        with:
-          token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          keep_minimum_runs: ${{ github.event.inputs.runs_to_keep }} # 手动任务按输入的条数保留
+          # 只保留这一个条件
+          keep_minimum_runs: ${{ github.event.inputs.runs_to_keep || 20 }}
