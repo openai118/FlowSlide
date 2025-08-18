@@ -51,7 +51,7 @@ langchain-community>=0.3.27
 tavily-python>=0.7.8  # Web search API client
 mineru[core]>=2.0.6
 markitdown[all]>=0.1.2
-onnxruntime==1.19.2
+onnxruntime>=1.20.0
 apryse-sdk>=11.6.0
 
 # Browser automation

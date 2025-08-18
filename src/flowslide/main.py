@@ -24,7 +24,24 @@ from .database.create_default_template import \
 from .database.database import init_db
 from .web import router as web_router
 from . import __version__ as FS_VERSION
-from .monitoring import metrics_endpoint, metrics_collector
+
+# 条件导入监控模块
+try:
+    from .monitoring import metrics_endpoint, metrics_collector
+    MONITORING_ENABLED = True
+except ImportError as e:
+    logger.warning(f"Monitoring disabled due to missing dependencies: {e}")
+    MONITORING_ENABLED = False
+
+    # 创建mock对象
+    class MockMetricsCollector:
+        def track_http_request(self, *args, **kwargs):
+            pass
+
+    def metrics_endpoint():
+        return {"message": "Monitoring disabled - missing prometheus_client"}
+
+    metrics_collector = MockMetricsCollector()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -164,24 +181,25 @@ if os.path.exists(temp_dir):
 else:
     logger.warning(f"Temp directory not found: {temp_dir}")
 
-# Add request monitoring middleware
-@app.middleware("http")
-async def monitor_requests(request, call_next):
-    import time
-    start_time = time.time()
+# Add request monitoring middleware (if monitoring is enabled)
+if MONITORING_ENABLED:
+    @app.middleware("http")
+    async def monitor_requests(request, call_next):
+        import time
+        start_time = time.time()
 
-    response = await call_next(request)
+        response = await call_next(request)
 
-    # Track request metrics
-    duration = time.time() - start_time
-    metrics_collector.track_http_request(
-        method=request.method,
-        endpoint=request.url.path,
-        status_code=response.status_code,
-        duration=duration
-    )
+        # Track request metrics
+        duration = time.time() - start_time
+        metrics_collector.track_http_request(
+            method=request.method,
+            endpoint=request.url.path,
+            status_code=response.status_code,
+            duration=duration
+        )
 
-    return response
+        return response
 
 # Add caching middleware for static files
 @app.middleware("http")
