@@ -125,14 +125,31 @@ docker run -d \
 #### 方式三：本地开发
 
 ```bash
-# 安装依赖
+# 1. 创建虚拟环境
+python -m venv .venv
+
+# 2. 激活虚拟环境
+# Windows:
+.venv\Scripts\activate
+# Linux/Mac:
+source .venv/bin/activate
+
+# 3. 安装依赖
 pip install -r requirements.txt
 
-# 运行数据库健康检查
-python database_health_check.py
+# 4. 启动应用 (选择其中一种方式)
 
-# 启动应用
-python run.py
+# 方式A: 使用Python脚本启动
+python start_flowslide.py
+
+# 方式B: 使用批处理文件 (Windows)
+start.bat
+
+# 方式C: 使用PowerShell脚本 (Windows)
+powershell -ExecutionPolicy Bypass -File start.ps1
+
+# 方式D: 直接使用uvicorn
+.venv\Scripts\python.exe -m uvicorn src.flowslide.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## 🚪 访问入口
@@ -142,40 +159,26 @@ python run.py
 - 📚 API 文档: http://localhost:8000/docs
 - 🩺 健康检查: http://localhost:8000/health
 
-## 📊 数据库监控工具
+## 📊 监控和测试
 
-### 🏥 `database_health_check.py` - 全面健康检查
-**用途**: 全面的数据库健康状况评估
-**特点**:
-- ✅ 连接测试和权限验证
-- 🔍 模式访问和表操作检查
-- ⚡ 性能分析和缓存命中率
-- 🌐 API 连接测试（如果配置）
-- 💾 存储访问验证（如果配置）
-- 📄 详细的 JSON 报告生成
+### 🧪 测试套件
+项目包含完整的测试框架：
 
-**使用方法**:
 ```bash
-# 使用 DATABASE_URL
-DATABASE_URL="postgresql://user:pass@host:port/db" python database_health_check.py
+# 运行所有测试
+python -m pytest
 
-# 使用分离的环境变量
-DB_HOST=host DB_USER=user DB_PASSWORD=pass python database_health_check.py
+# 运行特定测试
+python -m pytest tests/test_auth.py
+
+# 运行性能测试
+python tests/performance/run_performance_tests.py
 ```
 
-### 🔍 `database_diagnosis.py` - 深度诊断
-**用途**: 深度性能分析和问题诊断
-**特点**:
-- 📈 数据库性能指标分析
-- 📋 表统计信息和大小分析
-- 🐌 慢查询识别和分析
-- 🗂️ 索引使用情况检查
-- 💡 智能优化建议生成
-- 📊 详细诊断报告
-
-**使用方法**:
+### 🔒 安全扫描
 ```bash
-python database_diagnosis.py
+# 运行安全扫描
+python security/security_scan.py
 ```
 
 ## 🔄 备份和恢复
