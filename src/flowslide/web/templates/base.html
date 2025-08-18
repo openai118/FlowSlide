@@ -165,6 +165,12 @@
             --spacing-lg: 24px;
             --spacing-xl: 32px;
             --spacing-2xl: 48px;
+
+            /* Input and form elements */
+            --input-bg: rgba(255, 255, 255, 0.9);
+            --input-border: rgba(255, 255, 255, 0.3);
+            --border-color: rgba(255, 255, 255, 0.3);
+            --text-color: #2d3748;
         }
 
         * {
@@ -706,6 +712,11 @@
             --tint-red: rgba(209,36,47,0.08);
             --tint-purple: rgba(130,80,223,0.08);
             --tint-yellow: rgba(191,135,0,0.08);
+            /* Input and form elements */
+            --input-bg: #ffffff;
+            --input-border: #d0d7de;
+            --border-color: #d0d7de;
+            --text-color: #24292f;
         }
 
         html.theme-github body {
@@ -811,6 +822,11 @@
             --tint-red: rgba(218,54,51,0.15);
             --tint-purple: rgba(137,87,229,0.15);
             --tint-yellow: rgba(158,106,3,0.15);
+            /* Input and form elements */
+            --input-bg: #21262d;
+            --input-border: #30363d;
+            --border-color: #30363d;
+            --text-color: #c9d1d9;
         }
 
         html.theme-dark body {
@@ -895,6 +911,15 @@
 
         /* Footer text */
         html.theme-dark .footer { color: #8b949e !important; }
+
+        /* Toggle switches in dark theme */
+        html.theme-dark .toggle-slider {
+            background-color: #30363d !important;
+        }
+
+        html.theme-dark .toggle-slider:before {
+            background-color: #21262d !important;
+        }
     </style>
 </head>
 <body>

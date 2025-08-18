@@ -95,9 +95,13 @@ class AuthMiddleware:
             request.state.user = user
 
         # Public paths don't require authentication; proceed immediately.
-        if self.is_public_path(path):
+        is_public = self.is_public_path(path)
+        if is_public:
+            logger.debug(f"Public path allowed without auth: {path}")
             response = await call_next(request)
             return response
+        else:
+            logger.debug(f"Protected path requires auth: {path}")
 
         # For protected paths, enforce authentication
         if not user:

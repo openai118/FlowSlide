@@ -278,10 +278,10 @@
             </p>
         </div>
         
-        <div style="background: #f8f9fa; padding: 15px; border-radius: 10px;">
+        <div style="background: var(--input-bg); padding: 15px; border-radius: 10px;">
             <h4 style="color: #2c3e50; margin-bottom: 10px;">阶段状态</h4>
             {% for stage in todo_board.stages %}
-            <div style="display: flex; align-items: center; margin-bottom: 10px; padding: 12px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <div style="display: flex; align-items: center; margin-bottom: 10px; padding: 12px; background: var(--panel-bg); border-radius: 8px; box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border);">
                 <div style="margin-right: 15px;">
                     {% if stage.status == 'completed' %}
                         <span style="color: #27ae60; font-size: 1.2em;">✅</span>
@@ -360,10 +360,10 @@
         </div>
     </div>
 
-    <div style="background: white; border-radius: 15px; padding: 30px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);">
+    <div style="background: var(--panel-bg); border-radius: 15px; padding: 30px; box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border);">
         <div style="text-align: center; margin-bottom: 20px;">
-            <h4 style="color: #3498db; margin-bottom: 10px;">{{ project.outline.get('title', project.topic or '未命名大纲') }}</h4>
-            <p style="color: #7f8c8d;">
+            <h4 style="color: var(--accent-blue); margin-bottom: 10px;">{{ project.outline.get('title', project.topic or '未命名大纲') }}</h4>
+            <p style="color: var(--text-secondary);">
                 总共 {{ project.outline.get('slides', [])|length }} 页幻灯片 |
                 场景: {{ project.outline.get('metadata', {}).get('scenario', project.scenario) }} |
                 语言: {{ project.outline.get('metadata', {}).get('language', 'zh') }}
@@ -372,12 +372,12 @@
 
         <!-- 简洁视图 -->
         <div id="compactView" style="display: block;">
-            <div style="background: #f8f9fa; border-radius: 10px; padding: 20px;">
+            <div style="background: var(--input-bg); border-radius: 10px; padding: 20px;">
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;">
                     {% for slide in project.outline.get('slides', []) %}
-                    <div style="padding: 15px; background: white; border-radius: 8px; border-left: 4px solid #3498db; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.1); position: relative;"
-                         onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.15)'"
-                         onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)'">
+                    <div style="padding: 15px; background: var(--panel-bg); border-radius: 8px; border-left: 4px solid var(--accent-blue); transition: all 0.3s ease; box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border); position: relative;"
+                         onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--glass-shadow-hover)'"
+                         onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='var(--glass-shadow)'">
 
                         <!-- 操作按钮 -->
                         <div style="position: absolute; top: 10px; right: 10px; display: flex; gap: 5px;">
@@ -421,7 +421,7 @@
         <!-- 详细视图 -->
         <div id="detailView" style="display: none; max-height: 500px; overflow-y: auto;">
             {% for slide in project.outline.get('slides', []) %}
-            <div style="padding: 20px; margin-bottom: 15px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid #3498db; position: relative;">
+            <div style="padding: 20px; margin-bottom: 15px; background: var(--input-bg); border-radius: 10px; border-left: 4px solid var(--accent-blue); position: relative;">
                 <div style="display: flex; align-items: center; margin-bottom: 15px;">
                     <span style="background: #3498db; color: white; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 15px;">
                         {{ slide.get('page_number', loop.index) }}
@@ -449,7 +449,7 @@
                 {% elif slide.get('content') %}
                 <div style="margin-top: 10px;">
                     <h5 style="color: #555; margin-bottom: 8px; font-size: 0.9em;">内容：</h5>
-                    <div style="background: white; padding: 15px; border-radius: 6px; color: #555; line-height: 1.6; white-space: pre-wrap;">{{ slide.get('content') }}</div>
+                    <div style="background: var(--input-bg); padding: 15px; border-radius: 6px; color: var(--text-primary); line-height: 1.6; white-space: pre-wrap; border: 1px solid var(--border-color);">{{ slide.get('content') }}</div>
                 </div>
                 {% endif %}
 
@@ -470,13 +470,13 @@
 <div style="margin-top: 40px;">
     <h3 style="color: #2c3e50; margin-bottom: 20px; text-align: center;">📄 PPT 大纲</h3>
 
-    <div style="background: white; border-radius: 15px; padding: 30px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);">
+    <div style="background: var(--panel-bg); border-radius: 15px; padding: 30px; box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border);">
         <div style="text-align: center; margin-bottom: 20px;">
-            <h4 style="color: #3498db; margin-bottom: 10px;">{{ project.outline.get('title', project.topic or '未命名大纲') if project.outline else (project.topic or '未命名大纲') }}</h4>
-            <p style="color: #7f8c8d;">大纲内容</p>
+            <h4 style="color: var(--accent-blue); margin-bottom: 10px;">{{ project.outline.get('title', project.topic or '未命名大纲') if project.outline else (project.topic or '未命名大纲') }}</h4>
+            <p style="color: var(--text-secondary);">大纲内容</p>
         </div>
 
-        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; max-height: 400px; overflow-y: auto;">
+        <div style="background: var(--input-bg); padding: 20px; border-radius: 8px; max-height: 400px; overflow-y: auto;">
             {% if project.outline and project.outline.get('content') %}
             <pre style="white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.4; margin: 0;">{{ project.outline.get('content') }}</pre>
             {% else %}
@@ -492,11 +492,11 @@
 <div style="margin-top: 40px;">
     <h3 style="color: #2c3e50; margin-bottom: 20px; text-align: center;">📚 版本历史</h3>
     
-    <div style="background: white; border-radius: 15px; padding: 30px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);">
+    <div style="background: var(--panel-bg); border-radius: 15px; padding: 30px; box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border);">
         {% for version in versions %}
-        <div style="display: flex; align-items: center; padding: 15px; margin-bottom: 10px; background: #f8f9fa; border-radius: 8px;">
+        <div style="display: flex; align-items: center; padding: 15px; margin-bottom: 10px; background: var(--input-bg); border-radius: 8px;">
             <div style="margin-right: 20px;">
-                <div style="width: 40px; height: 40px; background: #3498db; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
+                <div style="width: 40px; height: 40px; background: var(--accent-blue); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
                     v{{ version.version }}
                 </div>
             </div>
@@ -634,9 +634,9 @@ function viewSlideDetail(slideIndex) {
 
     const content = document.createElement('div');
     content.style.cssText = `
-        background: white; border-radius: 15px; padding: 30px;
+        background: var(--panel-bg); border-radius: 15px; padding: 30px;
         max-width: 600px; max-height: 80vh; overflow-y: auto;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3); border: 1px solid var(--glass-border);
     `;
 
     let contentPoints = '';
@@ -647,7 +647,7 @@ function viewSlideDetail(slideIndex) {
         });
         contentPoints += '</ul>';
     } else if (slide.content) {
-        contentPoints = `<h5 style="color: #555; margin: 15px 0 8px 0;">内容：</h5><div style="background: #f8f9fa; padding: 15px; border-radius: 6px; color: #555; line-height: 1.6; white-space: pre-wrap;">${slide.content}</div>`;
+        contentPoints = `<h5 style="color: var(--text-secondary); margin: 15px 0 8px 0;">内容：</h5><div style="background: var(--input-bg); padding: 15px; border-radius: 6px; color: var(--text-secondary); line-height: 1.6; white-space: pre-wrap;">${slide.content}</div>`;
     }
 
     content.innerHTML = `
@@ -690,9 +690,9 @@ function editOutline() {
 
     const content = document.createElement('div');
     content.style.cssText = `
-        background: white; border-radius: 15px; padding: 30px;
+        background: var(--panel-bg); border-radius: 15px; padding: 30px;
         width: 90%; max-width: 800px; height: 80vh; display: flex;
-        flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.3); border: 1px solid var(--glass-border);
     `;
 
     content.innerHTML = `
@@ -798,9 +798,9 @@ function editSingleSlide(slideIndex) {
 
     const content = document.createElement('div');
     content.style.cssText = `
-        background: white; border-radius: 15px; padding: 30px;
+        background: var(--panel-bg); border-radius: 15px; padding: 30px;
         width: 90%; max-width: 700px; max-height: 85vh; overflow-y: auto;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3); border: 1px solid var(--glass-border);
     `;
 
     // 构建内容要点的编辑界面

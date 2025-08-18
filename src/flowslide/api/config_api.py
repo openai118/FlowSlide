@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from ..auth.middleware import get_current_admin_user
+from ..auth.middleware import get_current_admin_user, get_current_user_optional, get_current_user_required
 from ..database.models import User
 from ..services.config_service import ConfigService, get_config_service
 
@@ -161,20 +161,30 @@ async def set_default_provider(
 @router.get("/api/config/current-provider")
 async def get_current_provider(
     config_service: ConfigService = Depends(get_config_service),
-    user: User = Depends(get_current_admin_user),
+    user: User = Depends(get_current_user_required),
 ):
     """Get current default AI provider (provider config redacted)."""
     try:
         from ..core.config import ai_config
 
         provider = ai_config.default_ai_provider
+        logger.info(f"Current provider from ai_config: {provider} (type: {type(provider)})")
+
+        # 确保provider不为None或空字符串
+        if not provider:
+            logger.warning("Provider is None or empty, using default 'openai'")
+            provider = "openai"
+
         provider_config_raw = ai_config.get_provider_config() if hasattr(ai_config, "get_provider_config") else {}
         provider_config = _heuristic_redact(provider_config_raw if isinstance(provider_config_raw, dict) else {})
-        return {
+
+        result = {
             "success": True,
             "current_provider": provider,
             "provider_config": provider_config,
         }
+        logger.info(f"Returning current provider result: {result}")
+        return result
     except Exception as e:
         logger.error(f"Failed to get current provider: {e}")
         raise HTTPException(status_code=500, detail="Failed to get current provider")

@@ -51,7 +51,7 @@ def get_aspect_ratio_settings() -> dict:
         aspect = (cfg.get("aspect_ratio") or "16:9").strip()
     except Exception:
         aspect = "16:9"
-    
+
     if aspect == "4:3":
         return {"ratio_css": "4/3", "width": 1280, "height": 960, "vw_height": "75vw"}
     # default 16:9
@@ -399,6 +399,239 @@ async def get_openai_models(
     except Exception as e:
         logger.error(f"Error fetching OpenAI models from frontend config: {e}")
         return {"success": False, "error": str(e)}
+
+
+
+@router.post("/api/ai/providers/anthropic/models")
+async def get_anthropic_models(
+    request: Request, user: User = Depends(get_current_user_required)
+):
+    """Proxy endpoint to get Anthropic models list using frontend-provided config."""
+    try:
+        import aiohttp
+
+        data = await request.json()
+        base_url = data.get("base_url", "https://api.anthropic.com").rstrip("/")
+        api_key = data.get("api_key", "")
+        version = data.get("api_version", "2023-06-01")
+
+        if not api_key:
+            return {"success": False, "error": "API Key is required"}
+
+        # Anthropic models API endpoint
+        url = f"{base_url}/v1/models"
+        async with aiohttp.ClientSession() as session:
+            headers = {
+                "x-api-key": api_key,
+                "anthropic-version": version,
+                "content-type": "application/json",
+            }
+            async with session.get(url, headers=headers, timeout=30) as resp:
+                text = await resp.text()
+                if resp.status != 200:
+                    logger.error(f"Anthropic models fetch failed {resp.status}: {text}")
+                    return {"success": False, "error": f"HTTP {resp.status}: {text}"}
+                try:
+                    data = await resp.json()
+                except Exception:
+                    return {"success": False, "error": text}
+
+                models = []
+                # Anthropic API returns { "data": [ {"id": "claude-3-5-sonnet-20241022", ...}, ... ] }
+                if isinstance(data, dict):
+                    items = data.get("data", [])
+                    for item in items:
+                        model_id = item.get("id")
+                        if model_id:
+                            models.append({"id": model_id})
+
+                return {"success": True, "models": models}
+    except Exception as e:
+        logger.error(f"Error fetching Anthropic models: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/api/ai/providers/google/models")
+async def get_google_models(
+    request: Request, user: User = Depends(get_current_user_required)
+):
+    """Proxy endpoint to get Google Gemini models list using frontend-provided config."""
+    try:
+        import aiohttp
+
+        body = await request.json()
+        base_url = body.get("base_url", "https://generativelanguage.googleapis.com").rstrip("/")
+        api_key = body.get("api_key", "")
+        if not api_key:
+            return {"success": False, "error": "API Key is required"}
+
+        # Google Gemini API endpoint for listing models
+        url = f"{base_url}/v1/models?key={api_key}"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=30) as resp:
+                text = await resp.text()
+                if resp.status != 200:
+                    logger.error(f"Google models fetch failed {resp.status}: {text}")
+                    return {"success": False, "error": f"HTTP {resp.status}: {text}"}
+
+                try:
+                    data = await resp.json()
+                except Exception:
+                    return {"success": False, "error": text}
+
+                models = []
+                # Google API returns {"models": [{"name": "models/gemini-pro", ...}, ...]}
+                items = data.get("models", [])
+                for item in items:
+                    name = item.get("name", "")
+                    if name and name.startswith("models/"):
+                        # Extract model name from "models/gemini-pro" format
+                        model_id = name.replace("models/", "")
+                        # Only include generative models (exclude embedding models)
+                        if not model_id.endswith("-embedding"):
+                            models.append({"id": model_id})
+
+                return {"success": True, "models": models}
+    except Exception as e:
+        logger.error(f"Error fetching Google models: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/api/ai/providers/azure_openai/models")
+async def get_azure_openai_deployments(
+    request: Request, user: User = Depends(get_current_user_required)
+):
+    """Proxy endpoint to list Azure OpenAI deployments (used as model names)."""
+    try:
+        import aiohttp
+
+        body = await request.json()
+        endpoint = (body.get("endpoint") or body.get("base_url") or "").rstrip("/")
+        api_key = body.get("api_key", "")
+        api_version = body.get("api_version", "2024-02-15-preview")
+        if not endpoint:
+            return {"success": False, "error": "Endpoint is required"}
+        if not api_key:
+            return {"success": False, "error": "API Key is required"}
+
+        url = f"{endpoint}/openai/deployments?api-version={api_version}"
+        async with aiohttp.ClientSession() as session:
+            headers = {"api-key": api_key}
+            async with session.get(url, headers=headers, timeout=30) as resp:
+                text = await resp.text()
+                if resp.status != 200:
+                    logger.error(f"Azure deployments fetch failed {resp.status}: {text}")
+                    return {"success": False, "error": f"HTTP {resp.status}: {text}"}
+                try:
+                    data = await resp.json()
+                except Exception:
+                    return {"success": False, "error": text}
+
+                models = []
+                # Could be {"data": [...]} or {"value": [...]} depending on API
+                items = data.get("data") or data.get("value") or []
+                for it in items:
+                    name = it.get("name") or it.get("id")
+                    if name:
+                        models.append({"id": name})
+                return {"success": True, "models": models}
+    except Exception as e:
+        logger.error(f"Error fetching Azure OpenAI deployments: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/api/ai/providers/ollama/models")
+async def get_ollama_models(
+    request: Request, user: User = Depends(get_current_user_required)
+):
+    """Proxy endpoint to list Ollama local models (tags)."""
+    try:
+        import aiohttp
+
+        body = await request.json()
+        base_url = body.get("base_url", "http://localhost:11434").rstrip("/")
+        url = f"{base_url}/api/tags"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=15) as resp:
+                text = await resp.text()
+                if resp.status != 200:
+                    return {"success": False, "error": f"HTTP {resp.status}: {text}"}
+                try:
+                    data = await resp.json()
+                except Exception:
+                    return {"success": False, "error": text}
+
+                models = []
+                for m in data.get("models", []):
+                    name = m.get("name") or m.get("model")
+                    if name:
+                        models.append({"id": name})
+                return {"success": True, "models": models}
+    except Exception as e:
+        logger.error(f"Error fetching Ollama models: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/api/ai/providers/openai/validate")
+async def validate_openai_api_key(
+    request: Request, user: User = Depends(get_current_user_required)
+):
+    """Validate OpenAI API Key"""
+    try:
+        import aiohttp
+
+        # Get configuration from frontend request
+        data = await request.json()
+        base_url = data.get("base_url", "https://api.openai.com/v1")
+        api_key = data.get("api_key", "")
+
+        logger.info(f"Validating API Key for: {base_url}")
+
+        if not api_key:
+            return {"success": False, "error": "API Key is required"}
+
+        # Ensure base URL ends with /v1
+        if not base_url.endswith("/v1"):
+            base_url = base_url.rstrip("/") + "/v1"
+
+        # Simple validation: try to get models list
+        models_url = f"{base_url}/models"
+
+        async with aiohttp.ClientSession() as session:
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+
+            async with session.get(models_url, headers=headers, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    model_count = len(data.get("data", []))
+                    return {
+                        "success": True,
+                        "message": f"API Key 有效，可访问 {model_count} 个模型",
+                        "model_count": model_count
+                    }
+                else:
+                    error_text = await response.text()
+                    logger.error(f"API Key validation failed: {response.status} - {error_text}")
+
+                    # 解析错误信息
+                    try:
+                        error_data = await response.json() if response.content_type == 'application/json' else {}
+                        error_msg = error_data.get('error', {}).get('message', error_text)
+                    except:
+                        error_msg = error_text
+
+                    return {
+                        "success": False,
+                        "error": f"API Key 验证失败 (状态码: {response.status}): {error_msg}"
+                    }
+
+    except Exception as e:
+        logger.error(f"Error validating OpenAI API Key: {e}")
+        return {"success": False, "error": f"验证过程出错: {str(e)}"}
 
 
 @router.post("/api/ai/providers/openai/test")
@@ -865,7 +1098,7 @@ async def web_project_todo_board(
 
         # Ensure project is not None for template
         template_context = {
-            "request": request, 
+            "request": request,
             "todo_board": todo_board,
             "aspect_ratio_settings": get_aspect_ratio_settings()
         }
@@ -1929,7 +2162,7 @@ async def edit_project_ppt(
 
         return templates.TemplateResponse(
             "project_slides_editor.html", {
-                "request": request, 
+                "request": request,
                 "project": project,
                 "aspect_ratio_settings": get_aspect_ratio_settings()
             }
