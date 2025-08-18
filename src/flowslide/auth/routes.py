@@ -171,15 +171,15 @@ async def login(
 
     except Exception as e:
         logger.error(f"Login error: {e}")
-    return templates.TemplateResponse(
+        return templates.TemplateResponse(
             "login.html",
             {
                 "request": request,
                 "error": "登录过程中发生错误，请重试",
-        "username": username,
-        "turnstile_site_key": app_config.turnstile_site_key,
-        "hcaptcha_site_key": app_config.hcaptcha_site_key,
-        "enable_captcha": app_config.enable_login_captcha,
+                "username": username,
+                "turnstile_site_key": app_config.turnstile_site_key,
+                "hcaptcha_site_key": app_config.hcaptcha_site_key,
+                "enable_captcha": app_config.enable_login_captcha,
             },
         )
 

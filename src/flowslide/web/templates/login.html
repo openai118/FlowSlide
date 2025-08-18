@@ -6,9 +6,18 @@
     <title>登录 - FlowSlide</title>
     <link rel="icon" type="image/svg+xml" href="/static/images/flowslide-logo.svg">
     <link rel="alternate icon" href="/static/images/favicon.ico">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Font Awesome icons inline -->
     <style>
-        @import url('https://fonts.loli.net/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        /* Font Awesome icons - inline minimal set */
+        .fas { font-family: "Font Awesome 5 Free"; font-weight: 900; }
+        .fa-sign-in-alt:before { content: "→"; }
+        .fa-moon:before { content: "🌙"; }
+        .fa-spinner:before { content: "⟳"; }
+        .fa-spin { animation: fa-spin 2s infinite linear; }
+        @keyframes fa-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+    <style>
+        /* Use system fonts instead of external fonts */
 
         :root {
             --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -45,7 +54,7 @@
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             line-height: 1.6;
             color: var(--text-primary);
             background: #f6f8fa; /* default light fallback */
