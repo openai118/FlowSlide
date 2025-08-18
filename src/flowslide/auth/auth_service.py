@@ -294,4 +294,10 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, hashed: str) -> bool:
     """Verify password against hash"""
-    return hash_password(password) == hashed
+    try:
+        from passlib.context import CryptContext
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        return pwd_context.verify(password, hashed)
+    except Exception as e:
+        logger.error(f"Password verification error: {e}")
+        return False
