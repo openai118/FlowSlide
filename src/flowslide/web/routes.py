@@ -4095,7 +4095,15 @@ async def export_project_pptx(project_id: str, user: User = Depends(get_current_
 
             # Return PPTX file
             logging.info("PPTX generated successfully")
-            safe_filename = urllib.parse.quote(f"{project.topic}_PPT.pptx", safe="")
+
+            # 创建安全的文件名
+            safe_topic = re.sub(r'[^\w\s-]', '', project.topic).strip()[:50]  # 限制长度并移除特殊字符
+            if not safe_topic:
+                safe_topic = "presentation"
+            filename = f"{safe_topic}_PPT.pptx"
+
+            # URL编码文件名用于Content-Disposition
+            encoded_filename = urllib.parse.quote(filename, safe="")
 
             # 使用BackgroundTask来清理临时文件
             from starlette.background import BackgroundTask
@@ -4113,8 +4121,9 @@ async def export_project_pptx(project_id: str, user: User = Depends(get_current_
             return FileResponse(
                 temp_pptx_path,
                 media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                filename=filename,
                 headers={
-                    "Content-Disposition": f"attachment; filename*=UTF-8''{safe_filename}",
+                    "Content-Disposition": f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}',
                     "X-Conversion-Method": "PDF-to-PPTX",
                 },
                 background=BackgroundTask(cleanup_temp_files),
