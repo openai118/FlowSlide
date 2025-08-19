@@ -33,8 +33,10 @@ RUN python -m venv /opt/venv && \
     # Install dependencies excluding apryse-sdk first
     grep -v "apryse-sdk" requirements.txt > requirements-temp.txt && \
     /opt/venv/bin/pip install --no-cache-dir -r requirements-temp.txt && \
-    # Install Apryse SDK from their official PyPI index
-    /opt/venv/bin/pip install --no-cache-dir --extra-index-url https://pypi.apryse.com apryse-sdk>=11.6.0 && \
+    # Try to install Apryse SDK from their official PyPI index (optional)
+    (/opt/venv/bin/pip install --no-cache-dir --extra-index-url https://pypi.apryse.com apryse-sdk>=11.6.0 && \
+     echo "✅ Apryse SDK installed successfully") || \
+    echo "⚠️ Apryse SDK installation failed - PPTX export will not be available" && \
     rm requirements-temp.txt && \
     # Clean up build artifacts
     find /opt/venv -name "*.pyc" -delete && \
