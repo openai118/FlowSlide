@@ -5060,10 +5060,10 @@ def _replace_placeholder_images(html: str) -> str:
 
 
 def _remove_external_dependencies(html: str) -> str:
-    """移除外部CDN依赖，替换为本地资源或移除"""
+    """移除可能导致PDF渲染问题的外部依赖，保留功能性资源"""
     import re
 
-    # 移除 Tailwind CDN
+    # 仅替换 Tailwind CDN 为本地版本
     html = re.sub(
         r'<script[^>]*src=["\']https://cdn\.tailwindcss\.com[^"\']*["\'][^>]*></script>',
         '<link href="/static/css/tailwind.min.css" rel="stylesheet">',
@@ -5071,20 +5071,24 @@ def _remove_external_dependencies(html: str) -> str:
         flags=re.IGNORECASE
     )
 
-    # 移除其他可能导致PDF渲染问题的外部脚本
-    external_scripts = [
-        r'<script[^>]*src=["\']https://cdn\.jsdelivr\.net[^"\']*["\'][^>]*></script>',
-        r'<script[^>]*src=["\']https://cdnjs\.cloudflare\.com[^"\']*["\'][^>]*></script>',
-        r'<script[^>]*src=["\']https://unpkg\.com[^"\']*["\'][^>]*></script>',
+    # 移除可能导致PDF渲染阻塞的特定脚本（保留功能性库）
+    problematic_scripts = [
+        # 移除可能导致渲染问题的交互性脚本
+        r'<script[^>]*src=["\'][^"\']*analytics[^"\']*["\'][^>]*></script>',
+        r'<script[^>]*src=["\'][^"\']*gtag[^"\']*["\'][^>]*></script>',
+        r'<script[^>]*src=["\'][^"\']*hotjar[^"\']*["\'][^>]*></script>',
+        # 移除社交媒体插件
+        r'<script[^>]*src=["\'][^"\']*facebook[^"\']*["\'][^>]*></script>',
+        r'<script[^>]*src=["\'][^"\']*twitter[^"\']*["\'][^>]*></script>',
     ]
 
-    for pattern in external_scripts:
+    for pattern in problematic_scripts:
         html = re.sub(pattern, '', html, flags=re.IGNORECASE)
 
-    # 移除外部字体链接（可能导致渲染阻塞）
+    # 保留但优化外部字体加载（添加display=swap避免阻塞）
     html = re.sub(
-        r'<link[^>]*href=["\']https://fonts\.googleapis\.com[^"\']*["\'][^>]*>',
-        '',
+        r'(<link[^>]*href=["\']https://fonts\.googleapis\.com[^"\']*["\'][^>]*>)',
+        r'\1&display=swap',
         html,
         flags=re.IGNORECASE
     )
