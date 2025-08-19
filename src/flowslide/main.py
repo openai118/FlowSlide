@@ -2,14 +2,14 @@
 Main FastAPI application entry point
 """
 
-import asyncio
 import logging
 import os
+from typing import Any, Callable, Protocol
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__ as FS_VERSION
@@ -23,8 +23,6 @@ from .auth import auth_router, create_auth_middleware
 from .database.create_default_template import ensure_default_templates_exist_first_time
 from .database.database import init_db
 from .web import router as web_router
-
-from typing import Any, Callable, Protocol
 
 # Configure logging early so it's available during conditional imports
 logging.basicConfig(level=logging.INFO)
@@ -42,10 +40,8 @@ metrics_endpoint: Callable[[], Any]
 
 # 条件导入监控模块
 try:
-    from .monitoring import (
-        metrics_collector as _metrics_collector,
-        metrics_endpoint as _metrics_endpoint,
-    )
+    from .monitoring import metrics_collector as _metrics_collector
+    from .monitoring import metrics_endpoint as _metrics_endpoint
 
     metrics_collector = _metrics_collector  # type: ignore[assignment]
     metrics_endpoint = _metrics_endpoint  # type: ignore[assignment]
@@ -161,8 +157,6 @@ async def shutdown_event():
 
 
 # Add CORS middleware
-import os
-
 allowed_origins = os.getenv(
     "ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000,http://127.0.0.1:8000"
 ).split(",")
@@ -190,14 +184,10 @@ app.include_router(database_router, tags=["Database Management"])
 app.include_router(web_router, prefix="", tags=["Web Interface"])
 
 # Mount static files
-import os
-
 static_dir = os.path.join(os.path.dirname(__file__), "web", "static")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Add favicon route
-from fastapi.responses import FileResponse
-
 
 @app.get("/favicon.ico")
 async def favicon():
@@ -207,8 +197,6 @@ async def favicon():
         return FileResponse(favicon_path, media_type="image/svg+xml")
     else:
         # Return a simple 1x1 transparent PNG if favicon doesn't exist
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=404, detail="Favicon not found")
 
 
