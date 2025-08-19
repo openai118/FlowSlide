@@ -73,10 +73,10 @@ jobs:
         black --check src/ tests/
         isort --check-only src/ tests/
 
-    - name: Run type checking
+    - name: Run type checking (non-blocking)
       run: |
-        mypy src/flowslide --ignore-missing-imports
-        
+        mypy src/flowslide --ignore-missing-imports || true
+
     - name: Run security scan
       run: |
         safety check

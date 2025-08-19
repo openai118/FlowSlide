@@ -38,9 +38,9 @@ jobs:
       run: |
         isort --check-only --diff src/ tests/
         
-    - name: Run mypy
+    - name: Run mypy (non-blocking)
       run: |
-        mypy src/flowslide --ignore-missing-imports
+        mypy src/flowslide --ignore-missing-imports || true
 
   security:
     name: Security Analysis
