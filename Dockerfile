@@ -109,6 +109,10 @@ RUN apt-get update && \
 RUN curl -fsSL https://rclone.org/install.sh | bash || echo "Warning: rclone installation failed"
 
 # Create non-root user (for compatibility, but run as root)
+# Ensure runtime deps in production stage (defensive install)
+COPY requirements.txt ./
+RUN /opt/venv/bin/pip install --no-cache-dir -r requirements.txt --extra-index-url https://pypi.apryse.com
+
 RUN groupadd -r flowslide && \
     useradd -r -g flowslide -m -d /home/flowslide flowslide && \
     mkdir -p /home/flowslide/.cache/ms-playwright /root/.cache/ms-playwright
@@ -120,6 +124,8 @@ COPY --from=builder /opt/venv /opt/venv
 RUN /opt/venv/bin/pip install --no-cache-dir playwright==1.40.0 && \
     # Install only Chromium browser (fastest option)
     /opt/venv/bin/playwright install chromium && \
+    # Verify critical runtime deps still present in production stage
+    /opt/venv/bin/python -c "import uvicorn, fastapi; print('deps OK (prod)')" && \
     # Clean up browser cache to save space
     rm -rf /root/.cache/ms-playwright/chromium-*/chrome-linux/locales && \
     rm -rf /root/.cache/ms-playwright/chromium-*/chrome-linux/resources && \
