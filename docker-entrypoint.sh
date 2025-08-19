@@ -209,7 +209,45 @@ main() {
     info "📚 API Documentation: http://0.0.0.0:${PORT:-8000}/docs"
     info "🌐 Web Interface: http://0.0.0.0:${PORT:-8000}/web"
 
-    # Execute the main command
+    # Runtime interpreter and deps self-check
+    info "Verifying Python runtime and dependencies..."
+    echo "PATH=$PATH"
+    which python || true
+    python -V || true
+    python -c 'import sys; print("sys.executable=", sys.executable)' || true
+
+    if python - <<'PY'
+import sys
+try:
+    import uvicorn, fastapi
+    print('deps OK (default python)')
+    sys.exit(0)
+except Exception as e:
+    print('default python deps check failed:', e)
+    sys.exit(1)
+PY
+    then
+        info "Dependencies available for default python"
+        :
+    else
+        warn "Default python cannot import deps; trying /opt/venv/bin/python"
+        if /opt/venv/bin/python - <<'PY2'
+import sys
+import uvicorn, fastapi
+print('deps OK (venv python)')
+PY2
+        then
+            info "Switching to venv python explicitly"
+            set -- /opt/venv/bin/python run.py
+        else
+            error "Dependencies missing even in venv; printing installed packages"
+            python -m pip freeze || true
+            /opt/venv/bin/pip freeze || true
+            exit 1
+        fi
+    fi
+
+    # Execute the main command (possibly adjusted to venv python)
     exec "$@"
 }
 
