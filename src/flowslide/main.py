@@ -24,10 +24,26 @@ from .database.create_default_template import ensure_default_templates_exist_fir
 from .database.database import init_db
 from .web import router as web_router
 
+from typing import Any, Callable, Protocol
+
+# Configure logging early so it's available during conditional imports
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Protocol for metrics collector to satisfy type checkers
+class MetricsProtocol(Protocol):
+    def track_http_request(self, *args, **kwargs) -> None: ...
+
+# Placeholder type annotations for metrics objects
+metrics_collector: MetricsProtocol
+metrics_endpoint: Callable[[], Any]
+
 # 条件导入监控模块
 try:
-    from .monitoring import metrics_collector, metrics_endpoint
+    from .monitoring import metrics_collector as _metrics_collector, metrics_endpoint as _metrics_endpoint
 
+    metrics_collector = _metrics_collector  # type: ignore[assignment]
+    metrics_endpoint = _metrics_endpoint  # type: ignore[assignment]
     MONITORING_ENABLED = True
 except ImportError as e:
     logger.warning(f"Monitoring disabled due to missing dependencies: {e}")
@@ -35,10 +51,10 @@ except ImportError as e:
 
     # 创建mock对象
     class MockMetricsCollector:
-        def track_http_request(self, *args, **kwargs):
+        def track_http_request(self, *args, **kwargs) -> None:
             pass
 
-    def metrics_endpoint():
+    def metrics_endpoint() -> dict:
         return {"message": "Monitoring disabled - missing prometheus_client"}
 
     metrics_collector = MockMetricsCollector()
