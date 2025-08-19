@@ -216,11 +216,11 @@ class PDFToPPTXConverter:
             self._sdk_available = True
             logger.info("Apryse SDK is available")
             return True
-        except ImportError as e:
+        except (ImportError, OSError, Exception) as e:
             self._sdk_available = False
             logger.warning(f"Apryse SDK not available: {e}")
             logger.warning(
-                "SDK files may be downloaded but Python package is not installed"
+                "SDK files may be downloaded but Python package is not installed or DLL files are missing"
             )
             return False
 

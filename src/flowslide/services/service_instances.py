@@ -57,7 +57,8 @@ def reload_services():
         from .pdf_to_pptx_converter import reload_pdf_to_pptx_converter
 
         reload_pdf_to_pptx_converter()
-    except ImportError:
+    except (ImportError, OSError, Exception) as e:
+        logger.warning(f"PDF to PPTX converter not available during reload: {e}")
         pass  # PDF converter may not be available
 
 

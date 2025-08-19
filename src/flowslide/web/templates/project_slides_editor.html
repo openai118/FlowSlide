@@ -9020,8 +9020,8 @@
                 return image.url.startsWith('/') ? image.url : `/api/image/view/${image.url}`;
             }
 
-            // 默认占位图
-            return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiBmaWxsPSIjRjVGNUY1Ii8+CjxwYXRoIGQ9Ik02MCA0NUw3NSA2NUg0NUw2MCA0NVoiIGZpbGw9IiNEREREREQiLz4KPGNpcmNsZSBjeD0iNTAiIGN5PSI0MCIgcj0iNSIgZmlsbD0iI0RERERERCIvPgo8L3N2Zz4K';
+            // 默认占位图（使用 picsum.photos）
+            return 'https://picsum.photos/120';
         }
 
         // 处理图片加载错误
@@ -9049,8 +9049,8 @@
                 return;
             }
 
-            // 最终使用占位图
-            imgElement.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiBmaWxsPSIjRjVGNUY1Ii8+CjxwYXRoIGQ9Ik02MCA0NUw3NSA2NUg0NUw2MCA0NVoiIGZpbGw9IiNEREREREQiLz4KPGNpcmNsZSBjeD0iNTAiIGN5PSI0MCIgcj0iNSIgZmlsbD0iI0RERERERCIvPjx0ZXh0IHg9IjYwIiB5PSI4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSI4IiBmaWxsPSIjOTk5Ij7liqDovb3lpLHotKU8L3RleHQ+PC9zdmc+';
+            // 最终使用占位图（使用 picsum.photos）
+            imgElement.src = 'https://picsum.photos/120';
             imgElement.style.opacity = '0.5';
             imgElement.title = '图片加载失败';
         }

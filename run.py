@@ -8,6 +8,7 @@ This script starts the FlowSlide FastAPI application with proper configuration.
 import uvicorn
 import sys
 import os
+import asyncio
 from dotenv import load_dotenv
 
 # Add src to Python path
@@ -26,6 +27,14 @@ except Exception as e:
 def main():
     """Main entry point for running the application"""
 
+    # Workaround for Windows asyncio subprocess (Playwright/Chromium) issues
+    if sys.platform.startswith("win"):
+        try:
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+            print("✅ Windows event loop set to Proactor (supports subprocess)")
+        except Exception as e:
+            print(f"⚠️ Failed to set Windows ProactorEventLoopPolicy: {e}")
+
     # Get configuration from environment variables with defaults
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8000"))
@@ -41,7 +50,7 @@ def main():
         "log_level": log_level,
         "access_log": True,
     }
-    
+
     print("🚀 Starting FlowSlide Server...")
     print(f"🏷️ Host: {config['host']}")
     print(f"🔌 Port: {config['port']}")
@@ -51,7 +60,7 @@ def main():
     print(f"🏠 Home (public): http://localhost:{config['port']}/home")
     print(f"📚 API Docs: http://localhost:{config['port']}/docs")
     print("=" * 60)
-    
+
     try:
         uvicorn.run(**config)
     except KeyboardInterrupt:

@@ -525,10 +525,17 @@
                     <label style="font-weight: 600; color: var(--text-primary); margin-bottom: 8px; display: block;">
                         Apryse License Key (PPT导出)
                     </label>
-                    <input type="password" name="apryse_license_key" placeholder="your-apryse-license-key"
-                           value="{{ current_config.get('apryse_license_key', '') }}"
-                           style="font-family: monospace; font-size: 0.9em; margin-bottom: 8px;">
-                    <small style="color: var(--text-secondary); font-size: 0.85em; line-height: 1.4;">
+                    <div style="display: flex; gap: 8px; align-items: flex-start;">
+                        <input type="password" name="apryse_license_key" id="apryse_license_key" placeholder="your-apryse-license-key"
+                               value="{{ current_config.get('apryse_license_key', '') }}"
+                               style="font-family: monospace; font-size: 0.9em; flex: 1;">
+                        <button type="button" onclick="checkApryseLicense()" id="checkLicenseBtn"
+                                style="padding: 8px 16px; background: var(--accent-blue, #4facfe); color: white; border: none; border-radius: 6px; font-size: 0.9em; cursor: pointer; white-space: nowrap;">
+                            检测许可证
+                        </button>
+                    </div>
+                    <div id="licenseStatus" style="margin-top: 8px; padding: 8px; border-radius: 4px; font-size: 0.85em; display: none;"></div>
+                    <small style="color: var(--text-secondary); font-size: 0.85em; line-height: 1.4; margin-top: 8px; display: block;">
                         用于PPTX导出功能的Apryse SDK许可证密钥，可在 <a href="https://www.pdftron.com/" target="_blank" style="color: var(--accent-purple, #667eea);">Apryse官网</a> 获取
                     </small>
                 </div>
@@ -5307,6 +5314,97 @@ function onPageCountModeChange(mode){
         if(el){ el.addEventListener('input', ()=>{ el.dataset.userEdited = '1'; }); }
     });
 })();
+
+// Apryse许可证检测功能
+async function checkApryseLicense() {
+    const btn = document.getElementById('checkLicenseBtn');
+    const status = document.getElementById('licenseStatus');
+    const input = document.getElementById('apryse_license_key');
+
+    // 检查是否输入了许可证
+    if (!input.value.trim()) {
+        showLicenseStatus('请先输入Apryse许可证密钥', 'error');
+        return;
+    }
+
+    // 显示检测中状态
+    btn.disabled = true;
+    btn.textContent = '检测中...';
+    showLicenseStatus('正在验证许可证...', 'info');
+
+    try {
+        // 先保存当前配置以确保许可证被更新
+        const licenseKey = input.value.trim();
+
+        // 创建FormData对象并添加许可证密钥
+        const formData = new FormData();
+        formData.append('apryse_license_key', licenseKey);
+
+        // 保存配置
+        const saveResponse = await fetch('/api/config/all', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                config: { apryse_license_key: licenseKey }
+            })
+        });
+
+        if (!saveResponse.ok) {
+            throw new Error('保存配置失败');
+        }
+
+        // 检测许可证
+        const response = await fetch('/api/apryse/license/check');
+        const result = await response.json();
+
+        if (result.valid) {
+            showLicenseStatus(`✅ ${result.message}`, 'success');
+        } else {
+            showLicenseStatus(`❌ ${result.error}`, 'error');
+        }
+
+    } catch (error) {
+        console.error('许可证检测失败:', error);
+        showLicenseStatus(`❌ 检测失败: ${error.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '检测许可证';
+    }
+}
+
+function showLicenseStatus(message, type) {
+    const status = document.getElementById('licenseStatus');
+    status.style.display = 'block';
+    status.textContent = message;
+
+    // 清除之前的样式
+    status.className = '';
+
+    // 根据类型设置样式
+    switch (type) {
+        case 'success':
+            status.style.background = '#d4edda';
+            status.style.color = '#155724';
+            status.style.border = '1px solid #c3e6cb';
+            break;
+        case 'error':
+            status.style.background = '#f8d7da';
+            status.style.color = '#721c24';
+            status.style.border = '1px solid #f5c6cb';
+            break;
+        case 'info':
+            status.style.background = '#d1ecf1';
+            status.style.color = '#0c5460';
+            status.style.border = '1px solid #bee5eb';
+            break;
+        default:
+            status.style.background = '#f8f9fa';
+            status.style.color = '#6c757d';
+            status.style.border = '1px solid #dee2e6';
+    }
+}
 
 // 在加载配置后，根据 page_count_mode 控制显示
 (function patchPopulate(){

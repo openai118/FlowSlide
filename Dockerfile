@@ -182,7 +182,7 @@ HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
 
 # Set entrypoint and command with smart script selection
 ENTRYPOINT ["./docker-entrypoint-active.sh"]
-CMD ["python", "run.py"]
+CMD ["/opt/venv/bin/python", "run.py"]
 
 # Metadata labels
 LABEL maintainer="FlowSlide Team" \
