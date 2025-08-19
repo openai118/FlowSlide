@@ -7367,25 +7367,57 @@
             }
         }
 
-        function exportToPDF() {
-            // 显示提示信息
-            showNotification('正在生成PDF文件...', 'info');
+        async function exportToPDF() {
+            try {
+                // 显示提示信息
+                showNotification('正在生成PDF文件...', 'info');
 
-            // 直接下载PDF文件
-            const downloadLink = document.createElement('a');
-            downloadLink.href = `/api/projects/{{ project.project_id }}/export/pdf`;
-            downloadLink.download = '';
-            downloadLink.style.display = 'none';
+                // 使用fetch API进行下载，以便处理错误
+                const response = await fetch(`/api/projects/{{ project.project_id }}/export/pdf`);
 
-            // 添加到页面并触发下载
-            document.body.appendChild(downloadLink);
-            downloadLink.click();
-            document.body.removeChild(downloadLink);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`导出失败: ${response.status} - ${errorText}`);
+                }
 
-            // 延迟显示成功消息
-            setTimeout(() => {
-                showNotification('PDF文件生成完成，正在下载...', 'success');
-            }, 1000);
+                // 获取文件名
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = 'presentation.pdf';
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                    if (filenameMatch && filenameMatch[1]) {
+                        filename = filenameMatch[1].replace(/['"]/g, '');
+                        // 解码URL编码的文件名
+                        try {
+                            filename = decodeURIComponent(filename);
+                        } catch (e) {
+                            console.warn('Failed to decode filename:', filename);
+                        }
+                    }
+                }
+
+                // 创建blob并下载
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+
+                const downloadLink = document.createElement('a');
+                downloadLink.href = url;
+                downloadLink.download = filename;
+                downloadLink.style.display = 'none';
+
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+
+                // 清理URL对象
+                window.URL.revokeObjectURL(url);
+
+                showNotification('PDF文件下载成功！', 'success');
+
+            } catch (error) {
+                console.error('PDF导出错误:', error);
+                showNotification(`PDF导出失败: ${error.message}`, 'error');
+            }
         }
 
 

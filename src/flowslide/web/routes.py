@@ -3983,7 +3983,15 @@ async def export_project_pdf(project_id: str, individual: bool = False, user: Us
 
         # Return PDF file
         logging.info("PDF generated successfully using Pyppeteer")
-        safe_filename = urllib.parse.quote(f"{project.topic}_PPT.pdf", safe="")
+
+        # 创建安全的文件名
+        safe_topic = re.sub(r'[^\w\s-]', '', project.topic).strip()[:50]  # 限制长度并移除特殊字符
+        if not safe_topic:
+            safe_topic = "presentation"
+        filename = f"{safe_topic}_PPT.pdf"
+
+        # URL编码文件名用于Content-Disposition
+        encoded_filename = urllib.parse.quote(filename, safe="")
 
         # 使用BackgroundTask来清理临时文件
         from starlette.background import BackgroundTask
@@ -3997,8 +4005,9 @@ async def export_project_pdf(project_id: str, individual: bool = False, user: Us
         return FileResponse(
             temp_pdf_path,
             media_type="application/pdf",
+            filename=filename,
             headers={
-                "Content-Disposition": f"attachment; filename*=UTF-8''{safe_filename}",
+                "Content-Disposition": f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}',
                 "X-PDF-Generator": "Pyppeteer",
             },
             background=BackgroundTask(cleanup_temp_file),

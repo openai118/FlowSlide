@@ -25,7 +25,7 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
         
@@ -60,7 +60,7 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
         
@@ -75,7 +75,7 @@ jobs:
         pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing --cov-report=html || echo "⚠️ Tests completed with some failures"
         
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml
         flags: unittests
@@ -90,7 +90,7 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
         
@@ -122,7 +122,7 @@ jobs:
         cp docs/index.html docs/_site/index.html
         
     - name: Upload Pages artifact
-      uses: actions/upload-pages-artifact@v3
+      uses: actions/upload-pages-artifact@v4
       with:
         path: docs/_site
         

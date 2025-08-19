@@ -76,11 +76,12 @@ async def add_security_headers(request, call_next):
     # 引用策略，尽量少暴露来源
     if "Referrer-Policy" not in response.headers:
         response.headers["Referrer-Policy"] = "no-referrer"
-    # COOP/COEP，提升隔离（如有第三方跨源资源可按需放宽）
+    # COOP/COEP，提升隔离（放宽COEP以允许外部资源如CDN）
     if "Cross-Origin-Opener-Policy" not in response.headers:
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     if "Cross-Origin-Embedder-Policy" not in response.headers:
-        response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+        # 使用 unsafe-none 允许加载外部资源（如Tailwind CSS CDN）
+        response.headers["Cross-Origin-Embedder-Policy"] = "unsafe-none"
     # 权限策略，按需最小化
     if "Permissions-Policy" not in response.headers:
         response.headers[
