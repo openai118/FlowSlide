@@ -1,0 +1,18 @@
+[flake8]
+max-line-length = 100
+extend-ignore = E203, W503
+exclude =
+    .git,
+    __pycache__,
+    build,
+    dist,
+    .venv,
+    venv,
+    env,
+    .mypy_cache,
+    .pytest_cache,
+    htmlcov
+per-file-ignores =
+    # 常见：__init__ 暴露导出或存在未使用导入
+    __init__.py:F401
+
