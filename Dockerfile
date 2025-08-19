@@ -24,20 +24,14 @@ RUN apt-get update && \
 
 # Set work directory and copy dependency files
 WORKDIR /app
-COPY requirements.txt ./
+COPY requirements-docker.txt requirements.txt ./
 
 # Install Python dependencies to a virtual environment
 RUN python -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
     /opt/venv/bin/pip install --no-cache-dir psycopg2-binary requests && \
-    # Install dependencies excluding apryse-sdk first
-    grep -v "apryse-sdk" requirements.txt > requirements-temp.txt && \
-    /opt/venv/bin/pip install --no-cache-dir -r requirements-temp.txt && \
-    # Try to install Apryse SDK from their official PyPI index (optional)
-    (/opt/venv/bin/pip install --no-cache-dir --extra-index-url https://pypi.apryse.com apryse-sdk>=11.6.0 && \
-     echo "✅ Apryse SDK installed successfully") || \
-    echo "⚠️ Apryse SDK installation failed - PPTX export will not be available" && \
-    rm requirements-temp.txt && \
+    # Install Docker-optimized dependencies (lightweight)
+    /opt/venv/bin/pip install --no-cache-dir -r requirements-docker.txt && \
     # Clean up build artifacts
     find /opt/venv -name "*.pyc" -delete && \
     find /opt/venv -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
@@ -101,8 +95,8 @@ RUN apt-get update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install rclone for backup functionality
-RUN curl https://rclone.org/install.sh | bash
+# Install rclone for backup functionality (optional, can be skipped for faster builds)
+RUN curl -fsSL https://rclone.org/install.sh | bash || echo "Warning: rclone installation failed"
 
 # Create non-root user (for compatibility, but run as root)
 RUN groupadd -r flowslide && \
@@ -112,9 +106,10 @@ RUN groupadd -r flowslide && \
 # Copy Python packages from builder
 COPY --from=builder /opt/venv /opt/venv
 
-# Install Playwright with minimal footprint
+# Install Playwright with minimal footprint (use system chromium to save time)
 RUN /opt/venv/bin/pip install --no-cache-dir playwright==1.40.0 && \
-    /opt/venv/bin/playwright install chromium && \
+    # Use system chromium instead of downloading playwright's chromium
+    PLAYWRIGHT_BROWSERS_PATH=/usr/bin /opt/venv/bin/playwright install-deps chromium || true && \
     chown -R flowslide:flowslide /home/flowslide && \
     rm -rf /tmp/* /var/tmp/*
 
