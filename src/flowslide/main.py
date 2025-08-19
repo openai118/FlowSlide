@@ -174,6 +174,20 @@ import os
 static_dir = os.path.join(os.path.dirname(__file__), "web", "static")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
+# Add favicon route
+from fastapi.responses import FileResponse
+
+@app.get("/favicon.ico")
+async def favicon():
+    """Serve favicon"""
+    favicon_path = os.path.join(static_dir, "images", "favicon.svg")
+    if os.path.exists(favicon_path):
+        return FileResponse(favicon_path, media_type="image/svg+xml")
+    else:
+        # Return a simple 1x1 transparent PNG if favicon doesn't exist
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Favicon not found")
+
 # Mount temp directory for image cache with caching headers
 temp_dir = os.path.join(os.getcwd(), "temp")
 if os.path.exists(temp_dir):

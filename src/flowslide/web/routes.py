@@ -4981,6 +4981,9 @@ def _clean_html_for_pdf(
     # Replace deprecated placeholder domains with picsum.photos
     cleaned_html = _replace_placeholder_images(cleaned_html)
 
+    # Remove external CDN dependencies for PDF generation
+    cleaned_html = _remove_external_dependencies(cleaned_html)
+
     # Add PDF-specific styles
     pdf_styles = """
     <style>
@@ -5052,6 +5055,39 @@ def _replace_placeholder_images(html: str) -> str:
 
     css_pattern = re.compile(r'(url\(["\"])\s*[^)\"\"]*(via\.placeholder\.com|placeholder\.com|placehold\.it|dummyimage\.com|placekitten\.com|placekitten|placehold|placeholder)[^)\"\"]*(\))', re.IGNORECASE)
     html = re.sub(css_pattern, repl_css, html)
+
+    return html
+
+
+def _remove_external_dependencies(html: str) -> str:
+    """移除外部CDN依赖，替换为本地资源或移除"""
+    import re
+
+    # 移除 Tailwind CDN
+    html = re.sub(
+        r'<script[^>]*src=["\']https://cdn\.tailwindcss\.com[^"\']*["\'][^>]*></script>',
+        '<link href="/static/css/tailwind.min.css" rel="stylesheet">',
+        html,
+        flags=re.IGNORECASE
+    )
+
+    # 移除其他可能导致PDF渲染问题的外部脚本
+    external_scripts = [
+        r'<script[^>]*src=["\']https://cdn\.jsdelivr\.net[^"\']*["\'][^>]*></script>',
+        r'<script[^>]*src=["\']https://cdnjs\.cloudflare\.com[^"\']*["\'][^>]*></script>',
+        r'<script[^>]*src=["\']https://unpkg\.com[^"\']*["\'][^>]*></script>',
+    ]
+
+    for pattern in external_scripts:
+        html = re.sub(pattern, '', html, flags=re.IGNORECASE)
+
+    # 移除外部字体链接（可能导致渲染阻塞）
+    html = re.sub(
+        r'<link[^>]*href=["\']https://fonts\.googleapis\.com[^"\']*["\'][^>]*>',
+        '',
+        html,
+        flags=re.IGNORECASE
+    )
 
     return html
 
