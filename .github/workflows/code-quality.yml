@@ -75,7 +75,7 @@ jobs:
         semgrep --config=auto src/ --json --output=semgrep-report.json || true
         
     - name: Upload security reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: security-reports
         path: |
@@ -106,7 +106,7 @@ jobs:
         pip-audit --format=json --output=dependency-audit.json || true
         
     - name: Upload dependency report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: dependency-audit
         path: dependency-audit.json
@@ -139,7 +139,7 @@ jobs:
         xenon src/ --max-absolute B --max-modules A --max-average A || true
         
     - name: Upload complexity reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: complexity-reports
         path: |

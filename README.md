@@ -137,6 +137,9 @@ source .venv/bin/activate
 # 3. 安装依赖
 pip install -r requirements.txt
 
+# 可选：安装 Apryse SDK 以支持 PPTX 导出功能
+pip install --extra-index-url https://pypi.apryse.com apryse-sdk>=11.6.0
+
 # 4. 启动应用 (选择其中一种方式)
 
 # 方式A: 使用Python脚本启动

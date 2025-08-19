@@ -30,7 +30,12 @@ COPY requirements.txt ./
 RUN python -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
     /opt/venv/bin/pip install --no-cache-dir psycopg2-binary requests && \
-    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt && \
+    # Install dependencies excluding apryse-sdk first
+    grep -v "apryse-sdk" requirements.txt > requirements-temp.txt && \
+    /opt/venv/bin/pip install --no-cache-dir -r requirements-temp.txt && \
+    # Install Apryse SDK from their official PyPI index
+    /opt/venv/bin/pip install --no-cache-dir --extra-index-url https://pypi.apryse.com apryse-sdk>=11.6.0 && \
+    rm requirements-temp.txt && \
     # Clean up build artifacts
     find /opt/venv -name "*.pyc" -delete && \
     find /opt/venv -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
@@ -126,11 +131,10 @@ COPY docker-healthcheck.sh docker-entrypoint.sh ./
 # Copy backup scripts
 COPY backup_to_r2_enhanced.sh ./
 
-# Create tools directory and copy database health check tools
-RUN mkdir -p tools
-COPY database_health_check.py database_diagnosis.py ./tools/ 
-# Create placeholder if tools are missing
-RUN [ -f "tools/database_health_check.py" ] || echo "#!/usr/bin/env python3\nprint('Database tools not available')" > tools/placeholder.py
+# Create tools directory and placeholder for database health check tools
+RUN mkdir -p tools && \
+    echo "#!/usr/bin/env python3\nprint('Database tools not available')" > tools/placeholder.py && \
+    chmod +x tools/placeholder.py
 
 # Create enhanced scripts from standard ones
 RUN cp docker-healthcheck.sh docker-healthcheck-enhanced.sh && \
@@ -138,7 +142,7 @@ RUN cp docker-healthcheck.sh docker-healthcheck-enhanced.sh && \
 
 # Create directories and set permissions in one layer
 RUN chmod +x docker-healthcheck*.sh docker-entrypoint*.sh backup_to_r2*.sh 2>/dev/null || true && \
-    chmod +x tools/*.py 2>/dev/null || true && \
+    find tools -name "*.py" -exec chmod +x {} \; 2>/dev/null || true && \
     mkdir -p temp/ai_responses_cache temp/style_genes_cache temp/summeryanyfile_cache temp/templates_cache \
              research_reports lib/Linux lib/MacOS lib/Windows uploads data tools logs db && \
     chown -R flowslide:flowslide /app /home/flowslide && \
