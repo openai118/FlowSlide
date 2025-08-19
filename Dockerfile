@@ -108,14 +108,23 @@ RUN apt-get update && \
 # Install rclone for backup functionality (optional, can be skipped for faster builds)
 RUN curl -fsSL https://rclone.org/install.sh | bash || echo "Warning: rclone installation failed"
 
-# Create non-root user (for compatibility, but run as root)
-# Ensure runtime deps in production stage (defensive install)
-COPY requirements.txt ./
-RUN /opt/venv/bin/pip install --no-cache-dir -r requirements.txt --extra-index-url https://pypi.apryse.com
+# Copy Python packages from builder FIRST
+COPY --from=builder /opt/venv /opt/venv
 
+# Create non-root user (for compatibility, but run as root)
 RUN groupadd -r flowslide && \
     useradd -r -g flowslide -m -d /home/flowslide flowslide && \
     mkdir -p /home/flowslide/.cache/ms-playwright /root/.cache/ms-playwright
+
+# Ensure runtime deps in production stage (defensive install after venv copy)
+COPY requirements.txt ./
+RUN /opt/venv/bin/pip install --no-cache-dir -r requirements.txt --extra-index-url https://pypi.apryse.com
+# Harden runtime: ensure python, python3 point to venv
+RUN ln -sf /opt/venv/bin/python /usr/local/bin/python \
+    && ln -sf /opt/venv/bin/python /usr/local/bin/python3 \
+    && ln -sf /opt/venv/bin/pip /usr/local/bin/pip \
+    && ln -sf /opt/venv/bin/pip /usr/local/bin/pip3
+
 
 # Copy Python packages from builder
 COPY --from=builder /opt/venv /opt/venv
