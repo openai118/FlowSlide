@@ -119,11 +119,9 @@ RUN groupadd -r flowslide && \
 # Ensure runtime deps in production stage (defensive install after venv copy)
 COPY requirements.txt ./
 RUN /opt/venv/bin/pip install --no-cache-dir -r requirements.txt --extra-index-url https://pypi.apryse.com
-# Harden runtime: ensure python, python3 point to venv
-RUN ln -sf /opt/venv/bin/python /usr/local/bin/python \
-    && ln -sf /opt/venv/bin/python /usr/local/bin/python3 \
-    && ln -sf /opt/venv/bin/pip /usr/local/bin/pip \
-    && ln -sf /opt/venv/bin/pip /usr/local/bin/pip3
+# Avoid altering system python/pip symlinks to prevent circular links
+# PATH already prioritizes /opt/venv/bin so venv tools are used by default
+RUN true
 
 
 # Copy Python packages from builder
