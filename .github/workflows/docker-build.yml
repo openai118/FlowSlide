@@ -27,7 +27,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements-ci.txt
+        pip install -r requirements.txt --extra-index-url https://pypi.apryse.com
         
     - name: Run basic tests
       run: |

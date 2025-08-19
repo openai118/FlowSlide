@@ -24,15 +24,15 @@ RUN apt-get update && \
 
 # Set work directory and copy dependency files
 WORKDIR /app
-COPY requirements-docker.txt requirements.txt ./
+COPY requirements.txt ./
 
 # Install Python dependencies to a virtual environment
 RUN python -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
     /opt/venv/bin/pip install --no-cache-dir psycopg2-binary requests && \
-    # Install Docker dependencies (full functionality)
-    /opt/venv/bin/pip install --no-cache-dir -r requirements-docker.txt && \
-    # Try to install Apryse SDK from their official PyPI index (optional)
+    # Install project dependencies (full requirements)
+    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt && \
+    # Ensure Apryse SDK from official index (retry from private index if needed)
     (/opt/venv/bin/pip install --no-cache-dir --extra-index-url https://pypi.apryse.com apryse-sdk>=11.6.0 && \
      echo "✅ Apryse SDK installed successfully") || \
     echo "⚠️ Apryse SDK installation failed - PPTX export will not be available" && \
