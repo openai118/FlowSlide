@@ -30,9 +30,11 @@ from typing import Any, Callable, Protocol
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 # Protocol for metrics collector to satisfy type checkers
 class MetricsProtocol(Protocol):
     def track_http_request(self, *args, **kwargs) -> None: ...
+
 
 # Placeholder type annotations for metrics objects
 metrics_collector: MetricsProtocol
@@ -40,7 +42,10 @@ metrics_endpoint: Callable[[], Any]
 
 # 条件导入监控模块
 try:
-    from .monitoring import metrics_collector as _metrics_collector, metrics_endpoint as _metrics_endpoint
+    from .monitoring import (
+        metrics_collector as _metrics_collector,
+        metrics_endpoint as _metrics_endpoint,
+    )
 
     metrics_collector = _metrics_collector  # type: ignore[assignment]
     metrics_endpoint = _metrics_endpoint  # type: ignore[assignment]
