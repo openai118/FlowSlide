@@ -4,10 +4,10 @@ Quick Database Check Script for FlowSlide
 Performs basic database connectivity and health checks
 """
 
-import sys
-import os
 import asyncio
 import logging
+import os
+import sys
 from pathlib import Path
 
 # Add src to path

@@ -5065,7 +5065,8 @@ def _remove_external_dependencies(html: str) -> str:
 
     # 仅替换 Tailwind CDN 为本地版本
     html = re.sub(
-        r'<script[^>]*src=["\']https://cdn\.tailwindcss\.com[^"\']*["\'][^>]*></script>',
+        r'<script[^>]*src=["\']https://cdn\.tailwindcss\.com[^"\']*["\'][^>]*>'
+        r'</script>',
         '<link href="/static/css/tailwind.min.css" rel="stylesheet">',
         html,
         flags=re.IGNORECASE

@@ -30,8 +30,12 @@ COPY requirements-docker.txt requirements.txt ./
 RUN python -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
     /opt/venv/bin/pip install --no-cache-dir psycopg2-binary requests && \
-    # Install Docker-optimized dependencies (lightweight)
+    # Install Docker dependencies (full functionality)
     /opt/venv/bin/pip install --no-cache-dir -r requirements-docker.txt && \
+    # Try to install Apryse SDK from their official PyPI index (optional)
+    (/opt/venv/bin/pip install --no-cache-dir --extra-index-url https://pypi.apryse.com apryse-sdk>=11.6.0 && \
+     echo "✅ Apryse SDK installed successfully") || \
+    echo "⚠️ Apryse SDK installation failed - PPTX export will not be available" && \
     # Clean up build artifacts
     find /opt/venv -name "*.pyc" -delete && \
     find /opt/venv -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
@@ -106,10 +110,13 @@ RUN groupadd -r flowslide && \
 # Copy Python packages from builder
 COPY --from=builder /opt/venv /opt/venv
 
-# Install Playwright with minimal footprint (use system chromium to save time)
+# Install Playwright with optimized browser installation
 RUN /opt/venv/bin/pip install --no-cache-dir playwright==1.40.0 && \
-    # Use system chromium instead of downloading playwright's chromium
-    PLAYWRIGHT_BROWSERS_PATH=/usr/bin /opt/venv/bin/playwright install-deps chromium || true && \
+    # Install only Chromium browser (fastest option)
+    /opt/venv/bin/playwright install chromium && \
+    # Clean up browser cache to save space
+    rm -rf /root/.cache/ms-playwright/chromium-*/chrome-linux/locales && \
+    rm -rf /root/.cache/ms-playwright/chromium-*/chrome-linux/resources && \
     chown -R flowslide:flowslide /home/flowslide && \
     rm -rf /tmp/* /var/tmp/*
 

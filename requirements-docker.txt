@@ -33,14 +33,14 @@ Pillow>=10.1.0
 # Image generation services (lightweight)
 replicate>=0.22.0
 
-# Search and research libraries (essential only)
+# Search and research libraries (full functionality)
 tavily-python>=0.7.8
-# mineru[core]>=2.0.6  # Heavy package, excluded for Docker
+mineru[core]>=2.0.6
 markitdown[all]>=0.1.2
-# onnxruntime>=1.20.0  # Heavy package, excluded for Docker
-# apryse-sdk>=11.6.0  # Excluded for Docker
+onnxruntime>=1.20.0
+# apryse-sdk>=11.6.0  # Will be installed separately in Dockerfile
 
-# Browser automation (will use system chromium)
+# Browser automation (REQUIRED for PDF export)
 playwright>=1.40.0
 
 # Utilities
