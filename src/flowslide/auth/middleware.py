@@ -152,9 +152,7 @@ def require_admin(request: Request) -> User:
     return user
 
 
-def get_current_user_optional(
-    request: Request, db: Session = Depends(get_db)
-) -> Optional[User]:
+def get_current_user_optional(request: Request, db: Session = Depends(get_db)) -> Optional[User]:
     """Get current user if authenticated, None otherwise"""
     session_id = request.cookies.get("session_id")
     if not session_id:

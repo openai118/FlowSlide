@@ -11,12 +11,10 @@ from typing import Optional
 import click
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import (BarColumn, Progress, SpinnerColumn, TextColumn,
-                           TimeElapsedColumn)
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
-from .config.settings import (create_default_config, create_env_template,
-                              load_settings)
+from .config.settings import create_default_config, create_env_template, load_settings
 from .core.models import ChunkStrategy, ProcessingConfig
 from .generators.ppt_generator import PPTOutlineGenerator
 from .utils.file_handler import FileHandler
@@ -47,9 +45,7 @@ def cli(ctx, config, log_level, debug):
     ctx.obj["settings"] = settings
 
     if debug:
-        console.print(
-            f"[dim]配置加载完成: {settings.llm_provider}/{settings.llm_model}[/dim]"
-        )
+        console.print(f"[dim]配置加载完成: {settings.llm_provider}/{settings.llm_model}[/dim]")
 
 
 @cli.command()
@@ -65,19 +61,13 @@ def cli(ctx, config, log_level, debug):
     help="分块策略",
 )
 @click.option("--model", help="LLM模型名称")
-@click.option(
-    "--provider", type=click.Choice(["openai", "anthropic", "azure"]), help="LLM提供商"
-)
+@click.option("--provider", type=click.Choice(["openai", "anthropic", "azure"]), help="LLM提供商")
 @click.option("--temperature", type=float, help="温度参数 (0.0-2.0)")
 @click.option("--max-tokens", type=int, help="最大token数量")
 @click.option("--base-url", help="自定义OpenAI API端点URL")
-@click.option(
-    "--save-markdown", is_flag=True, help="保存转换后的Markdown文件到temp目录"
-)
+@click.option("--save-markdown", is_flag=True, help="保存转换后的Markdown文件到temp目录")
 @click.option("--temp-dir", help="自定义temp目录路径")
-@click.option(
-    "--no-magic-pdf", is_flag=True, help="禁用Magic-PDF，强制使用MarkItDown处理PDF"
-)
+@click.option("--no-magic-pdf", is_flag=True, help="禁用Magic-PDF，强制使用MarkItDown处理PDF")
 @click.option("--no-progress", is_flag=True, help="禁用进度条")
 @click.pass_context
 def generate(
@@ -279,9 +269,7 @@ def _show_generation_summary(outline):
 
 
 @cli.command()
-@click.option(
-    "--provider", type=click.Choice(["openai", "anthropic", "azure"]), help="LLM提供商"
-)
+@click.option("--provider", type=click.Choice(["openai", "anthropic", "azure"]), help="LLM提供商")
 def validate_setup(provider):
     """验证设置和API连接"""
     console.print("[blue]正在验证设置...[/blue]")
@@ -359,9 +347,7 @@ def analyze(input_path):
 
         # 显示内容预览
         preview = (
-            doc_info.content[:500] + "..."
-            if len(doc_info.content) > 500
-            else doc_info.content
+            doc_info.content[:500] + "..." if len(doc_info.content) > 500 else doc_info.content
         )
         console.print(Panel(preview, title="内容预览"))
 

@@ -11,9 +11,16 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 
-from ..models import (ImageFormat, ImageGenerationRequest, ImageInfo,
-                      ImageMetadata, ImageOperationResult, ImageProvider,
-                      ImageSourceType, ImageTag)
+from ..models import (
+    ImageFormat,
+    ImageGenerationRequest,
+    ImageInfo,
+    ImageMetadata,
+    ImageOperationResult,
+    ImageProvider,
+    ImageSourceType,
+    ImageTag,
+)
 from .base import ImageGenerationProvider
 
 logger = logging.getLogger(__name__)
@@ -78,9 +85,7 @@ class DalleProvider(ImageGenerationProvider):
 
                     if response.status != 200:
                         error_text = await response.text()
-                        logger.error(
-                            f"DALL-E API error {response.status}: {error_text}"
-                        )
+                        logger.error(f"DALL-E API error {response.status}: {error_text}")
                         return ImageOperationResult(
                             success=False,
                             message=f"DALL-E API error: {response.status}",
@@ -152,9 +157,7 @@ class DalleProvider(ImageGenerationProvider):
             image_path, image_size = await self._download_image(image_url, request)
 
             # 创建图片信息
-            image_info = self._create_image_info(
-                image_path, image_size, request, revised_prompt
-            )
+            image_info = self._create_image_info(image_path, image_size, request, revised_prompt)
 
             return ImageOperationResult(
                 success=True,
@@ -264,17 +267,13 @@ class DalleProvider(ImageGenerationProvider):
             "with",
             "by",
         }
-        keywords = [
-            word for word in keywords if word not in stop_words and len(word) > 2
-        ]
+        keywords = [word for word in keywords if word not in stop_words and len(word) > 2]
 
         # 生成标签
         tags = []
         for i, keyword in enumerate(keywords[:10]):  # 最多10个标签
             confidence = max(0.5, 1.0 - i * 0.1)  # 递减的置信度
-            tags.append(
-                ImageTag(name=keyword, confidence=confidence, category="ai_generated")
-            )
+            tags.append(ImageTag(name=keyword, confidence=confidence, category="ai_generated"))
 
         return tags
 

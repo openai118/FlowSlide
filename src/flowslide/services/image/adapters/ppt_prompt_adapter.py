@@ -88,9 +88,7 @@ class PPTPromptAdapter:
             style_desc = self._get_scenario_style(slide_context.scenario)
 
             # 获取内容类型描述
-            content_desc = self._get_content_description(
-                slide_context, content_analysis
-            )
+            content_desc = self._get_content_description(slide_context, content_analysis)
 
             # 选择合适的提示词模板
             template_key = self._select_template_key(slide_context, content_analysis)
@@ -164,28 +162,20 @@ class PPTPromptAdapter:
         elif slide_context.page_number == slide_context.total_pages:
             analysis["type"] = "conclusion"
         elif any(
-            word in content
-            for word in ["数据", "统计", "图表", "分析", "data", "chart", "graph"]
+            word in content for word in ["数据", "统计", "图表", "分析", "data", "chart", "graph"]
         ):
             analysis["type"] = "data"
         elif any(
-            word in content
-            for word in ["流程", "步骤", "过程", "process", "workflow", "step"]
+            word in content for word in ["流程", "步骤", "过程", "process", "workflow", "step"]
         ):
             analysis["type"] = "process"
-        elif any(
-            word in content for word in ["对比", "比较", "versus", "comparison", "vs"]
-        ):
+        elif any(word in content for word in ["对比", "比较", "versus", "comparison", "vs"]):
             analysis["type"] = "comparison"
         elif any(
-            word in content
-            for word in ["时间", "历史", "发展", "timeline", "history", "evolution"]
+            word in content for word in ["时间", "历史", "发展", "timeline", "history", "evolution"]
         ):
             analysis["type"] = "timeline"
-        elif any(
-            word in content
-            for word in ["概述", "总览", "overview", "summary", "outline"]
-        ):
+        elif any(word in content for word in ["概述", "总览", "overview", "summary", "outline"]):
             analysis["type"] = "overview"
 
         # 提取关键词
@@ -357,9 +347,7 @@ class PPTPromptAdapter:
     ) -> str:
         """获取内容描述"""
         content_type = content_analysis["type"]
-        base_desc = self.content_type_visuals.get(
-            content_type, "professional presentation slide"
-        )
+        base_desc = self.content_type_visuals.get(content_type, "professional presentation slide")
 
         # 添加关键词增强
         if content_analysis["keywords"]:
@@ -388,9 +376,7 @@ class PPTPromptAdapter:
         else:
             return "content"
 
-    def _enhance_prompt_quality(
-        self, prompt: str, slide_context: PPTSlideContext
-    ) -> str:
+    def _enhance_prompt_quality(self, prompt: str, slide_context: PPTSlideContext) -> str:
         """增强提示词质量"""
         # 添加质量修饰符
         quality_modifiers = [
@@ -455,9 +441,9 @@ class PPTPromptAdapter:
 
     def _map_sizes_for_provider(self, provider: ImageProvider, aspect_ratio: str) -> dict:
         """Return default size params for provider based on aspect ratio.
-        
+
         Note: DALL·E 3 doesn't support native 4:3 aspect ratio. For 4:3 requests,
-        we use 1024x1024 (closest square) which will be letterboxed/cropped by 
+        we use 1024x1024 (closest square) which will be letterboxed/cropped by
         the slide rendering to fit 4:3 canvas dimensions (1280x960).
         """
         if provider == ImageProvider.DALLE:
@@ -517,9 +503,7 @@ class PPTPromptAdapter:
 
         # 标题页提升质量
         if slide_context.page_number == 1:
-            params["quality"] = (
-                "hd" if provider == ImageProvider.DALLE else params.get("quality")
-            )
+            params["quality"] = "hd" if provider == ImageProvider.DALLE else params.get("quality")
 
         return params
 

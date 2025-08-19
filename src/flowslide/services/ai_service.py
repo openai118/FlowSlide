@@ -8,8 +8,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from ..ai import AIMessage, MessageRole, get_ai_provider
-from ..api.models import (ChatCompletionRequest, CompletionRequest,
-                          PPTGenerationRequest)
+from ..api.models import ChatCompletionRequest, CompletionRequest, PPTGenerationRequest
 from ..core.config import ai_config
 
 logger = logging.getLogger(__name__)
@@ -126,15 +125,11 @@ class AIService:
             # Convert to AI messages
             ai_messages = []
             for msg in request.messages:
-                ai_messages.append(
-                    AIMessage(role=MessageRole(msg.role), content=msg.content)
-                )
+                ai_messages.append(AIMessage(role=MessageRole(msg.role), content=msg.content))
 
             # Add system prompt for PPT generation
             system_prompt = self._get_ppt_system_prompt()
-            ai_messages.insert(
-                0, AIMessage(role=MessageRole.SYSTEM, content=system_prompt)
-            )
+            ai_messages.insert(0, AIMessage(role=MessageRole.SYSTEM, content=system_prompt))
 
             # Generate response using AI provider
             response = await self.ai_provider.chat_completion(
@@ -149,16 +144,12 @@ class AIService:
         except Exception as e:
             logger.error(f"Error in PPT chat request: {e}")
             # Fallback to basic response
-            return await self._generate_fallback_ppt_response(
-                request.messages[-1].content
-            )
+            return await self._generate_fallback_ppt_response(request.messages[-1].content)
 
     async def handle_ppt_completion_request(self, request: CompletionRequest) -> str:
         """Handle PPT-related completion request using real AI"""
         try:
-            prompt = (
-                request.prompt if isinstance(request.prompt, str) else request.prompt[0]
-            )
+            prompt = request.prompt if isinstance(request.prompt, str) else request.prompt[0]
 
             # Create enhanced prompt for PPT generation
             enhanced_prompt = self._create_ppt_prompt(prompt)
@@ -184,23 +175,17 @@ class AIService:
             # Convert to AI messages
             ai_messages = []
             for msg in request.messages:
-                ai_messages.append(
-                    AIMessage(role=MessageRole(msg.role), content=msg.content)
-                )
+                ai_messages.append(AIMessage(role=MessageRole(msg.role), content=msg.content))
 
             # Add system prompt for general assistance
             system_prompt = self._get_general_system_prompt()
-            ai_messages.insert(
-                0, AIMessage(role=MessageRole.SYSTEM, content=system_prompt)
-            )
+            ai_messages.insert(0, AIMessage(role=MessageRole.SYSTEM, content=system_prompt))
 
             # Generate response using AI provider
             response = await self.ai_provider.chat_completion(
                 messages=ai_messages,
                 max_tokens=request.max_tokens
-                or min(
-                    ai_config.max_tokens, 1000
-                ),  # Use smaller limit for general chat
+                or min(ai_config.max_tokens, 1000),  # Use smaller limit for general chat
                 temperature=request.temperature or ai_config.temperature,
                 top_p=request.top_p or ai_config.top_p,
             )
@@ -210,18 +195,12 @@ class AIService:
         except Exception as e:
             logger.error(f"Error in general chat request: {e}")
             # Fallback to simple response
-            return self._generate_fallback_general_response(
-                request.messages[-1].content
-            )
+            return self._generate_fallback_general_response(request.messages[-1].content)
 
-    async def handle_general_completion_request(
-        self, request: CompletionRequest
-    ) -> str:
+    async def handle_general_completion_request(self, request: CompletionRequest) -> str:
         """Handle general (non-PPT) completion request using real AI"""
         try:
-            prompt = (
-                request.prompt if isinstance(request.prompt, str) else request.prompt[0]
-            )
+            prompt = request.prompt if isinstance(request.prompt, str) else request.prompt[0]
 
             # Create enhanced prompt for general assistance
             enhanced_prompt = self._create_general_prompt(prompt)
@@ -230,9 +209,7 @@ class AIService:
             response = await self.ai_provider.text_completion(
                 prompt=enhanced_prompt,
                 max_tokens=request.max_tokens
-                or min(
-                    ai_config.max_tokens, 1000
-                ),  # Use smaller limit for general completion
+                or min(ai_config.max_tokens, 1000),  # Use smaller limit for general completion
                 temperature=request.temperature or ai_config.temperature,
                 top_p=request.top_p or ai_config.top_p,
             )
@@ -376,9 +353,7 @@ Try saying something like: "Create a PPT about artificial intelligence for begin
         scenario = ppt_info["scenario"]
         language = ppt_info["language"]
 
-        template = self.scenario_templates.get(
-            scenario, self.scenario_templates["general"]
-        )
+        template = self.scenario_templates.get(scenario, self.scenario_templates["general"])
 
         if language == "zh":
             response = f"""# {topic} - PPT大纲
@@ -439,11 +414,11 @@ Try saying something like: "Create a PPT about artificial intelligence for begin
                 }
 
                 section_name = section_names.get(section, section)
-                response += (
-                    f"### 第{i}页：{section_name}\n- 相关内容要点\n- 支撑数据或案例\n\n"
-                )
+                response += f"### 第{i}页：{section_name}\n- 相关内容要点\n- 支撑数据或案例\n\n"
 
-            response += f"### 第{len(template['structure']) + 3}页：谢谢\n- 感谢聆听\n- 联系方式\n- Q&A环节"
+            response += (
+                f"### 第{len(template['structure']) + 3}页：谢谢\n- 感谢聆听\n- 联系方式\n- Q&A环节"
+            )
 
         else:
             response = f"""# {topic} - PPT Outline

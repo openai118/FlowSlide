@@ -13,10 +13,14 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 
 from .image.models import ImageSourceType
-from .models.slide_image_info import (ImagePurpose, ImageRequirement,
-                                      ImageSource, SlideImageInfo,
-                                      SlideImageRequirements,
-                                      SlideImagesCollection)
+from .models.slide_image_info import (
+    ImagePurpose,
+    ImageRequirement,
+    ImageSource,
+    SlideImageInfo,
+    SlideImageRequirements,
+    SlideImagesCollection,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +48,7 @@ class PPTImageProcessor:
 
         return build_absolute_url(relative_path)
 
-    def _get_enabled_image_sources(
-        self, image_config: Dict[str, Any]
-    ) -> List[ImageSource]:
+    def _get_enabled_image_sources(self, image_config: Dict[str, Any]) -> List[ImageSource]:
         """获取启用的图像来源"""
         enabled_sources = []
         if image_config.get("enable_local_images", True):
@@ -83,9 +85,7 @@ class PPTImageProcessor:
             slide_title = slide_data.get("title", f"第{page_number}页")
             slide_content = slide_data.get("content_points", [])
             slide_content_text = (
-                "\n".join(slide_content)
-                if isinstance(slide_content, list)
-                else str(slide_content)
+                "\n".join(slide_content) if isinstance(slide_content, list) else str(slide_content)
             )
 
             # 检查启用的图片来源
@@ -116,16 +116,11 @@ class PPTImageProcessor:
             )
 
             # 创建图片集合
-            images_collection = SlideImagesCollection(
-                page_number=page_number, images=[]
-            )
+            images_collection = SlideImagesCollection(page_number=page_number, images=[])
 
             # 根据需求处理各种来源的图片
             for requirement in image_requirements.requirements:
-                if (
-                    requirement.source == ImageSource.LOCAL
-                    and ImageSource.LOCAL in enabled_sources
-                ):
+                if requirement.source == ImageSource.LOCAL and ImageSource.LOCAL in enabled_sources:
                     local_images = await self._process_local_images(
                         requirement,
                         project_topic,
@@ -205,14 +200,10 @@ class PPTImageProcessor:
         slide_title = slide_data.get("title", "")
         slide_content = slide_data.get("content_points", [])
         slide_content_text = (
-            "\n".join(slide_content)
-            if isinstance(slide_content, list)
-            else str(slide_content)
+            "\n".join(slide_content) if isinstance(slide_content, list) else str(slide_content)
         )
         content_length = len(slide_content_text.strip())
-        content_points_count = (
-            len(slide_content) if isinstance(slide_content, list) else 0
-        )
+        content_points_count = len(slide_content) if isinstance(slide_content, list) else 0
 
         # 处理启用的来源和配置限制
         if not enabled_sources:
@@ -341,9 +332,7 @@ class PPTImageProcessor:
 
 请直接返回纯JSON格式的结果："""
 
-                response = await self.ai_provider.text_completion(
-                    prompt=prompt, temperature=0.7
-                )
+                response = await self.ai_provider.text_completion(prompt=prompt, temperature=0.7)
 
                 # 解析AI响应
                 # 清理AI响应内容
@@ -358,20 +347,13 @@ class PPTImageProcessor:
 
                 result = json.loads(json_content)
 
-                if (
-                    not result.get("needs_images", False)
-                    or result.get("total_images", 0) == 0
-                ):
+                if not result.get("needs_images", False) or result.get("total_images", 0) == 0:
                     reasoning = result.get("reasoning", "未提供理由")
-                    logger.info(
-                        f"AI判断第{page_number}页不需要或不适合配图: {reasoning}"
-                    )
+                    logger.info(f"AI判断第{page_number}页不需要或不适合配图: {reasoning}")
                     return None
 
                 # 创建需求对象
-                requirements = SlideImageRequirements(
-                    page_number=page_number, requirements=[]
-                )
+                requirements = SlideImageRequirements(page_number=page_number, requirements=[])
 
                 for req_data in result.get("requirements", []):
                     requirement = ImageRequirement(
@@ -383,9 +365,7 @@ class PPTImageProcessor:
                     )
                     requirements.add_requirement(requirement)
 
-                logger.info(
-                    f"AI分析第{page_number}页图片需求: {result.get('reasoning', '')}"
-                )
+                logger.info(f"AI分析第{page_number}页图片需求: {result.get('reasoning', '')}")
                 return requirements
 
             except (json.JSONDecodeError, KeyError, ValueError) as e:
@@ -538,9 +518,7 @@ class PPTImageProcessor:
 
                 config_service = get_config_service()
                 all_config = config_service.get_all_config()
-                default_provider = all_config.get(
-                    "default_network_search_provider", "unsplash"
-                )
+                default_provider = all_config.get("default_network_search_provider", "unsplash")
                 logger.warning(f"默认网络搜索提供商: {default_provider}")
                 logger.warning(
                     f"Unsplash API Key: {'已配置' if image_config.get('unsplash_access_key') else '未配置'}"
@@ -567,18 +545,14 @@ class PPTImageProcessor:
             # 搜索更多图片以便在下载失败时有备选
             search_count = min(requirement.count * 3, 20)  # 搜索3倍数量，但不超过20张
             # logger.info(f"开始网络搜索，关键词: {search_query}, 搜索数量: {search_count}")
-            network_images = await self._search_images_directly(
-                search_query, search_count
-            )
+            network_images = await self._search_images_directly(search_query, search_count)
             # logger.info(f"网络搜索返回 {len(network_images)} 张图片")
 
             # 下载网络图片到本地缓存文件夹，带重试机制
             successful_downloads = 0
             image_index = 0
 
-            while successful_downloads < requirement.count and image_index < len(
-                network_images
-            ):
+            while successful_downloads < requirement.count and image_index < len(network_images):
                 image_data = network_images[image_index]
                 image_index += 1
 
@@ -589,10 +563,8 @@ class PPTImageProcessor:
                     )
 
                     # 下载图片到本地缓存，带重试机制
-                    cached_image_info = (
-                        await self._download_network_image_to_cache_with_retry(
-                            image_data, meaningful_title
-                        )
+                    cached_image_info = await self._download_network_image_to_cache_with_retry(
+                        image_data, meaningful_title
                     )
 
                     if cached_image_info:
@@ -611,9 +583,7 @@ class PPTImageProcessor:
                         )
                         images.append(slide_image)
                         successful_downloads += 1
-                        logger.info(
-                            f"网络图片缓存成功: {cached_image_info['absolute_url']}"
-                        )
+                        logger.info(f"网络图片缓存成功: {cached_image_info['absolute_url']}")
                     else:
                         logger.warning(f"网络图片缓存失败，尝试下一张图片")
 
@@ -636,9 +606,7 @@ class PPTImageProcessor:
 
             config_service = get_config_service()
             all_config = config_service.get_all_config()
-            default_provider = all_config.get(
-                "default_network_search_provider", "unsplash"
-            )
+            default_provider = all_config.get("default_network_search_provider", "unsplash")
 
             # 检查默认提供商的API密钥是否配置
             if default_provider == "unsplash":
@@ -665,9 +633,7 @@ class PPTImageProcessor:
                 or (searxng_host and searxng_host.strip())
             )
 
-    async def _search_images_with_service(
-        self, query: str, count: int
-    ) -> List[Dict[str, Any]]:
+    async def _search_images_with_service(self, query: str, count: int) -> List[Dict[str, Any]]:
         """使用图片服务搜索图片"""
         # 创建搜索缓存键
         search_key = f"{query}_{count}"
@@ -708,12 +674,8 @@ class PPTImageProcessor:
                     "tags": ", ".join([tag.name for tag in (image_info.tags or [])]),
                     "user": image_info.author or "Unknown",
                     "pageURL": image_info.source_url or "",
-                    "imageWidth": (
-                        image_info.metadata.width if image_info.metadata else 0
-                    ),
-                    "imageHeight": (
-                        image_info.metadata.height if image_info.metadata else 0
-                    ),
+                    "imageWidth": (image_info.metadata.width if image_info.metadata else 0),
+                    "imageHeight": (image_info.metadata.height if image_info.metadata else 0),
                 }
                 images.append(image_data)
 
@@ -832,18 +794,14 @@ class PPTImageProcessor:
             logger.error(f"处理AI生成图片失败: {e}")
             return images
 
-    async def _search_multiple_local_images(
-        self, keywords: str, count: int
-    ) -> List[str]:
+    async def _search_multiple_local_images(self, keywords: str, count: int) -> List[str]:
         """搜索多张本地图片"""
         try:
             if not self.image_service:
                 return []
 
             # 获取所有本地图片
-            gallery_result = await self.image_service.list_cached_images(
-                page=1, per_page=100
-            )
+            gallery_result = await self.image_service.list_cached_images(page=1, per_page=100)
             if not gallery_result.get("images"):
                 return []
 
@@ -870,9 +828,7 @@ class PPTImageProcessor:
             logger.error(f"搜索多张本地图片失败: {e}")
             return []
 
-    async def _search_images_directly(
-        self, query: str, count: int
-    ) -> List[Dict[str, Any]]:
+    async def _search_images_directly(self, query: str, count: int) -> List[Dict[str, Any]]:
         """使用配置的默认网络搜索提供商搜索图片"""
         # 创建搜索缓存键
         search_key = f"direct_{query}_{count}"
@@ -896,9 +852,7 @@ class PPTImageProcessor:
 
             config_service = get_config_service()
             all_config = config_service.get_all_config()
-            default_provider = all_config.get(
-                "default_network_search_provider", "unsplash"
-            )
+            default_provider = all_config.get("default_network_search_provider", "unsplash")
 
             logger.debug(f"使用默认网络搜索提供商: {default_provider}")
 
@@ -909,8 +863,7 @@ class PPTImageProcessor:
                 if not pixabay_config.get("api_key"):
                     logger.warning("Pixabay API key not configured")
                     return []
-                from .image.providers.pixabay_provider import \
-                    PixabaySearchProvider
+                from .image.providers.pixabay_provider import PixabaySearchProvider
 
                 provider = PixabaySearchProvider(pixabay_config)
             elif default_provider == "searxng":
@@ -918,8 +871,7 @@ class PPTImageProcessor:
                 if not searxng_config.get("host"):
                     logger.warning("SearXNG host not configured")
                     return []
-                from .image.providers.searxng_image_provider import \
-                    SearXNGSearchProvider
+                from .image.providers.searxng_image_provider import SearXNGSearchProvider
 
                 provider = SearXNGSearchProvider(searxng_config)
             else:  # 默认使用unsplash
@@ -928,8 +880,7 @@ class PPTImageProcessor:
                     logger.warning("Unsplash API key not configured")
                     return []
 
-                from .image.providers.unsplash_provider import \
-                    UnsplashSearchProvider
+                from .image.providers.unsplash_provider import UnsplashSearchProvider
 
                 provider = UnsplashSearchProvider(unsplash_config)
 
@@ -959,17 +910,11 @@ class PPTImageProcessor:
                         "id": image_info.image_id,
                         "webformatURL": image_info.original_url,
                         "largeImageURL": image_info.original_url,
-                        "tags": ", ".join(
-                            [tag.name for tag in (image_info.tags or [])]
-                        ),
+                        "tags": ", ".join([tag.name for tag in (image_info.tags or [])]),
                         "user": image_info.author or "Unknown",
                         "pageURL": image_info.source_url or "",
-                        "imageWidth": (
-                            image_info.metadata.width if image_info.metadata else 0
-                        ),
-                        "imageHeight": (
-                            image_info.metadata.height if image_info.metadata else 0
-                        ),
+                        "imageWidth": (image_info.metadata.width if image_info.metadata else 0),
+                        "imageHeight": (image_info.metadata.height if image_info.metadata else 0),
                     }
                     images.append(image_data)
                     logger.debug(
@@ -1023,9 +968,7 @@ class PPTImageProcessor:
                         image_data_bytes = await response.read()
 
                         # 获取文件扩展名
-                        content_type = response.headers.get(
-                            "content-type", "image/jpeg"
-                        )
+                        content_type = response.headers.get("content-type", "image/jpeg")
                         if "jpeg" in content_type or "jpg" in content_type:
                             file_extension = "jpg"
                         elif "png" in content_type:
@@ -1039,9 +982,7 @@ class PPTImageProcessor:
                         from .image.models import ImageUploadRequest
 
                         # 生成更好的描述和标签
-                        description, tags = self._generate_image_metadata(
-                            image_data, title
-                        )
+                        description, tags = self._generate_image_metadata(image_data, title)
 
                         upload_request = ImageUploadRequest(
                             filename=f"{title}.{file_extension}",
@@ -1120,21 +1061,15 @@ class PPTImageProcessor:
             description = image_data.get("description", "")
 
             # 清理幻灯片标题，移除特殊字符
-            clean_slide_title = "".join(
-                c for c in slide_title if c.isalnum() or c in " -_"
-            )
+            clean_slide_title = "".join(c for c in slide_title if c.isalnum() or c in " -_")
             clean_slide_title = clean_slide_title.strip().replace(" ", "_")
 
             # 如果有标签，使用前2个标签
             if tags:
                 if isinstance(tags, str):
-                    tag_list = [
-                        tag.strip() for tag in tags.split(",")[:2] if tag.strip()
-                    ]
+                    tag_list = [tag.strip() for tag in tags.split(",")[:2] if tag.strip()]
                 elif isinstance(tags, list):
-                    tag_list = [
-                        str(tag).strip() for tag in tags[:2] if str(tag).strip()
-                    ]
+                    tag_list = [str(tag).strip() for tag in tags[:2] if str(tag).strip()]
                 else:
                     tag_list = []
 
@@ -1164,9 +1099,7 @@ class PPTImageProcessor:
 
             # 如果有描述但没有标签
             if description:
-                clean_desc = "".join(
-                    c for c in description[:20] if c.isalnum() or c in " -_"
-                )
+                clean_desc = "".join(c for c in description[:20] if c.isalnum() or c in " -_")
                 clean_desc = clean_desc.strip().replace(" ", "_")
                 if clean_desc:
                     if clean_slide_title:
@@ -1185,9 +1118,7 @@ class PPTImageProcessor:
             # 回退到简单命名
             return f"slide_image_{index}"
 
-    def _generate_image_metadata(
-        self, image_data: Dict[str, Any], title: str
-    ) -> tuple[str, list]:
+    def _generate_image_metadata(self, image_data: Dict[str, Any], title: str) -> tuple[str, list]:
         """生成图片的描述和标签"""
         try:
             # 获取图片来源信息
@@ -1199,11 +1130,7 @@ class PPTImageProcessor:
 
             # 获取图片统计信息
             stats_info = ""
-            if (
-                "views" in image_data
-                or "downloads" in image_data
-                or "likes" in image_data
-            ):
+            if "views" in image_data or "downloads" in image_data or "likes" in image_data:
                 stats = []
                 if "views" in image_data:
                     stats.append(f"浏览: {image_data['views']}")
@@ -1246,15 +1173,11 @@ class PPTImageProcessor:
                 if isinstance(raw_tags, str):
                     # 分割字符串标签
                     tag_list = [
-                        tag.strip()
-                        for tag in raw_tags.replace(",", " ").split()
-                        if tag.strip()
+                        tag.strip() for tag in raw_tags.replace(",", " ").split() if tag.strip()
                     ]
                 elif isinstance(raw_tags, list):
                     # 处理列表标签
-                    tag_list = [
-                        str(tag).strip() for tag in raw_tags if str(tag).strip()
-                    ]
+                    tag_list = [str(tag).strip() for tag in raw_tags if str(tag).strip()]
                 else:
                     tag_list = []
 
@@ -1303,9 +1226,7 @@ class PPTImageProcessor:
             logger.error(f"获取本地图片详细信息失败: {e}")
             return {}
 
-    def _calculate_image_match_score(
-        self, img: Dict[str, Any], keyword_list: List[str]
-    ) -> int:
+    def _calculate_image_match_score(self, img: Dict[str, Any], keyword_list: List[str]) -> int:
         """计算图片匹配分数"""
         score = 0
 
@@ -1380,9 +1301,7 @@ class PPTImageProcessor:
 示例格式：商务 会议 图表 business chart
 请只回复关键词，不要其他内容："""
 
-            response = await self.ai_provider.text_completion(
-                prompt=prompt, temperature=0.5
-            )
+            response = await self.ai_provider.text_completion(prompt=prompt, temperature=0.5)
 
             search_keywords = response.content.strip()
             logger.info(f"AI生成本地搜索关键词: {search_keywords}")
@@ -1403,9 +1322,7 @@ class PPTImageProcessor:
             keyword_list = keywords.lower().split()
 
             # 获取所有本地图片
-            gallery_result = await self.image_service.list_cached_images(
-                page=1, per_page=100
-            )
+            gallery_result = await self.image_service.list_cached_images(page=1, per_page=100)
             if not gallery_result.get("images"):
                 return None
 
@@ -1546,9 +1463,7 @@ class PPTImageProcessor:
 示例格式：{example_format}
 请只回复关键词，不要其他内容："""
 
-            response = await self.ai_provider.text_completion(
-                prompt=prompt, temperature=0.5
-            )
+            response = await self.ai_provider.text_completion(prompt=prompt, temperature=0.5)
 
             search_query = response.content.strip()
 
@@ -1557,18 +1472,14 @@ class PPTImageProcessor:
 
             config_service = get_config_service()
             all_config = config_service.get_all_config()
-            default_provider = all_config.get(
-                "default_network_search_provider", "unsplash"
-            )
+            default_provider = all_config.get("default_network_search_provider", "unsplash")
 
             # Pixabay API的100字符限制，其他提供商使用更宽松的限制
             max_length = 100 if default_provider == "pixabay" else 200
             truncated_query = self._truncate_search_query(search_query, max_length)
 
             if len(search_query) > max_length:
-                logger.warning(
-                    f"搜索关键词过长，已截断: '{search_query}' -> '{truncated_query}'"
-                )
+                logger.warning(f"搜索关键词过长，已截断: '{search_query}' -> '{truncated_query}'")
 
             # logger.info(f"AI生成搜索关键词: {truncated_query}")
             return truncated_query
@@ -1644,9 +1555,7 @@ class PPTImageProcessor:
 3. 考虑PPT演示的整体效果
 4. 只回复对应的数字编号（1-5），不要其他内容"""
 
-            response = await self.ai_provider.text_completion(
-                prompt=prompt, temperature=0.3
-            )
+            response = await self.ai_provider.text_completion(prompt=prompt, temperature=0.3)
 
             choice = response.content.strip()
 
@@ -1746,9 +1655,7 @@ class PPTImageProcessor:
 
 请生成一个完整的英文提示词（不超过120词），直接输出提示词，不要添加任何其他内容"""
 
-            response = await self.ai_provider.text_completion(
-                prompt=prompt, temperature=0.7
-            )
+            response = await self.ai_provider.text_completion(prompt=prompt, temperature=0.7)
 
             image_prompt = response.content.strip()
             logger.info(f"AI生成第{image_index}张图片提示词: {image_prompt}")
@@ -1776,14 +1683,10 @@ class PPTImageProcessor:
             slide_title = slide_data.get("title", "")
             slide_content = slide_data.get("content_points", [])
             slide_content_text = (
-                "\n".join(slide_content)
-                if isinstance(slide_content, list)
-                else str(slide_content)
+                "\n".join(slide_content) if isinstance(slide_content, list) else str(slide_content)
             )
             content_length = len(slide_content_text.strip())
-            content_points_count = (
-                len(slide_content) if isinstance(slide_content, list) else 0
-            )
+            content_points_count = len(slide_content) if isinstance(slide_content, list) else 0
 
             prompt = f"""作为专业的PPT设计师，请根据以下标准判断该幻灯片是否需要插入配图：
 
@@ -1825,16 +1728,12 @@ class PPTImageProcessor:
 
 请基于以上标准进行专业判断，只回复"是"或"否"："""
 
-            response = await self.ai_provider.text_completion(
-                prompt=prompt, temperature=0.7
-            )
+            response = await self.ai_provider.text_completion(prompt=prompt, temperature=0.7)
             # logger.info(f"AI判断是否需要图片的回复: {response.content}")
             decision = response.content.strip().lower()
             should_add = decision in ["是", "yes", "true", "需要", "适合"]
 
-            logger.info(
-                f"AI判断第{page_number}页是否需要图片: {decision} -> {should_add}"
-            )
+            logger.info(f"AI判断第{page_number}页是否需要图片: {decision} -> {should_add}")
             return should_add
 
         except Exception as e:
@@ -1906,14 +1805,10 @@ class PPTImageProcessor:
 - **页眉页脚保持原样**
 """
             # 调用AI进行智能插入
-            response = await self.ai_provider.text_completion(
-                prompt=prompt, temperature=0.3
-            )
+            response = await self.ai_provider.text_completion(prompt=prompt, temperature=0.3)
 
             # 提取markdown代码块中的HTML内容
-            updated_html = self._extract_html_from_markdown_response(
-                response.content.strip()
-            )
+            updated_html = self._extract_html_from_markdown_response(response.content.strip())
 
             if not updated_html:
                 logger.warning("无法从AI响应中提取HTML内容，使用默认插入逻辑")
@@ -1923,9 +1818,7 @@ class PPTImageProcessor:
 
             # 验证返回的HTML是否有效
             if self._validate_html_structure(updated_html):
-                logger.info(
-                    f"AI成功插入{len(images_collection.images)}张图片到幻灯片中"
-                )
+                logger.info(f"AI成功插入{len(images_collection.images)}张图片到幻灯片中")
                 return updated_html
             else:
                 logger.warning("AI返回的HTML结构无效，使用默认插入逻辑")
@@ -1961,9 +1854,7 @@ class PPTImageProcessor:
 
             if match2:
                 html_content = match2.group(1).strip()
-                logger.debug(
-                    f"使用备用模式提取HTML内容，长度: {len(html_content)} 字符"
-                )
+                logger.debug(f"使用备用模式提取HTML内容，长度: {len(html_content)} 字符")
                 return html_content
 
             # 如果还是没找到，尝试查找任何代码块
@@ -1979,9 +1870,7 @@ class PPTImageProcessor:
                     or "<div" in potential_html
                     or "<body" in potential_html
                 ):
-                    logger.debug(
-                        f"从通用代码块中提取HTML内容，长度: {len(potential_html)} 字符"
-                    )
+                    logger.debug(f"从通用代码块中提取HTML内容，长度: {len(potential_html)} 字符")
                     return potential_html
 
             # 最后尝试：如果响应内容本身就是HTML（没有代码块包装）
@@ -2009,9 +1898,7 @@ class PPTImageProcessor:
             soup = BeautifulSoup(html, "html.parser")
 
             # 检查基本结构 - 至少要有一个容器元素
-            container_elements = soup.find_all(
-                ["body", "div", "section", "main", "article"]
-            )
+            container_elements = soup.find_all(["body", "div", "section", "main", "article"])
             if not container_elements:
                 return False
 
@@ -2029,9 +1916,7 @@ class PPTImageProcessor:
             for img in img_elements:
                 src = img.get("src", "").strip()
                 if src and (
-                    src.startswith("http")
-                    or src.startswith("/")
-                    or src.startswith("data:")
+                    src.startswith("http") or src.startswith("/") or src.startswith("data:")
                 ):
                     valid_images += 1
 
@@ -2071,10 +1956,7 @@ class PPTImageProcessor:
             content_areas = soup.find_all(
                 ["div", "section"],
                 class_=lambda x: x
-                and any(
-                    keyword in x.lower()
-                    for keyword in ["content", "main", "body", "text"]
-                ),
+                and any(keyword in x.lower() for keyword in ["content", "main", "body", "text"]),
             )
 
             # 3. 查找标题后的位置
@@ -2097,9 +1979,7 @@ class PPTImageProcessor:
                 # 创建图片容器
                 img_container = soup.new_tag("div")
                 img_container["class"] = "auto-generated-image-container"
-                img_container["style"] = (
-                    "text-align: center; margin: 20px 0; padding: 10px;"
-                )
+                img_container["style"] = "text-align: center; margin: 20px 0; padding: 10px;"
                 img_container.append(img_element)
 
                 # 添加图片说明

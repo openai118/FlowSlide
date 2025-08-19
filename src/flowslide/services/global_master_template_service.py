@@ -97,9 +97,7 @@ class GlobalMasterTemplateService:
         try:
             async with AsyncSessionLocal() as session:
                 db_service = DatabaseService(session)
-                templates = await db_service.get_all_global_master_templates(
-                    active_only
-                )
+                templates = await db_service.get_all_global_master_templates(active_only)
 
                 return [
                     {
@@ -138,13 +136,11 @@ class GlobalMasterTemplateService:
                 offset = (page - 1) * page_size
 
                 # Get templates with pagination
-                templates, total_count = (
-                    await db_service.get_global_master_templates_paginated(
-                        active_only=active_only,
-                        offset=offset,
-                        limit=page_size,
-                        search=search,
-                    )
+                templates, total_count = await db_service.get_global_master_templates_paginated(
+                    active_only=active_only,
+                    offset=offset,
+                    limit=page_size,
+                    search=search,
                 )
 
                 # Calculate pagination info
@@ -189,9 +185,7 @@ class GlobalMasterTemplateService:
         try:
             async with AsyncSessionLocal() as session:
                 db_service = DatabaseService(session)
-                template = await db_service.get_global_master_template_by_id(
-                    template_id
-                )
+                template = await db_service.get_global_master_template_by_id(template_id)
 
                 if not template:
                     return None
@@ -216,9 +210,7 @@ class GlobalMasterTemplateService:
             logger.error(f"Failed to get global master template {template_id}: {e}")
             raise
 
-    async def update_template(
-        self, template_id: int, update_data: Dict[str, Any]
-    ) -> bool:
+    async def update_template(self, template_id: int, update_data: Dict[str, Any]) -> bool:
         """Update a global master template"""
         try:
             # Check if template name conflicts (if being updated)
@@ -247,9 +239,7 @@ class GlobalMasterTemplateService:
 
             async with AsyncSessionLocal() as session:
                 db_service = DatabaseService(session)
-                return await db_service.update_global_master_template(
-                    template_id, update_data
-                )
+                return await db_service.update_global_master_template(template_id, update_data)
 
         except Exception as e:
             logger.error(f"Failed to update global master template {template_id}: {e}")
@@ -262,9 +252,7 @@ class GlobalMasterTemplateService:
                 db_service = DatabaseService(session)
 
                 # Check if template exists
-                template = await db_service.get_global_master_template_by_id(
-                    template_id
-                )
+                template = await db_service.get_global_master_template_by_id(template_id)
                 if not template:
                     logger.warning(f"Template {template_id} not found for deletion")
                     return False
@@ -273,17 +261,13 @@ class GlobalMasterTemplateService:
                 if template.is_default:
                     raise ValueError("Cannot delete the default template")
 
-                logger.info(
-                    f"Deleting template {template_id}: {template.template_name}"
-                )
+                logger.info(f"Deleting template {template_id}: {template.template_name}")
                 result = await db_service.delete_global_master_template(template_id)
 
                 if result:
                     logger.info(f"Successfully deleted template {template_id}")
                 else:
-                    logger.warning(
-                        f"Failed to delete template {template_id} - no rows affected"
-                    )
+                    logger.warning(f"Failed to delete template {template_id} - no rows affected")
 
                 return result
 
@@ -492,12 +476,8 @@ class GlobalMasterTemplateService:
             if not self._validate_html_template(html_template):
                 logger.error(f"Generated HTML template validation failed.")
                 logger.error(f"Template length: {len(html_template)}")
-                logger.error(
-                    f"Template preview (first 2000 chars): {html_template[:2000]}"
-                )
-                logger.error(
-                    f"Template ending (last 500 chars): {html_template[-500:]}"
-                )
+                logger.error(f"Template preview (first 2000 chars): {html_template[:2000]}")
+                logger.error(f"Template ending (last 500 chars): {html_template[-500:]}")
                 raise ValueError("Generated HTML template is invalid")
 
             # Create template data
@@ -520,9 +500,7 @@ class GlobalMasterTemplateService:
         """Extract HTML code from AI response with improved extraction"""
         import re
 
-        logger.info(
-            f"Extracting HTML from response. Content length: {len(response_content)}"
-        )
+        logger.info(f"Extracting HTML from response. Content length: {len(response_content)}")
 
         # Try to extract HTML code block (most common format)
         html_match = re.search(r"```html\s*(.*?)\s*```", response_content, re.DOTALL)
@@ -539,9 +517,7 @@ class GlobalMasterTemplateService:
         )
         if code_block_match:
             extracted = code_block_match.group(1).strip()
-            logger.info(
-                f"Extracted HTML from generic code block. Length: {len(extracted)}"
-            )
+            logger.info(f"Extracted HTML from generic code block. Length: {len(extracted)}")
             return extracted
 
         # Try to extract DOCTYPE HTML directly
@@ -558,9 +534,7 @@ class GlobalMasterTemplateService:
         if content_stripped.lower().startswith(
             "<!doctype html"
         ) and content_stripped.lower().endswith("</html>"):
-            logger.info(
-                f"Content appears to be direct HTML. Length: {len(content_stripped)}"
-            )
+            logger.info(f"Content appears to be direct HTML. Length: {len(content_stripped)}")
             return content_stripped
 
         # Return original content as last resort
@@ -643,14 +617,10 @@ class GlobalMasterTemplateService:
                 r"(?:background|color)[^:]*:\s*([^;]+)", html_content, re.IGNORECASE
             )
             if color_matches:
-                style_config["colors"] = list(
-                    set(color_matches[:10])
-                )  # Limit to 10 colors
+                style_config["colors"] = list(set(color_matches[:10]))  # Limit to 10 colors
 
             # Extract font configuration
-            font_matches = re.findall(
-                r"font-family[^:]*:\s*([^;]+)", html_content, re.IGNORECASE
-            )
+            font_matches = re.findall(r"font-family[^:]*:\s*([^;]+)", html_content, re.IGNORECASE)
             if font_matches:
                 style_config["fonts"] = list(set(font_matches[:5]))  # Limit to 5 fonts
 
@@ -672,9 +642,7 @@ class GlobalMasterTemplateService:
         try:
             async with AsyncSessionLocal() as session:
                 db_service = DatabaseService(session)
-                templates = await db_service.get_global_master_templates_by_tags(
-                    tags, active_only
-                )
+                templates = await db_service.get_global_master_templates_by_tags(tags, active_only)
 
                 return [
                     {
@@ -766,9 +734,7 @@ class GlobalMasterTemplateService:
         try:
             async with AsyncSessionLocal() as session:
                 db_service = DatabaseService(session)
-                return await db_service.increment_global_master_template_usage(
-                    template_id
-                )
+                return await db_service.increment_global_master_template_usage(template_id)
 
         except Exception as e:
             logger.error(f"Failed to increment template usage {template_id}: {e}")

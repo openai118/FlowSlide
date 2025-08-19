@@ -8,20 +8,21 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from ..services.global_master_template_service import \
-    GlobalMasterTemplateService
-from .models import (GlobalMasterTemplateCreate,
-                     GlobalMasterTemplateDetailResponse,
-                     GlobalMasterTemplateGenerateRequest,
-                     GlobalMasterTemplateResponse, GlobalMasterTemplateUpdate,
-                     TemplateSelectionRequest, TemplateSelectionResponse)
+from ..services.global_master_template_service import GlobalMasterTemplateService
+from .models import (
+    GlobalMasterTemplateCreate,
+    GlobalMasterTemplateDetailResponse,
+    GlobalMasterTemplateGenerateRequest,
+    GlobalMasterTemplateResponse,
+    GlobalMasterTemplateUpdate,
+    TemplateSelectionRequest,
+    TemplateSelectionResponse,
+)
 
 logger = logging.getLogger(__name__)
 
 # Create router
-router = APIRouter(
-    prefix="/api/global-master-templates", tags=["Global Master Templates"]
-)
+router = APIRouter(prefix="/api/global-master-templates", tags=["Global Master Templates"])
 
 # Service instance
 template_service = GlobalMasterTemplateService()
@@ -46,9 +47,7 @@ async def get_all_templates(
     tags: Optional[str] = Query(None, description="Filter by tags (comma-separated)"),
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(6, ge=1, le=100, description="Number of items per page"),
-    search: Optional[str] = Query(
-        None, description="Search in template name and description"
-    ),
+    search: Optional[str] = Query(None, description="Search in template name and description"),
 ):
     """Get all global master templates with pagination"""
     try:
@@ -64,8 +63,7 @@ async def get_all_templates(
 
         return {
             "templates": [
-                GlobalMasterTemplateResponse(**template)
-                for template in result["templates"]
+                GlobalMasterTemplateResponse(**template) for template in result["templates"]
             ],
             "pagination": result["pagination"],
         }
@@ -95,9 +93,7 @@ async def update_template(template_id: int, update_data: GlobalMasterTemplateUpd
     """Update a global master template"""
     try:
         # Filter out None values
-        update_dict = {
-            k: v for k, v in update_data.model_dump().items() if v is not None
-        }
+        update_dict = {k: v for k, v in update_data.model_dump().items() if v is not None}
 
         if not update_dict:
             raise HTTPException(status_code=400, detail="No update data provided")
@@ -226,18 +222,12 @@ async def select_template_for_project(request: TemplateSelectionRequest):
     try:
         if request.selected_template_id:
             # Get the selected template
-            template = await template_service.get_template_by_id(
-                request.selected_template_id
-            )
+            template = await template_service.get_template_by_id(request.selected_template_id)
             if not template:
-                raise HTTPException(
-                    status_code=404, detail="Selected template not found"
-                )
+                raise HTTPException(status_code=404, detail="Selected template not found")
 
             # Increment usage count
-            await template_service.increment_template_usage(
-                request.selected_template_id
-            )
+            await template_service.increment_template_usage(request.selected_template_id)
 
             return TemplateSelectionResponse(
                 success=True,

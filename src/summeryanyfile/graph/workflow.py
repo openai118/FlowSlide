@@ -121,9 +121,7 @@ class WorkflowManager(LoggerMixin):
                 step_count += 1
 
                 # 计算进度
-                progress = min(
-                    (step_count / estimated_steps) * 100, 95
-                )  # 最多95%，留5%给最终处理
+                progress = min((step_count / estimated_steps) * 100, 95)  # 最多95%，留5%给最终处理
 
                 # 确定当前步骤名称
                 current_step = self._get_current_step_name(step, step_count)
@@ -187,9 +185,7 @@ class WorkflowManager(LoggerMixin):
         # 创建运行配置
         run_config = {"recursion_limit": self.recursion_limit}
 
-        async for step in self.app.astream(
-            initial_state, config=run_config, stream_mode="values"
-        ):
+        async for step in self.app.astream(initial_state, config=run_config, stream_mode="values"):
             yield step
 
     def get_workflow_info(self) -> Dict[str, Any]:
@@ -246,9 +242,7 @@ class WorkflowExecutor:
             最终状态
         """
         try:
-            return await self.workflow_manager.execute_workflow(
-                initial_state, progress_callback
-            )
+            return await self.workflow_manager.execute_workflow(initial_state, progress_callback)
         except Exception as e:
             self.logger.error(f"工作流执行出错: {e}")
             if error_callback:

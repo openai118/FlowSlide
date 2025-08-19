@@ -39,9 +39,7 @@ class FastChunker(BaseChunker):
     - 优化速度，适合大文档的快速处理
     """
 
-    def __init__(
-        self, max_tokens: Optional[int] = None, chars_per_token: float = 4.0
-    ) -> None:
+    def __init__(self, max_tokens: Optional[int] = None, chars_per_token: float = 4.0) -> None:
         """
         初始化快速分块器
 
@@ -239,9 +237,7 @@ class FastChunker(BaseChunker):
 
         return adjusted_chunks
 
-    def _split_large_chunk(
-        self, chunk: DocumentChunk, token_limit: int
-    ) -> List[DocumentChunk]:
+    def _split_large_chunk(self, chunk: DocumentChunk, token_limit: int) -> List[DocumentChunk]:
         """
         分割过大的块
 
@@ -258,9 +254,7 @@ class FastChunker(BaseChunker):
             return [chunk]
 
         # 创建临时分块器
-        temp_chunker = FastChunker(
-            max_tokens=token_limit, chars_per_token=self.chars_per_token
-        )
+        temp_chunker = FastChunker(max_tokens=token_limit, chars_per_token=self.chars_per_token)
 
         # 分割内容
         sub_chunks = temp_chunker.chunk_text(chunk.content, chunk.metadata)

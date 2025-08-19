@@ -81,9 +81,7 @@ class ResearchReportGenerator:
         content.append("")
         content.append(f"- **研究主题**: {report.topic}")
         content.append(f"- **报告语言**: {report.language}")
-        content.append(
-            f"- **生成时间**: {report.created_at.strftime('%Y年%m月%d日 %H:%M:%S')}"
-        )
+        content.append(f"- **生成时间**: {report.created_at.strftime('%Y年%m月%d日 %H:%M:%S')}")
         content.append(f"- **研究耗时**: {report.total_duration:.2f} 秒")
         content.append(f"- **研究步骤**: {len(report.steps)} 个")
         content.append(f"- **信息来源**: {len(report.sources)} 个")
@@ -132,9 +130,7 @@ class ResearchReportGenerator:
                 if step.results:
                     content.append("**主要信息来源**:")
                     content.append("")
-                    for i, result in enumerate(
-                        step.results[:3], 1
-                    ):  # Show top 3 sources
+                    for i, result in enumerate(step.results[:3], 1):  # Show top 3 sources
                         content.append(
                             f"{i}. [{result.get('title', '未知标题')}]({result.get('url', '#')})"
                         )

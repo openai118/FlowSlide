@@ -13,9 +13,17 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from PIL import Image
 
-from ..models import (ImageFormat, ImageInfo, ImageMetadata,
-                      ImageOperationResult, ImageProvider, ImageSearchResult,
-                      ImageSourceType, ImageTag, ImageUploadRequest)
+from ..models import (
+    ImageFormat,
+    ImageInfo,
+    ImageMetadata,
+    ImageOperationResult,
+    ImageProvider,
+    ImageSearchResult,
+    ImageSourceType,
+    ImageTag,
+    ImageUploadRequest,
+)
 from .base import LocalStorageProvider
 
 logger = logging.getLogger(__name__)
@@ -29,9 +37,7 @@ class FileSystemStorageProvider(LocalStorageProvider):
 
         # 存储配置
         self.base_dir = Path(config.get("base_dir", "temp/images_cache/local_storage"))
-        self.max_file_size = (
-            config.get("max_file_size_mb", 50) * 1024 * 1024
-        )  # MB to bytes
+        self.max_file_size = config.get("max_file_size_mb", 50) * 1024 * 1024  # MB to bytes
         self.supported_formats = config.get(
             "supported_formats", ["jpg", "jpeg", "png", "webp", "gif"]
         )
@@ -41,9 +47,7 @@ class FileSystemStorageProvider(LocalStorageProvider):
 
         logger.info(f"Local storage provider initialized: {self.base_dir}")
 
-    async def upload(
-        self, request: ImageUploadRequest, file_data: bytes
-    ) -> ImageOperationResult:
+    async def upload(self, request: ImageUploadRequest, file_data: bytes) -> ImageOperationResult:
         """上传图片到本地存储"""
         try:
             # 验证文件大小
@@ -123,13 +127,10 @@ class FileSystemStorageProvider(LocalStorageProvider):
                 for file_path in search_dir.rglob("*"):
                     if (
                         file_path.is_file()
-                        and file_path.suffix.lower().lstrip(".")
-                        in self.supported_formats
+                        and file_path.suffix.lower().lstrip(".") in self.supported_formats
                     ):
                         try:
-                            image_info = await self._create_image_info_from_file(
-                                file_path
-                            )
+                            image_info = await self._create_image_info_from_file(file_path)
                             if image_info:
                                 all_images.append(image_info)
                         except Exception as e:
@@ -186,9 +187,7 @@ class FileSystemStorageProvider(LocalStorageProvider):
                 if file_path.is_file() and image_id in file_path.name:
                     file_path.unlink()
                     logger.info(f"Image deleted: {image_id}")
-                    return ImageOperationResult(
-                        success=True, message="Image deleted successfully"
-                    )
+                    return ImageOperationResult(success=True, message="Image deleted successfully")
 
             return ImageOperationResult(
                 success=False, message="Image not found", error_code="not_found"
@@ -202,9 +201,7 @@ class FileSystemStorageProvider(LocalStorageProvider):
                 error_code="delete_error",
             )
 
-    async def update_image(
-        self, image_id: str, updates: Dict[str, Any]
-    ) -> ImageOperationResult:
+    async def update_image(self, image_id: str, updates: Dict[str, Any]) -> ImageOperationResult:
         """更新图片信息"""
         try:
             # 搜索图片文件
@@ -228,13 +225,9 @@ class FileSystemStorageProvider(LocalStorageProvider):
                 new_file_path = new_category_dir / target_file.name
                 shutil.move(str(target_file), str(new_file_path))
 
-                logger.info(
-                    f"Image moved to new category: {image_id} -> {new_category}"
-                )
+                logger.info(f"Image moved to new category: {image_id} -> {new_category}")
 
-            return ImageOperationResult(
-                success=True, message="Image updated successfully"
-            )
+            return ImageOperationResult(success=True, message="Image updated successfully")
 
         except Exception as e:
             logger.error(f"Failed to update image {image_id}: {e}")
@@ -275,9 +268,7 @@ class FileSystemStorageProvider(LocalStorageProvider):
         # 创建标签
         tags = []
         for tag_name in request.tags:
-            tags.append(
-                ImageTag(name=tag_name, confidence=1.0, category="user_defined")
-            )
+            tags.append(ImageTag(name=tag_name, confidence=1.0, category="user_defined"))
 
         # 根据请求中的source_type设置正确的来源类型
         actual_source_type = request.source_type or ImageSourceType.LOCAL_STORAGE
@@ -286,13 +277,9 @@ class FileSystemStorageProvider(LocalStorageProvider):
         # 对于网络搜索的图片，我们无法确定具体的提供者，所以使用通用的本地存储标识
         # 但保持正确的source_type来区分来源
         if actual_source_type == ImageSourceType.WEB_SEARCH:
-            provider = (
-                ImageProvider.USER_UPLOAD
-            )  # 使用USER_UPLOAD来表示用户通过网络搜索获得的图片
+            provider = ImageProvider.USER_UPLOAD  # 使用USER_UPLOAD来表示用户通过网络搜索获得的图片
         elif actual_source_type == ImageSourceType.AI_GENERATED:
-            provider = (
-                ImageProvider.USER_UPLOAD
-            )  # 使用USER_UPLOAD来表示用户通过AI生成获得的图片
+            provider = ImageProvider.USER_UPLOAD  # 使用USER_UPLOAD来表示用户通过AI生成获得的图片
         else:
             provider = ImageProvider.LOCAL_STORAGE
 
@@ -325,9 +312,7 @@ class FileSystemStorageProvider(LocalStorageProvider):
                     with Image.open(io.BytesIO(file_data)) as img:
                         width, height = img.size
                         color_mode = img.mode
-                        has_transparency = (
-                            img.mode in ["RGBA", "LA"] or "transparency" in img.info
-                        )
+                        has_transparency = img.mode in ["RGBA", "LA"] or "transparency" in img.info
                         return width, height, color_mode, has_transparency
 
                 return await asyncio.get_event_loop().run_in_executor(None, _get_dims)
@@ -337,9 +322,7 @@ class FileSystemStorageProvider(LocalStorageProvider):
                     with Image.open(file_path) as img:
                         width, height = img.size
                         color_mode = img.mode
-                        has_transparency = (
-                            img.mode in ["RGBA", "LA"] or "transparency" in img.info
-                        )
+                        has_transparency = img.mode in ["RGBA", "LA"] or "transparency" in img.info
                         return width, height, color_mode, has_transparency
 
                 return await asyncio.get_event_loop().run_in_executor(None, _get_dims)
@@ -348,9 +331,7 @@ class FileSystemStorageProvider(LocalStorageProvider):
             logger.warning(f"Failed to get image dimensions for {file_path}: {e}")
             return 0, 0, "RGB", False
 
-    async def _create_image_info_from_file(
-        self, file_path: Path
-    ) -> Optional[ImageInfo]:
+    async def _create_image_info_from_file(self, file_path: Path) -> Optional[ImageInfo]:
         """从文件创建图片信息"""
         try:
             # 从文件名提取信息
@@ -358,18 +339,14 @@ class FileSystemStorageProvider(LocalStorageProvider):
             file_ext = file_path.suffix.lower().lstrip(".")
 
             # 生成图片ID（从文件名或路径生成）
-            image_id = (
-                file_path.stem.split("_")[-1]
-                if "_" in file_path.stem
-                else file_path.stem
-            )
+            image_id = file_path.stem.split("_")[-1] if "_" in file_path.stem else file_path.stem
 
             # 检测图片格式
             image_format = ImageFormat.PNG if file_ext == "png" else ImageFormat.JPEG
 
             # 获取图片尺寸
-            width, height, color_mode, has_transparency = (
-                await self._get_image_dimensions(file_path)
+            width, height, color_mode, has_transparency = await self._get_image_dimensions(
+                file_path
             )
 
             # 创建元数据

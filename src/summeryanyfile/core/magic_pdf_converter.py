@@ -49,15 +49,20 @@ class MagicPDFConverter:
         """检查mineru是否可用"""
         if self._is_available is None:
             try:
-                from mineru.backend.pipeline.model_json_to_middle_json import \
-                    result_to_middle_json as pipeline_result_to_middle_json
-                from mineru.backend.pipeline.pipeline_analyze import \
-                    doc_analyze as pipeline_doc_analyze
-                from mineru.backend.pipeline.pipeline_middle_json_mkcontent import \
-                    union_make as pipeline_union_make
+                from mineru.backend.pipeline.model_json_to_middle_json import (
+                    result_to_middle_json as pipeline_result_to_middle_json,
+                )
+                from mineru.backend.pipeline.pipeline_analyze import (
+                    doc_analyze as pipeline_doc_analyze,
+                )
+                from mineru.backend.pipeline.pipeline_middle_json_mkcontent import (
+                    union_make as pipeline_union_make,
+                )
                 from mineru.cli.common import (
-                    convert_pdf_bytes_to_bytes_by_pypdfium2, prepare_env,
-                    read_fn)
+                    convert_pdf_bytes_to_bytes_by_pypdfium2,
+                    prepare_env,
+                    read_fn,
+                )
                 from mineru.data.data_reader_writer import FileBasedDataWriter
                 from mineru.utils.enum_class import MakeMode
 
@@ -98,9 +103,7 @@ class MagicPDFConverter:
             ImportError: mineru库未安装
         """
         if not self.is_available():
-            raise ImportError(
-                "mineru库未安装。请安装: pip install mineru 或参考官方文档"
-            )
+            raise ImportError("mineru库未安装。请安装: pip install mineru 或参考官方文档")
 
         path = Path(file_path)
         if not path.exists():
@@ -113,14 +116,18 @@ class MagicPDFConverter:
 
         try:
             # 导入必要的模块
-            from mineru.backend.pipeline.model_json_to_middle_json import \
-                result_to_middle_json as pipeline_result_to_middle_json
-            from mineru.backend.pipeline.pipeline_analyze import \
-                doc_analyze as pipeline_doc_analyze
-            from mineru.backend.pipeline.pipeline_middle_json_mkcontent import \
-                union_make as pipeline_union_make
+            from mineru.backend.pipeline.model_json_to_middle_json import (
+                result_to_middle_json as pipeline_result_to_middle_json,
+            )
+            from mineru.backend.pipeline.pipeline_analyze import doc_analyze as pipeline_doc_analyze
+            from mineru.backend.pipeline.pipeline_middle_json_mkcontent import (
+                union_make as pipeline_union_make,
+            )
             from mineru.cli.common import (
-                convert_pdf_bytes_to_bytes_by_pypdfium2, prepare_env, read_fn)
+                convert_pdf_bytes_to_bytes_by_pypdfium2,
+                prepare_env,
+                read_fn,
+            )
             from mineru.data.data_reader_writer import FileBasedDataWriter
             from mineru.utils.enum_class import MakeMode
 
@@ -132,9 +139,7 @@ class MagicPDFConverter:
             pdf_bytes = read_fn(path)
 
             # 准备输出目录
-            local_image_dir, local_md_dir = prepare_env(
-                self.output_dir, name_without_suff, method
-            )
+            local_image_dir, local_md_dir = prepare_env(self.output_dir, name_without_suff, method)
             image_dir = os.path.basename(local_image_dir)
 
             # 创建数据写入器
@@ -144,9 +149,7 @@ class MagicPDFConverter:
             # 使用pipeline后端进行处理
             if backend == "pipeline":
                 # 转换PDF字节
-                new_pdf_bytes = convert_pdf_bytes_to_bytes_by_pypdfium2(
-                    pdf_bytes, 0, None
-                )
+                new_pdf_bytes = convert_pdf_bytes_to_bytes_by_pypdfium2(pdf_bytes, 0, None)
 
                 # 进行文档分析
                 (
@@ -186,8 +189,7 @@ class MagicPDFConverter:
 
                 # 生成调试文件（可选）
                 try:
-                    from mineru.utils.draw_bbox import (draw_layout_bbox,
-                                                        draw_span_bbox)
+                    from mineru.utils.draw_bbox import draw_layout_bbox, draw_span_bbox
 
                     # 绘制布局边界框
                     draw_layout_bbox(
@@ -223,9 +225,7 @@ class MagicPDFConverter:
 
                 # 保存内容列表（JSON格式）
                 try:
-                    content_list = pipeline_union_make(
-                        pdf_info, MakeMode.CONTENT_LIST, image_dir
-                    )
+                    content_list = pipeline_union_make(pdf_info, MakeMode.CONTENT_LIST, image_dir)
                     md_writer.write_string(
                         f"{name_without_suff}_content_list.json",
                         json.dumps(content_list, ensure_ascii=False, indent=4),
@@ -243,9 +243,7 @@ class MagicPDFConverter:
                         json.dumps(model_json, ensure_ascii=False, indent=4),
                     )
 
-                    logger.debug(
-                        f"额外文件已保存: content_list.json, middle.json, model.json"
-                    )
+                    logger.debug(f"额外文件已保存: content_list.json, middle.json, model.json")
                 except Exception as e:
                     logger.warning(f"保存额外文件失败: {e}")
 
@@ -390,9 +388,7 @@ class MagicPDFConverter:
 
         return {
             "markdown": os.path.join(method_dir, f"{name_without_suff}.md"),
-            "content_list": os.path.join(
-                method_dir, f"{name_without_suff}_content_list.json"
-            ),
+            "content_list": os.path.join(method_dir, f"{name_without_suff}_content_list.json"),
             "middle_json": os.path.join(method_dir, f"{name_without_suff}_middle.json"),
             "model_json": os.path.join(method_dir, f"{name_without_suff}_model.json"),
             "origin_pdf": os.path.join(method_dir, f"{name_without_suff}_origin.pdf"),

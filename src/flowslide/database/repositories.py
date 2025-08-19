@@ -13,8 +13,15 @@ from sqlalchemy.orm import selectinload
 from ..api.models import PPTProject
 from ..api.models import TodoBoard as TodoBoardModel
 from ..api.models import TodoStage as TodoStageModel
-from .models import (GlobalMasterTemplate, PPTTemplate, Project,
-                     ProjectVersion, SlideData, TodoBoard, TodoStage)
+from .models import (
+    GlobalMasterTemplate,
+    PPTTemplate,
+    Project,
+    ProjectVersion,
+    SlideData,
+    TodoBoard,
+    TodoStage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +55,11 @@ class ProjectRepository:
         return result.scalar_one_or_none()
 
     async def list_projects(
-        self, page: int = 1, page_size: int = 10, status: Optional[str] = None, owner_id: Optional[int] = None
+        self,
+        page: int = 1,
+        page_size: int = 10,
+        status: Optional[str] = None,
+        owner_id: Optional[int] = None,
     ) -> List[Project]:
         """List projects with pagination"""
         stmt = select(Project).options(
@@ -68,7 +79,9 @@ class ProjectRepository:
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
-    async def count_projects(self, status: Optional[str] = None, owner_id: Optional[int] = None) -> int:
+    async def count_projects(
+        self, status: Optional[str] = None, owner_id: Optional[int] = None
+    ) -> int:
         """Count total projects"""
         from sqlalchemy import func
 
@@ -81,9 +94,7 @@ class ProjectRepository:
         result = await self.session.execute(stmt)
         return result.scalar() or 0
 
-    async def update(
-        self, project_id: str, update_data: Dict[str, Any]
-    ) -> Optional[Project]:
+    async def update(self, project_id: str, update_data: Dict[str, Any]) -> Optional[Project]:
         """Update project"""
         try:
             # 首先获取项目
@@ -144,16 +155,10 @@ class TodoBoardRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def update(
-        self, project_id: str, update_data: Dict[str, Any]
-    ) -> Optional[TodoBoard]:
+    async def update(self, project_id: str, update_data: Dict[str, Any]) -> Optional[TodoBoard]:
         """Update todo board"""
         update_data["updated_at"] = time.time()
-        stmt = (
-            update(TodoBoard)
-            .where(TodoBoard.project_id == project_id)
-            .values(**update_data)
-        )
+        stmt = update(TodoBoard).where(TodoBoard.project_id == project_id).values(**update_data)
         await self.session.execute(stmt)
         await self.session.commit()
         return await self.get_by_project_id(project_id)
@@ -177,11 +182,7 @@ class TodoStageRepository:
     async def update_stage(self, stage_id: str, update_data: Dict[str, Any]) -> bool:
         """Update a specific stage"""
         update_data["updated_at"] = time.time()
-        stmt = (
-            update(TodoStage)
-            .where(TodoStage.stage_id == stage_id)
-            .values(**update_data)
-        )
+        stmt = update(TodoStage).where(TodoStage.stage_id == stage_id).values(**update_data)
         result = await self.session.execute(stmt)
         await self.session.commit()
         return result.rowcount > 0
@@ -267,9 +268,7 @@ class SlideDataRepository:
 
         logger = logging.getLogger(__name__)
 
-        logger.info(
-            f"🔄 数据库仓库开始upsert幻灯片: 项目ID={project_id}, 索引={slide_index}"
-        )
+        logger.info(f"🔄 数据库仓库开始upsert幻灯片: 项目ID={project_id}, 索引={slide_index}")
 
         # Check if slide already exists
         stmt = select(SlideData).where(
@@ -320,11 +319,7 @@ class SlideDataRepository:
     async def update_slide(self, slide_id: str, update_data: Dict[str, Any]) -> bool:
         """Update a specific slide"""
         update_data["updated_at"] = time.time()
-        stmt = (
-            update(SlideData)
-            .where(SlideData.slide_id == slide_id)
-            .values(**update_data)
-        )
+        stmt = update(SlideData).where(SlideData.slide_id == slide_id).values(**update_data)
         result = await self.session.execute(stmt)
         await self.session.commit()
         return result.rowcount > 0
@@ -340,9 +335,7 @@ class SlideDataRepository:
         """Delete slides with index >= start_index for a project"""
         logger.debug(f"🗑️ 删除项目 {project_id} 中索引 >= {start_index} 的幻灯片")
         stmt = delete(SlideData).where(
-            and_(
-                SlideData.project_id == project_id, SlideData.slide_index >= start_index
-            )
+            and_(SlideData.project_id == project_id, SlideData.slide_index >= start_index)
         )
         result = await self.session.execute(stmt)
         await self.session.commit()
@@ -350,23 +343,15 @@ class SlideDataRepository:
         logger.debug(f"✅ 成功删除 {deleted_count} 张多余的幻灯片")
         return deleted_count
 
-    async def batch_upsert_slides(
-        self, project_id: str, slides_data: List[Dict[str, Any]]
-    ) -> bool:
+    async def batch_upsert_slides(self, project_id: str, slides_data: List[Dict[str, Any]]) -> bool:
         """批量插入或更新幻灯片 - 优化版本"""
-        logger.debug(
-            f"🔄 开始批量upsert幻灯片: 项目ID={project_id}, 数量={len(slides_data)}"
-        )
+        logger.debug(f"🔄 开始批量upsert幻灯片: 项目ID={project_id}, 数量={len(slides_data)}")
 
         try:
             # 获取现有幻灯片
-            existing_slides_stmt = select(SlideData).where(
-                SlideData.project_id == project_id
-            )
+            existing_slides_stmt = select(SlideData).where(SlideData.project_id == project_id)
             result = await self.session.execute(existing_slides_stmt)
-            existing_slides = {
-                slide.slide_index: slide for slide in result.scalars().all()
-            }
+            existing_slides = {slide.slide_index: slide for slide in result.scalars().all()}
 
             updated_count = 0
             created_count = 0
@@ -384,10 +369,7 @@ class SlideDataRepository:
                     # 只更新有变化的字段
                     has_changes = False
                     for key, value in slide_data.items():
-                        if (
-                            hasattr(existing_slide, key)
-                            and getattr(existing_slide, key) != value
-                        ):
+                        if hasattr(existing_slide, key) and getattr(existing_slide, key) != value:
                             setattr(existing_slide, key, value)
                             has_changes = True
 
@@ -410,9 +392,7 @@ class SlideDataRepository:
             # 一次性提交所有更改
             await self.session.commit()
 
-            logger.debug(
-                f"✅ 批量upsert完成: 更新={updated_count}, 创建={created_count}"
-            )
+            logger.debug(f"✅ 批量upsert完成: 更新={updated_count}, 创建={created_count}")
             return True
 
         except Exception as e:
@@ -426,9 +406,7 @@ class SlideDataRepository:
         """Update the user edited status for a specific slide"""
         stmt = (
             update(SlideData)
-            .where(
-                SlideData.project_id == project_id, SlideData.slide_index == slide_index
-            )
+            .where(SlideData.project_id == project_id, SlideData.slide_index == slide_index)
             .values(is_user_edited=is_user_edited, updated_at=time.time())
         )
         result = await self.session.execute(stmt)
@@ -468,9 +446,7 @@ class PPTTemplateRepository:
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
-    async def get_templates_by_type(
-        self, project_id: str, template_type: str
-    ) -> List[PPTTemplate]:
+    async def get_templates_by_type(self, project_id: str, template_type: str) -> List[PPTTemplate]:
         """Get templates by type for a project"""
         stmt = (
             select(PPTTemplate)
@@ -483,16 +459,10 @@ class PPTTemplateRepository:
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
-    async def update_template(
-        self, template_id: int, update_data: Dict[str, Any]
-    ) -> bool:
+    async def update_template(self, template_id: int, update_data: Dict[str, Any]) -> bool:
         """Update a template"""
         update_data["updated_at"] = time.time()
-        stmt = (
-            update(PPTTemplate)
-            .where(PPTTemplate.id == template_id)
-            .values(**update_data)
-        )
+        stmt = update(PPTTemplate).where(PPTTemplate.id == template_id).values(**update_data)
         result = await self.session.execute(stmt)
         await self.session.commit()
         return result.rowcount > 0
@@ -522,9 +492,7 @@ class GlobalMasterTemplateRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def create_template(
-        self, template_data: Dict[str, Any]
-    ) -> GlobalMasterTemplate:
+    async def create_template(self, template_data: Dict[str, Any]) -> GlobalMasterTemplate:
         """Create a new global master template"""
         template_data["created_at"] = time.time()
         template_data["updated_at"] = time.time()
@@ -534,19 +502,13 @@ class GlobalMasterTemplateRepository:
         await self.session.refresh(template)
         return template
 
-    async def get_template_by_id(
-        self, template_id: int
-    ) -> Optional[GlobalMasterTemplate]:
+    async def get_template_by_id(self, template_id: int) -> Optional[GlobalMasterTemplate]:
         """Get template by ID"""
-        stmt = select(GlobalMasterTemplate).where(
-            GlobalMasterTemplate.id == template_id
-        )
+        stmt = select(GlobalMasterTemplate).where(GlobalMasterTemplate.id == template_id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_template_by_name(
-        self, template_name: str
-    ) -> Optional[GlobalMasterTemplate]:
+    async def get_template_by_name(self, template_name: str) -> Optional[GlobalMasterTemplate]:
         """Get template by name"""
         stmt = select(GlobalMasterTemplate).where(
             GlobalMasterTemplate.template_name == template_name
@@ -554,9 +516,7 @@ class GlobalMasterTemplateRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_all_templates(
-        self, active_only: bool = True
-    ) -> List[GlobalMasterTemplate]:
+    async def get_all_templates(self, active_only: bool = True) -> List[GlobalMasterTemplate]:
         """Get all global master templates"""
         stmt = select(GlobalMasterTemplate)
         if active_only:
@@ -665,11 +625,7 @@ class GlobalMasterTemplateRepository:
             count_stmt = count_stmt.where(search_filter)
 
         # Order and paginate
-        stmt = (
-            stmt.order_by(GlobalMasterTemplate.usage_count.desc())
-            .offset(offset)
-            .limit(limit)
-        )
+        stmt = stmt.order_by(GlobalMasterTemplate.usage_count.desc()).offset(offset).limit(limit)
 
         # Execute queries
         result = await self.session.execute(stmt)
@@ -680,9 +636,7 @@ class GlobalMasterTemplateRepository:
 
         return templates, total_count
 
-    async def update_template(
-        self, template_id: int, update_data: Dict[str, Any]
-    ) -> bool:
+    async def update_template(self, template_id: int, update_data: Dict[str, Any]) -> bool:
         """Update a global master template"""
         update_data["updated_at"] = time.time()
         stmt = (
@@ -697,9 +651,7 @@ class GlobalMasterTemplateRepository:
     async def delete_template(self, template_id: int) -> bool:
         """Delete a global master template"""
         try:
-            stmt = delete(GlobalMasterTemplate).where(
-                GlobalMasterTemplate.id == template_id
-            )
+            stmt = delete(GlobalMasterTemplate).where(GlobalMasterTemplate.id == template_id)
             result = await self.session.execute(stmt)
             await self.session.commit()
 
@@ -719,9 +671,7 @@ class GlobalMasterTemplateRepository:
         stmt = (
             update(GlobalMasterTemplate)
             .where(GlobalMasterTemplate.id == template_id)
-            .values(
-                usage_count=GlobalMasterTemplate.usage_count + 1, updated_at=time.time()
-            )
+            .values(usage_count=GlobalMasterTemplate.usage_count + 1, updated_at=time.time())
         )
         result = await self.session.execute(stmt)
         await self.session.commit()
@@ -730,9 +680,7 @@ class GlobalMasterTemplateRepository:
     async def set_default_template(self, template_id: int) -> bool:
         """Set a template as default (and unset others)"""
         # First, unset all default templates
-        stmt = update(GlobalMasterTemplate).values(
-            is_default=False, updated_at=time.time()
-        )
+        stmt = update(GlobalMasterTemplate).values(is_default=False, updated_at=time.time())
         await self.session.execute(stmt)
 
         # Then set the specified template as default

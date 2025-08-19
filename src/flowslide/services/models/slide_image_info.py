@@ -97,12 +97,8 @@ class SlideImagesCollection:
     def __post_init__(self):
         """初始化后处理，计算各类型图片数量"""
         self.total_count = len(self.images)
-        self.local_count = sum(
-            1 for img in self.images if img.source == ImageSource.LOCAL
-        )
-        self.network_count = sum(
-            1 for img in self.images if img.source == ImageSource.NETWORK
-        )
+        self.local_count = sum(1 for img in self.images if img.source == ImageSource.LOCAL)
+        self.network_count = sum(1 for img in self.images if img.source == ImageSource.NETWORK)
         self.ai_generated_count = sum(
             1 for img in self.images if img.source == ImageSource.AI_GENERATED
         )
@@ -134,9 +130,7 @@ class SlideImagesCollection:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SlideImagesCollection":
         """从字典创建实例"""
-        images = [
-            SlideImageInfo.from_dict(img_data) for img_data in data.get("images", [])
-        ]
+        images = [SlideImageInfo.from_dict(img_data) for img_data in data.get("images", [])]
         return cls(page_number=data["page_number"], images=images)
 
     def get_summary_for_ai(self) -> str:
@@ -173,16 +167,12 @@ class SlideImagesCollection:
 
         if self.local_count > 0:
             local_images = self.get_images_by_source(ImageSource.LOCAL)
-            local_desc = ", ".join(
-                [_format_image_with_metadata(img) for img in local_images]
-            )
+            local_desc = ", ".join([_format_image_with_metadata(img) for img in local_images])
             summary_parts.append(f"- 本地图片{self.local_count}张: {local_desc}")
 
         if self.network_count > 0:
             network_images = self.get_images_by_source(ImageSource.NETWORK)
-            network_desc = ", ".join(
-                [_format_image_with_metadata(img) for img in network_images]
-            )
+            network_desc = ", ".join([_format_image_with_metadata(img) for img in network_images])
             summary_parts.append(f"- 网络图片{self.network_count}张: {network_desc}")
 
         if self.ai_generated_count > 0:

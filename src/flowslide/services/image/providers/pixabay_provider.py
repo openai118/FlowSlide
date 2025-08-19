@@ -16,9 +16,18 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 
-from ..models import (ImageFormat, ImageInfo, ImageLicense, ImageMetadata,
-                      ImageOperationResult, ImageProvider, ImageSearchRequest,
-                      ImageSearchResult, ImageSourceType, ImageTag)
+from ..models import (
+    ImageFormat,
+    ImageInfo,
+    ImageLicense,
+    ImageMetadata,
+    ImageOperationResult,
+    ImageProvider,
+    ImageSearchRequest,
+    ImageSearchResult,
+    ImageSourceType,
+    ImageTag,
+)
 from .base import ImageSearchProvider
 
 logger = logging.getLogger(__name__)
@@ -31,12 +40,8 @@ class PixabaySearchProvider(ImageSearchProvider):
         self.api_key = config.get("api_key", "")
         self.api_base = config.get("api_base", "https://pixabay.com/api")
         self.per_page = config.get("per_page", 20)  # 默认20，最大200
-        self.rate_limit_requests = config.get(
-            "rate_limit_requests", 100
-        )  # 官方文档：100请求/60秒
-        self.rate_limit_window = config.get(
-            "rate_limit_window", 60
-        )  # 官方文档：60秒窗口
+        self.rate_limit_requests = config.get("rate_limit_requests", 100)  # 官方文档：100请求/60秒
+        self.rate_limit_window = config.get("rate_limit_window", 60)  # 官方文档：60秒窗口
         self.timeout = config.get("timeout", 30)
 
         # 请求限制跟踪
@@ -174,9 +179,7 @@ class PixabaySearchProvider(ImageSearchProvider):
                     "zh-hant": "zh",
                 }
 
-                lang_code = lang_map.get(
-                    request.language.lower(), request.language.lower()
-                )
+                lang_code = lang_map.get(request.language.lower(), request.language.lower())
                 if lang_code in supported_langs:
                     params["lang"] = lang_code
                 else:
@@ -193,23 +196,17 @@ class PixabaySearchProvider(ImageSearchProvider):
 
                     if response.status == 200:
                         data = await response.json()
-                        logger.debug(
-                            f"Pixabay API returned {len(data.get('hits', []))} results"
-                        )
+                        logger.debug(f"Pixabay API returned {len(data.get('hits', []))} results")
                         images = await self._parse_search_results(data)
                         logger.debug(f"Successfully parsed {len(images)} images")
 
                         # 根据官方API响应格式解析
-                        total_count = data.get(
-                            "totalHits", 0
-                        )  # 可通过API访问的图片数量
+                        total_count = data.get("totalHits", 0)  # 可通过API访问的图片数量
                         total_available = data.get("total", 0)  # 总匹配数量
                         current_page = request.page
                         per_page = request.per_page
                         total_pages = (
-                            (total_count + per_page - 1) // per_page
-                            if total_count > 0
-                            else 0
+                            (total_count + per_page - 1) // per_page if total_count > 0 else 0
                         )
 
                         return ImageSearchResult(
@@ -239,9 +236,7 @@ class PixabaySearchProvider(ImageSearchProvider):
                         )
                     else:
                         error_text = await response.text()
-                        logger.error(
-                            f"Pixabay API error: {response.status} - {error_text}"
-                        )
+                        logger.error(f"Pixabay API error: {response.status} - {error_text}")
                         return ImageSearchResult(
                             images=[],
                             total_count=0,
@@ -284,9 +279,7 @@ class PixabaySearchProvider(ImageSearchProvider):
 
         return images
 
-    async def _create_image_info_from_pixabay(
-        self, hit: Dict[str, Any]
-    ) -> Optional[ImageInfo]:
+    async def _create_image_info_from_pixabay(self, hit: Dict[str, Any]) -> Optional[ImageInfo]:
         """从Pixabay API响应创建ImageInfo对象 - 根据官方API文档"""
         try:
             # 生成唯一的图片ID
@@ -314,9 +307,7 @@ class PixabaySearchProvider(ImageSearchProvider):
             tags_str = hit.get("tags", "")
             if tags_str:
                 tag_names = [tag.strip() for tag in tags_str.split(",") if tag.strip()]
-                tags = [
-                    ImageTag(name=tag_name, confidence=1.0) for tag_name in tag_names
-                ]
+                tags = [ImageTag(name=tag_name, confidence=1.0) for tag_name in tag_names]
 
             # 根据官方API响应创建元数据
             # 优先使用webformat尺寸，回退到原始尺寸
@@ -388,9 +379,7 @@ class PixabaySearchProvider(ImageSearchProvider):
 
         # 清理过期的请求记录
         self._request_times = [
-            req_time
-            for req_time in self._request_times
-            if current_time - req_time < rate_window
+            req_time for req_time in self._request_times if current_time - req_time < rate_window
         ]
 
         # 检查是否超过限制（默认100请求/60秒）
@@ -485,9 +474,7 @@ class PixabaySearchProvider(ImageSearchProvider):
             logger.error(f"Failed to get Pixabay image details: {e}")
             return None
 
-    async def download_image(
-        self, image_info: ImageInfo, save_path: Path
-    ) -> ImageOperationResult:
+    async def download_image(self, image_info: ImageInfo, save_path: Path) -> ImageOperationResult:
         """下载图片到本地"""
         try:
             if not image_info.original_url:
@@ -501,9 +488,7 @@ class PixabaySearchProvider(ImageSearchProvider):
             save_path.parent.mkdir(parents=True, exist_ok=True)
 
             # 下载图片
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=60)
-            ) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
                 async with session.get(image_info.original_url) as response:
                     if response.status == 200:
                         with open(save_path, "wb") as f:

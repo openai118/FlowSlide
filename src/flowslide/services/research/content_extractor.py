@@ -104,12 +104,8 @@ class WebContentExtractor:
         text = re.sub(r"\s+", " ", text)
 
         # Remove common unwanted patterns
-        text = re.sub(
-            r"(Cookie|Privacy) Policy.*?(?=\n|$)", "", text, flags=re.IGNORECASE
-        )
-        text = re.sub(
-            r"Subscribe.*?newsletter.*?(?=\n|$)", "", text, flags=re.IGNORECASE
-        )
+        text = re.sub(r"(Cookie|Privacy) Policy.*?(?=\n|$)", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"Subscribe.*?newsletter.*?(?=\n|$)", "", text, flags=re.IGNORECASE)
         text = re.sub(r"Follow us on.*?(?=\n|$)", "", text, flags=re.IGNORECASE)
         text = re.sub(r"Share this.*?(?=\n|$)", "", text, flags=re.IGNORECASE)
 
@@ -236,9 +232,7 @@ class WebContentExtractor:
             if not title and soup.title:
                 title = soup.title.string.strip() if soup.title.string else ""
 
-            extracted = ExtractedContent(
-                url=url, title=title, content=content, metadata=metadata
-            )
+            extracted = ExtractedContent(url=url, title=title, content=content, metadata=metadata)
 
             logger.info(f"Extracted {extracted.word_count} words from {url}")
             return extracted
@@ -289,9 +283,7 @@ class WebContentExtractor:
             elif isinstance(result, Exception):
                 logger.warning(f"Content extraction failed: {result}")
 
-        logger.info(
-            f"Successfully extracted content from {len(results)}/{len(urls)} URLs"
-        )
+        logger.info(f"Successfully extracted content from {len(results)}/{len(urls)} URLs")
         return results
 
     def get_status(self) -> Dict[str, Any]:

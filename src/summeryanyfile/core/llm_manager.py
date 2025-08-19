@@ -145,9 +145,7 @@ class LLMManager:
 
         api_key = kwargs.get("api_key") or os.getenv("OPENAI_API_KEY")
         if not api_key:
-            raise ValueError(
-                "未找到OpenAI API密钥。请设置OPENAI_API_KEY环境变量或传递api_key参数"
-            )
+            raise ValueError("未找到OpenAI API密钥。请设置OPENAI_API_KEY环境变量或传递api_key参数")
 
         # 处理自定义base_url
         base_url = kwargs.get("base_url") or os.getenv("OPENAI_BASE_URL")
@@ -167,9 +165,7 @@ class LLMManager:
 
         # 添加其他参数（排除已处理的）
         excluded_keys = {"api_key", "base_url"}
-        openai_kwargs.update(
-            {k: v for k, v in kwargs.items() if k not in excluded_keys}
-        )
+        openai_kwargs.update({k: v for k, v in kwargs.items() if k not in excluded_keys})
 
         return ChatOpenAI(**openai_kwargs)
 
@@ -180,9 +176,7 @@ class LLMManager:
         try:
             from langchain_anthropic import ChatAnthropic
         except ImportError:
-            raise ImportError(
-                "请安装 langchain-anthropic: pip install langchain-anthropic"
-            )
+            raise ImportError("请安装 langchain-anthropic: pip install langchain-anthropic")
 
         api_key = kwargs.get("api_key") or os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
@@ -208,21 +202,15 @@ class LLMManager:
             raise ImportError("请安装 langchain-openai: pip install langchain-openai")
 
         api_key = kwargs.get("api_key") or os.getenv("AZURE_OPENAI_API_KEY")
-        azure_endpoint = kwargs.get("azure_endpoint") or os.getenv(
-            "AZURE_OPENAI_ENDPOINT"
-        )
+        azure_endpoint = kwargs.get("azure_endpoint") or os.getenv("AZURE_OPENAI_ENDPOINT")
         api_version = kwargs.get("api_version") or os.getenv(
             "AZURE_OPENAI_API_VERSION", "2024-02-15-preview"
         )
 
         if not api_key:
-            raise ValueError(
-                "未找到Azure OpenAI API密钥。请设置AZURE_OPENAI_API_KEY环境变量"
-            )
+            raise ValueError("未找到Azure OpenAI API密钥。请设置AZURE_OPENAI_API_KEY环境变量")
         if not azure_endpoint:
-            raise ValueError(
-                "未找到Azure OpenAI端点。请设置AZURE_OPENAI_ENDPOINT环境变量"
-            )
+            raise ValueError("未找到Azure OpenAI端点。请设置AZURE_OPENAI_ENDPOINT环境变量")
 
         return AzureChatOpenAI(
             deployment_name=model,
@@ -248,9 +236,7 @@ class LLMManager:
             raise ImportError("请安装 langchain-ollama: pip install langchain-ollama")
 
         # Ollama默认运行在本地，可以通过base_url自定义
-        base_url = kwargs.get("base_url") or os.getenv(
-            "OLLAMA_BASE_URL", "http://localhost:11434"
-        )
+        base_url = kwargs.get("base_url") or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
         # 构建参数
         ollama_kwargs = {
@@ -262,9 +248,7 @@ class LLMManager:
 
         # 添加其他参数（排除已处理的）
         excluded_keys = {"base_url", "max_tokens"}
-        ollama_kwargs.update(
-            {k: v for k, v in kwargs.items() if k not in excluded_keys}
-        )
+        ollama_kwargs.update({k: v for k, v in kwargs.items() if k not in excluded_keys})
 
         logger.info(f"使用Ollama端点: {base_url}")
         return ChatOllama(**ollama_kwargs)
@@ -276,15 +260,11 @@ class LLMManager:
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
         except ImportError:
-            raise ImportError(
-                "请安装 langchain-google-genai: pip install langchain-google-genai"
-            )
+            raise ImportError("请安装 langchain-google-genai: pip install langchain-google-genai")
 
         api_key = kwargs.get("api_key") or os.getenv("GOOGLE_API_KEY")
         if not api_key:
-            raise ValueError(
-                "未找到Google API密钥。请设置GOOGLE_API_KEY环境变量或传递api_key参数"
-            )
+            raise ValueError("未找到Google API密钥。请设置GOOGLE_API_KEY环境变量或传递api_key参数")
 
         # 构建参数
         gemini_kwargs = {
@@ -296,9 +276,7 @@ class LLMManager:
 
         # 添加其他参数（排除已处理的）
         excluded_keys = {"api_key", "max_tokens"}
-        gemini_kwargs.update(
-            {k: v for k, v in kwargs.items() if k not in excluded_keys}
-        )
+        gemini_kwargs.update({k: v for k, v in kwargs.items() if k not in excluded_keys})
 
         return ChatGoogleGenerativeAI(**gemini_kwargs)
 
@@ -322,9 +300,7 @@ class LLMManager:
                 return bool(api_key)
             elif provider == "azure_openai":
                 api_key = kwargs.get("api_key") or os.getenv("AZURE_OPENAI_API_KEY")
-                endpoint = kwargs.get("azure_endpoint") or os.getenv(
-                    "AZURE_OPENAI_ENDPOINT"
-                )
+                endpoint = kwargs.get("azure_endpoint") or os.getenv("AZURE_OPENAI_ENDPOINT")
                 return bool(api_key and endpoint)
             elif provider == "ollama":
                 # Ollama通常不需要API密钥，只需要确保服务可访问

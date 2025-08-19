@@ -24,16 +24,12 @@ class RepairPrompts:
         if page_count_mode == "custom_range":
             min_pages = page_count_settings.get("min_pages", 8)
             max_pages = page_count_settings.get("max_pages", 15)
-            page_count_instruction = (
-                f"- 页数要求：必须严格生成{min_pages}-{max_pages}页的PPT"
-            )
+            page_count_instruction = f"- 页数要求：必须严格生成{min_pages}-{max_pages}页的PPT"
         elif page_count_mode == "fixed":
             fixed_pages = page_count_settings.get("fixed_pages", 10)
             page_count_instruction = f"- 页数要求：必须生成恰好{fixed_pages}页的PPT"
         else:
-            page_count_instruction = (
-                "- 页数要求：根据内容复杂度自主决定合适的页数（建议8-15页）"
-            )
+            page_count_instruction = "- 页数要求：根据内容复杂度自主决定合适的页数（建议8-15页）"
 
         errors_text = "\n".join(["- " + str(error) for error in validation_errors])
 
@@ -65,9 +61,7 @@ class RepairPrompts:
 请输出修复后的完整JSON数据，使用```json```代码块包裹："""
 
     @staticmethod
-    def get_json_validation_prompt(
-        json_data: str, expected_structure: Dict[str, Any]
-    ) -> str:
+    def get_json_validation_prompt(json_data: str, expected_structure: Dict[str, Any]) -> str:
         """获取JSON验证提示词"""
         return f"""作为数据验证专家，请验证以下JSON数据是否符合预期结构：
 
@@ -96,9 +90,7 @@ class RepairPrompts:
 如果数据正确，请确认验证通过。"""
 
     @staticmethod
-    def get_content_validation_prompt(
-        content: str, requirements: Dict[str, Any]
-    ) -> str:
+    def get_content_validation_prompt(content: str, requirements: Dict[str, Any]) -> str:
         """获取内容验证提示词"""
         return f"""作为内容质量专家，请验证以下内容是否符合要求：
 
@@ -133,9 +125,7 @@ class RepairPrompts:
 请提供详细的验证结果和改进建议。"""
 
     @staticmethod
-    def get_structure_repair_prompt(
-        data: Dict[str, Any], target_structure: Dict[str, Any]
-    ) -> str:
+    def get_structure_repair_prompt(data: Dict[str, Any], target_structure: Dict[str, Any]) -> str:
         """获取结构修复提示词"""
         return f"""作为数据结构专家，请将以下数据修复为目标结构：
 

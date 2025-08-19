@@ -11,12 +11,24 @@ from typing import Any, Dict, List, Optional, Tuple
 from .adapters.ppt_prompt_adapter import PPTPromptAdapter, PPTSlideContext
 from .cache.image_cache import ImageCacheManager
 from .matching.image_matcher import ImageMatcher
-from .models import (ImageGenerationRequest, ImageInfo, ImageOperationResult,
-                     ImageProcessingOptions, ImageProvider, ImageSearchRequest,
-                     ImageSearchResult, ImageSourceType, ImageUploadRequest)
+from .models import (
+    ImageGenerationRequest,
+    ImageInfo,
+    ImageOperationResult,
+    ImageProcessingOptions,
+    ImageProvider,
+    ImageSearchRequest,
+    ImageSearchResult,
+    ImageSourceType,
+    ImageUploadRequest,
+)
 from .processors.image_processor import ImageProcessor
-from .providers.base import (ImageGenerationProvider, ImageSearchProvider,
-                             LocalStorageProvider, provider_registry)
+from .providers.base import (
+    ImageGenerationProvider,
+    ImageSearchProvider,
+    LocalStorageProvider,
+    provider_registry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,13 +86,10 @@ class ImageService:
         """初始化图片提供者"""
         try:
             # 检查是否已经初始化过本地存储提供者
-            existing_storage = provider_registry.get_storage_providers(
-                enabled_only=False
-            )
+            existing_storage = provider_registry.get_storage_providers(enabled_only=False)
             if not existing_storage:
                 # 初始化本地存储提供者（总是注册）
-                from .providers.local_storage_provider import \
-                    FileSystemStorageProvider
+                from .providers.local_storage_provider import FileSystemStorageProvider
 
                 storage_config = self.config.get("storage", {})
                 storage_provider = FileSystemStorageProvider(storage_config)
@@ -94,8 +103,7 @@ class ImageService:
             from .providers.dalle_provider import DalleProvider
             from .providers.pollinations_provider import PollinationsProvider
             from .providers.silicon_flow_provider import SiliconFlowProvider
-            from .providers.stable_diffusion_provider import \
-                StableDiffusionProvider
+            from .providers.stable_diffusion_provider import StableDiffusionProvider
 
             # 注册DALL-E提供者
             if is_provider_configured("dalle"):
@@ -104,9 +112,7 @@ class ImageService:
                 provider_registry.register(dalle_provider)
                 logger.debug("DALL-E provider registered")
             else:
-                logger.debug(
-                    "DALL-E API key not configured, skipping provider registration"
-                )
+                logger.debug("DALL-E API key not configured, skipping provider registration")
 
             # 注册Stable Diffusion提供者
             if is_provider_configured("stable_diffusion"):
@@ -126,9 +132,7 @@ class ImageService:
                 provider_registry.register(sf_provider)
                 logger.debug("SiliconFlow provider registered")
             else:
-                logger.debug(
-                    "SiliconFlow API key not configured, skipping provider registration"
-                )
+                logger.debug("SiliconFlow API key not configured, skipping provider registration")
 
             # 注册Pollinations提供者
             if is_provider_configured("pollinations"):
@@ -137,9 +141,7 @@ class ImageService:
                 provider_registry.register(pollinations_provider)
                 logger.debug("Pollinations provider registered")
             else:
-                logger.debug(
-                    "Pollinations provider not configured, skipping provider registration"
-                )
+                logger.debug("Pollinations provider not configured, skipping provider registration")
 
             # 初始化网络搜索提供者
             from .config.image_config import ImageServiceConfig
@@ -159,9 +161,7 @@ class ImageService:
                     "Unsplash API configured but not set as default network search provider"
                 )
             else:
-                logger.debug(
-                    "Unsplash API key not configured, skipping provider registration"
-                )
+                logger.debug("Unsplash API key not configured, skipping provider registration")
 
             # 注册Pixabay提供者
             if config_manager.should_enable_search_provider("pixabay"):
@@ -179,8 +179,7 @@ class ImageService:
             # 注册SearXNG提供者
             if config_manager.should_enable_search_provider("searxng"):
                 searxng_config = self.config.get("searxng", {})
-                from .providers.searxng_image_provider import \
-                    SearXNGSearchProvider
+                from .providers.searxng_image_provider import SearXNGSearchProvider
 
                 searxng_provider = SearXNGSearchProvider(searxng_config)
                 provider_registry.register(searxng_provider)
@@ -211,9 +210,7 @@ class ImageService:
 
             config_service = get_config_service()
             all_config = config_service.get_all_config()
-            default_provider = all_config.get(
-                "default_network_search_provider", "unsplash"
-            )
+            default_provider = all_config.get("default_network_search_provider", "unsplash")
 
             # 将默认提供者排在前面
             preferred_providers = []
@@ -283,16 +280,12 @@ class ImageService:
             # 过滤提供者
             if request.preferred_providers:
                 search_providers = [
-                    p
-                    for p in search_providers
-                    if p.provider in request.preferred_providers
+                    p for p in search_providers if p.provider in request.preferred_providers
                 ]
 
             if request.excluded_providers:
                 search_providers = [
-                    p
-                    for p in search_providers
-                    if p.provider not in request.excluded_providers
+                    p for p in search_providers if p.provider not in request.excluded_providers
                 ]
 
             # 如果没有指定优先提供者，根据默认配置排序
@@ -302,9 +295,7 @@ class ImageService:
             # 并行搜索
             search_tasks = []
             for provider in search_providers:
-                task = asyncio.create_task(
-                    self._search_with_provider(provider, request)
-                )
+                task = asyncio.create_task(self._search_with_provider(provider, request))
                 search_tasks.append(task)
 
             # 等待所有搜索完成
@@ -320,9 +311,7 @@ class ImageService:
 
                 if isinstance(result, ImageSearchResult):
                     all_images.extend(result.images)
-                    provider_results[search_providers[i].provider.value] = len(
-                        result.images
-                    )
+                    provider_results[search_providers[i].provider.value] = len(result.images)
 
             # 使用智能匹配器排序和过滤结果
             if all_images:
@@ -412,16 +401,12 @@ class ImageService:
                 with open(temp_path, "rb") as f:
                     image_data = f.read()
             except Exception as read_error:
-                logger.error(
-                    f"Failed to read downloaded file {temp_path}: {read_error}"
-                )
+                logger.error(f"Failed to read downloaded file {temp_path}: {read_error}")
                 return
 
             # 缓存图片
             await self.cache_manager.cache_image(image_info, image_data)
-            logger.debug(
-                f"Successfully cached image from provider: {image_info.image_id}"
-            )
+            logger.debug(f"Successfully cached image from provider: {image_info.image_id}")
 
         except Exception as e:
             logger.error(f"Failed to cache image {image_info.image_id}: {e}")
@@ -434,9 +419,7 @@ class ImageService:
                     temp_path.unlink(missing_ok=True)
                     logger.debug(f"Cleaned up temp file: {temp_path}")
                 except Exception as cleanup_error:
-                    logger.warning(
-                        f"Failed to cleanup temp file {temp_path}: {cleanup_error}"
-                    )
+                    logger.warning(f"Failed to cleanup temp file {temp_path}: {cleanup_error}")
                     # 如果立即删除失败，尝试延迟删除
                     asyncio.create_task(self._delayed_cleanup(temp_path))
 
@@ -455,13 +438,9 @@ class ImageService:
                         f"Failed to cleanup temp file after {max_retries} attempts: {file_path}, error: {e}"
                     )
                 else:
-                    logger.debug(
-                        f"Cleanup attempt {attempt + 1} failed for {file_path}: {e}"
-                    )
+                    logger.debug(f"Cleanup attempt {attempt + 1} failed for {file_path}: {e}")
 
-    async def generate_image(
-        self, request: ImageGenerationRequest
-    ) -> ImageOperationResult:
+    async def generate_image(self, request: ImageGenerationRequest) -> ImageOperationResult:
         """生成图片"""
         if not self.initialized:
             await self.initialize()
@@ -494,9 +473,7 @@ class ImageService:
                     image_data = f.read()
 
                 # 缓存图片
-                cache_key = await self.cache_manager.cache_image(
-                    result.image_info, image_data
-                )
+                cache_key = await self.cache_manager.cache_image(result.image_info, image_data)
                 logger.info(f"Generated image cached: {cache_key}")
 
             return result
@@ -535,9 +512,7 @@ class ImageService:
 
             # 如果上传成功，缓存图片
             if result.success and result.image_info:
-                cache_key = await self.cache_manager.cache_image(
-                    result.image_info, file_data
-                )
+                cache_key = await self.cache_manager.cache_image(result.image_info, file_data)
                 logger.info(f"Uploaded image cached: {cache_key}")
 
             return result
@@ -617,9 +592,7 @@ class ImageService:
             output_path = input_path.parent / f"processed_{input_path.name}"
 
             # 处理图片
-            result = await self.processor.process_image(
-                input_path, output_path, options
-            )
+            result = await self.processor.process_image(input_path, output_path, options)
 
             # 如果处理成功，缓存处理后的图片
             if result.success and result.image_info:
@@ -659,9 +632,7 @@ class ImageService:
             all_images = []
             processed_content_hashes = set()
 
-            logger.info(
-                f"Processing {len(self.cache_manager._cache_index)} cached images"
-            )
+            logger.info(f"Processing {len(self.cache_manager._cache_index)} cached images")
 
             # 首先处理主要的缓存条目
             for cache_key, cache_info in self.cache_manager._cache_index.items():
@@ -673,13 +644,9 @@ class ImageService:
                         continue
 
                     # 加载图片元数据
-                    image_info = await self.cache_manager._load_image_metadata(
-                        cache_key
-                    )
+                    image_info = await self.cache_manager._load_image_metadata(cache_key)
                     if not image_info:
-                        logger.warning(
-                            f"Failed to load metadata for cache key: {cache_key}"
-                        )
+                        logger.warning(f"Failed to load metadata for cache key: {cache_key}")
                         continue
 
                     # 分类筛选
@@ -700,9 +667,7 @@ class ImageService:
                         "title": image_info.title,
                         "description": image_info.description,
                         "filename": image_info.filename,
-                        "url": build_image_url(
-                            image_info.image_id
-                        ),  # 使用URL服务生成绝对URL
+                        "url": build_image_url(image_info.image_id),  # 使用URL服务生成绝对URL
                         "file_size": cache_info.file_size,
                         "width": (
                             image_info.metadata.width if image_info.metadata else 0
@@ -714,8 +679,7 @@ class ImageService:
                         "source": image_info.source_type.value,  # 添加source字段用于分类
                         "category": image_info.source_type.value,  # 添加category字段用于分类
                         "provider": image_info.provider.value,
-                        "alt_text": image_info.title
-                        or image_info.filename,  # 添加alt_text
+                        "alt_text": image_info.title or image_info.filename,  # 添加alt_text
                         "created_at": cache_info.created_at,
                         "last_accessed": cache_info.last_accessed,
                         "access_count": cache_info.access_count,
@@ -763,15 +727,11 @@ class ImageService:
 
                             # 搜索筛选
                             if search:
-                                if not self._matches_search_criteria(
-                                    image_info, search
-                                ):
+                                if not self._matches_search_criteria(image_info, search):
                                     continue
 
                             # 查找对应的缓存信息
-                            cache_info = self.cache_manager._cache_index.get(
-                                content_hash
-                            )
+                            cache_info = self.cache_manager._cache_index.get(content_hash)
                             if not cache_info:
                                 continue
 
@@ -789,21 +749,16 @@ class ImageService:
                                 ),  # 使用URL服务生成绝对URL
                                 "file_size": cache_info.file_size,
                                 "width": (
-                                    image_info.metadata.width
-                                    if image_info.metadata
-                                    else 0
+                                    image_info.metadata.width if image_info.metadata else 0
                                 ),  # 添加宽度
                                 "height": (
-                                    image_info.metadata.height
-                                    if image_info.metadata
-                                    else 0
+                                    image_info.metadata.height if image_info.metadata else 0
                                 ),  # 添加高度
                                 "source_type": image_info.source_type.value,
                                 "source": image_info.source_type.value,  # 添加source字段用于分类
                                 "category": image_info.source_type.value,  # 添加category字段用于分类
                                 "provider": image_info.provider.value,
-                                "alt_text": image_info.title
-                                or image_info.filename,  # 添加alt_text
+                                "alt_text": image_info.title or image_info.filename,  # 添加alt_text
                                 "created_at": cache_info.created_at,
                                 "last_accessed": cache_info.last_accessed,
                                 "access_count": cache_info.access_count,
@@ -816,9 +771,7 @@ class ImageService:
                             all_images.append(image_data)
 
                     except Exception as e:
-                        logger.warning(
-                            f"Failed to process reference file {reference_file}: {e}"
-                        )
+                        logger.warning(f"Failed to process reference file {reference_file}: {e}")
                         continue
 
             # 排序
@@ -1038,9 +991,7 @@ class ImageService:
             result = await self.generate_image(generation_request)
 
             if result.success:
-                logger.info(
-                    f"Generated PPT slide image for slide {slide_context.page_number}"
-                )
+                logger.info(f"Generated PPT slide image for slide {slide_context.page_number}")
 
             return result
 
@@ -1061,9 +1012,7 @@ class ImageService:
 
         try:
             # 构建搜索查询
-            search_query = (
-                f"{slide_context.title} {slide_context.topic} {slide_context.scenario}"
-            )
+            search_query = f"{slide_context.title} {slide_context.topic} {slide_context.scenario}"
 
             # 搜索相关图片
             search_request = ImageSearchRequest(

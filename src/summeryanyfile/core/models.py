@@ -172,9 +172,7 @@ class ProcessingConfig:
 
         # 验证逻辑
         if self.min_slides > self.max_slides:
-            raise ValueError(
-                f"最小页数({self.min_slides})不能大于最大页数({self.max_slides})"
-            )
+            raise ValueError(f"最小页数({self.min_slides})不能大于最大页数({self.max_slides})")
         if self.min_slides < 1:
             raise ValueError("最小页数不能小于1")
         if self.max_slides > 1000:
@@ -228,9 +226,7 @@ class PPTOutline:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PPTOutline":
         """从字典创建实例"""
-        slides = [
-            SlideInfo.from_dict(slide_data) for slide_data in data.get("slides", [])
-        ]
+        slides = [SlideInfo.from_dict(slide_data) for slide_data in data.get("slides", [])]
         return cls(
             title=data.get("title", ""),
             total_pages=data.get("total_pages", 0),

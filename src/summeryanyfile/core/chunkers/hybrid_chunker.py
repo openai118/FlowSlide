@@ -123,9 +123,7 @@ class HybridChunker(BaseChunker):
         # 创建新的元数据，保留原始信息
         new_metadata = chunk.metadata.copy()
         new_metadata["parent_chunk_id"] = chunk.chunk_id
-        new_metadata["parent_strategy"] = chunk.metadata.get(
-            "chunking_strategy", "unknown"
-        )
+        new_metadata["parent_strategy"] = chunk.metadata.get("chunking_strategy", "unknown")
 
         # 应用段落分块
         sub_chunks = self.paragraph_chunker.chunk_text(chunk.content, new_metadata)
@@ -150,9 +148,7 @@ class HybridChunker(BaseChunker):
         # 创建新的元数据，保留原始信息
         new_metadata = chunk.metadata.copy()
         new_metadata["parent_chunk_id"] = chunk.chunk_id
-        new_metadata["parent_strategy"] = chunk.metadata.get(
-            "chunking_strategy", "unknown"
-        )
+        new_metadata["parent_strategy"] = chunk.metadata.get("chunking_strategy", "unknown")
 
         # 应用递归分块
         sub_chunks = self.recursive_chunker.chunk_text(chunk.content, new_metadata)
@@ -234,9 +230,7 @@ class HybridChunker(BaseChunker):
             {
                 "strategy_distribution": strategy_counts,
                 "oversized_chunks": oversized_count,
-                "oversized_percentage": (
-                    (oversized_count / len(chunks)) * 100 if chunks else 0
-                ),
+                "oversized_percentage": ((oversized_count / len(chunks)) * 100 if chunks else 0),
                 "size_tolerance": self.size_tolerance,
             }
         )

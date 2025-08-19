@@ -503,8 +503,7 @@ class ConfigService:
                 k
                 for k in config.keys()
                 if k in self.config_schema
-                and self.config_schema[k]["category"]
-                in ["ai_providers", "generation_params"]
+                and self.config_schema[k]["category"] in ["ai_providers", "generation_params"]
             ]
             if ai_related_keys:
                 self._reload_ai_config()
@@ -513,8 +512,7 @@ class ConfigService:
             app_related_keys = [
                 k
                 for k in config.keys()
-                if k in self.config_schema
-                and self.config_schema[k]["category"] == "app_config"
+                if k in self.config_schema and self.config_schema[k]["category"] == "app_config"
             ]
             if app_related_keys:
                 self._reload_app_config()
@@ -523,8 +521,7 @@ class ConfigService:
             image_related_keys = [
                 k
                 for k in config.keys()
-                if k in self.config_schema
-                and self.config_schema[k]["category"] == "image_service"
+                if k in self.config_schema and self.config_schema[k]["category"] == "image_service"
             ]
             if image_related_keys:
                 self._reload_image_config()
@@ -559,9 +556,7 @@ class ConfigService:
             reload_services()
             logger.info("Service instances reloaded")
 
-            logger.info(
-                "AI configuration, providers, and services reloaded successfully"
-            )
+            logger.info("AI configuration, providers, and services reloaded successfully")
         except Exception as e:
             logger.error(f"Failed to reload AI configuration: {e}")
             import traceback
@@ -594,13 +589,9 @@ class ConfigService:
 
             # 映射配置项到Pollinations配置
             if "pollinations_api_token" in current_config:
-                pollinations_updates["api_token"] = current_config[
-                    "pollinations_api_token"
-                ]
+                pollinations_updates["api_token"] = current_config["pollinations_api_token"]
             if "pollinations_referrer" in current_config:
-                pollinations_updates["referrer"] = current_config[
-                    "pollinations_referrer"
-                ]
+                pollinations_updates["referrer"] = current_config["pollinations_referrer"]
             if "pollinations_model" in current_config:
                 pollinations_updates["model"] = current_config["pollinations_model"]
             if "pollinations_enhance" in current_config:
@@ -643,10 +634,7 @@ class ConfigService:
         filtered_config = {}
 
         for key, value in config.items():
-            if (
-                key in self.config_schema
-                and self.config_schema[key]["category"] == category
-            ):
+            if key in self.config_schema and self.config_schema[key]["category"] == category:
                 filtered_config[key] = value
 
         return self.update_config(filtered_config)
@@ -675,9 +663,7 @@ class ConfigService:
                     num_value = float(value)
                     # Special validation for access_token_expire_minutes - allow 0 for never expire
                     if key == "access_token_expire_minutes" and num_value < 0:
-                        field_errors.append(
-                            f"{key} must be 0 (never expire) or a positive number"
-                        )
+                        field_errors.append(f"{key} must be 0 (never expire) or a positive number")
                 except (ValueError, TypeError):
                     field_errors.append(f"{key} must be a number")
 
@@ -696,9 +682,7 @@ class ConfigService:
                         field_errors.append(f"{key} must be a boolean value")
 
             elif schema["type"] == "url":
-                if value and not (
-                    value.startswith("http://") or value.startswith("https://")
-                ):
+                if value and not (value.startswith("http://") or value.startswith("https://")):
                     field_errors.append(f"{key} must be a valid URL")
 
             # Enum validation for new fields
@@ -748,9 +732,7 @@ class ConfigService:
                             "min_pages/max_pages must be positive and min_pages <= max_pages"
                         )
             except Exception:
-                errors.setdefault("min_pages", []).append(
-                    "min_pages/max_pages must be integers"
-                )
+                errors.setdefault("min_pages", []).append("min_pages/max_pages must be integers")
 
         return errors
 

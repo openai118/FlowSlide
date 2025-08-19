@@ -115,9 +115,7 @@ class Settings:
 
             # 过滤掉不存在的字段
             valid_fields = {field.name for field in cls.__dataclass_fields__.values()}
-            filtered_config = {
-                k: v for k, v in config_dict.items() if k in valid_fields
-            }
+            filtered_config = {k: v for k, v in config_dict.items() if k in valid_fields}
 
             return cls(**filtered_config)
         except Exception as e:

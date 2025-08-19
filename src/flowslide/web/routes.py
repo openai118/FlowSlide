@@ -19,21 +19,18 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from bs4 import BeautifulSoup
-from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
-                     UploadFile)
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..ai import AIMessage, MessageRole, get_ai_provider
-from ..api.models import (FileOutlineGenerationRequest, PPTGenerationRequest,
-                          PPTProject, TodoBoard)
-from ..auth.middleware import (get_current_user_optional,
-                               get_current_user_required)
+from ..api.models import FileOutlineGenerationRequest, PPTGenerationRequest, PPTProject, TodoBoard
+from ..auth.middleware import get_current_user_optional, get_current_user_required
 from ..core.simple_config import ai_config
-from ..database.models import User
 from ..database.database import get_db
+from ..database.models import User
 from ..services.enhanced_ppt_service import EnhancedPPTService
 from ..services.pdf_to_pptx_converter import get_pdf_to_pptx_converter
 from ..services.pyppeteer_pdf_converter import get_pdf_converter
@@ -42,11 +39,13 @@ from ..utils.thread_pool import run_blocking_io, to_thread
 # Configure logger for this module
 logger = logging.getLogger(__name__)
 
+
 # Helper function for aspect ratio settings
 def get_aspect_ratio_settings() -> dict:
     """Get aspect ratio related settings from config (defaults to 16:9)."""
     try:
         from ..services.config_service import get_config_service
+
         cfg = get_config_service().get_all_config()
         aspect = (cfg.get("aspect_ratio") or "16:9").strip()
     except Exception:
@@ -57,10 +56,12 @@ def get_aspect_ratio_settings() -> dict:
     # default 16:9
     return {"ratio_css": "16/9", "width": 1280, "height": 720, "vw_height": "56.25vw"}
 
+
 router = APIRouter()
 
 # Templates directory - use absolute path for better reliability
 import os
+
 template_dir = os.path.join(os.path.dirname(__file__), "templates")
 templates = Jinja2Templates(directory=template_dir)
 
@@ -94,6 +95,7 @@ templates.env.filters["strftime"] = strftime_filter
 # Import shared service instances to ensure data consistency
 from ..services.service_instances import ppt_service
 
+
 # --- RBAC helpers ---
 def _user_can_access_project(user: Optional[User], project: Any) -> bool:
     try:
@@ -109,6 +111,7 @@ def _user_can_access_project(user: Optional[User], project: Any) -> bool:
     except Exception:
         return False
 
+
 # --- Admin: Simple user management page ---
 @router.get("/admin/users", response_class=HTMLResponse)
 async def admin_users_page(request: Request, user: User = Depends(get_current_user_required)):
@@ -116,6 +119,7 @@ async def admin_users_page(request: Request, user: User = Depends(get_current_us
     # 仅管理员可访问
     if not user.is_admin:
         from fastapi.responses import RedirectResponse
+
         return RedirectResponse(url="/home", status_code=302)
 
     return templates.TemplateResponse(
@@ -169,9 +173,7 @@ class AIAutoImageGenerateRequest(BaseModel):
 
 
 # Helper function to extract slides from HTML content
-async def _extract_slides_from_html(
-    slides_html: str, existing_slides_data: list
-) -> list:
+async def _extract_slides_from_html(slides_html: str, existing_slides_data: list) -> list:
     """
     Extract individual slides from combined HTML content and update slides_data
     """
@@ -214,9 +216,7 @@ async def _extract_slides_from_html(
             for i, container in enumerate(slide_containers):
                 # Try to extract title from the slide
                 title = f"第{i+1}页"
-                title_elements = container.find_all(
-                    ["h1", "h2", "h3", "h4", "h5", "h6"]
-                )
+                title_elements = container.find_all(["h1", "h2", "h3", "h4", "h5", "h6"])
                 if title_elements:
                     title = title_elements[0].get_text(strip=True) or title
 
@@ -300,9 +300,7 @@ async def web_home(request: Request, user: Optional[User] = Depends(get_current_
 
 
 @router.get("/ai-config", response_class=HTMLResponse)
-async def web_ai_config(
-    request: Request, user: User = Depends(get_current_user_required)
-):
+async def web_ai_config(request: Request, user: User = Depends(get_current_user_required)):
     """AI configuration page"""
     from ..services.config_service import get_config_service
 
@@ -326,9 +324,7 @@ async def web_ai_config(
 
 
 @router.post("/api/ai/providers/openai/models")
-async def get_openai_models(
-    request: Request, user: User = Depends(get_current_user_required)
-):
+async def get_openai_models(request: Request, user: User = Depends(get_current_user_required)):
     """Proxy endpoint to get OpenAI models list, avoiding CORS issues - uses frontend provided config"""
     try:
         import json
@@ -386,9 +382,7 @@ async def get_openai_models(
                                 return 2
 
                         models.sort(key=lambda x: (get_priority(x["id"]), x["id"]))
-                    logger.info(
-                        f"Successfully fetched {len(models)} models from {base_url}"
-                    )
+                    logger.info(f"Successfully fetched {len(models)} models from {base_url}")
                     return {"success": True, "models": models}
                 else:
                     error_text = await response.text()
@@ -405,11 +399,8 @@ async def get_openai_models(
         return {"success": False, "error": str(e)}
 
 
-
 @router.post("/api/ai/providers/anthropic/models")
-async def get_anthropic_models(
-    request: Request, user: User = Depends(get_current_user_required)
-):
+async def get_anthropic_models(request: Request, user: User = Depends(get_current_user_required)):
     """Proxy endpoint to get Anthropic models list using frontend-provided config."""
     try:
         import aiohttp
@@ -456,9 +447,7 @@ async def get_anthropic_models(
 
 
 @router.post("/api/ai/providers/google/models")
-async def get_google_models(
-    request: Request, user: User = Depends(get_current_user_required)
-):
+async def get_google_models(request: Request, user: User = Depends(get_current_user_required)):
     """Proxy endpoint to get Google Gemini models list using frontend-provided config."""
     try:
         import aiohttp
@@ -546,9 +535,7 @@ async def get_azure_openai_deployments(
 
 
 @router.post("/api/ai/providers/ollama/models")
-async def get_ollama_models(
-    request: Request, user: User = Depends(get_current_user_required)
-):
+async def get_ollama_models(request: Request, user: User = Depends(get_current_user_required)):
     """Proxy endpoint to list Ollama local models (tags)."""
     try:
         import aiohttp
@@ -615,7 +602,7 @@ async def validate_openai_api_key(
                     return {
                         "success": True,
                         "message": f"API Key 有效，可访问 {model_count} 个模型",
-                        "model_count": model_count
+                        "model_count": model_count,
                     }
                 else:
                     error_text = await response.text()
@@ -623,14 +610,18 @@ async def validate_openai_api_key(
 
                     # 解析错误信息
                     try:
-                        error_data = await response.json() if response.content_type == 'application/json' else {}
-                        error_msg = error_data.get('error', {}).get('message', error_text)
+                        error_data = (
+                            await response.json()
+                            if response.content_type == "application/json"
+                            else {}
+                        )
+                        error_msg = error_data.get("error", {}).get("message", error_text)
                     except:
                         error_msg = error_text
 
                     return {
                         "success": False,
-                        "error": f"API Key 验证失败 (状态码: {response.status}): {error_msg}"
+                        "error": f"API Key 验证失败 (状态码: {response.status}): {error_msg}",
                     }
 
     except Exception as e:
@@ -715,9 +706,7 @@ async def test_openai_provider_proxy(
                             "message", f"API returned status {response.status}"
                         )
                     except:
-                        error_message = (
-                            f"API returned status {response.status}: {error_text}"
-                        )
+                        error_message = f"API returned status {response.status}: {error_text}"
 
                     logger.error(f"Test failed for {base_url}: {error_message}")
 
@@ -880,9 +869,7 @@ async def web_demo(request: Request, user: User = Depends(get_current_user_requi
 
 
 @router.get("/research", response_class=HTMLResponse)
-async def web_research_status(
-    request: Request, user: User = Depends(get_current_user_required)
-):
+async def web_research_status(request: Request, user: User = Depends(get_current_user_required)):
     """DEEP Research status and management page"""
     return templates.TemplateResponse("research_status.html", {"request": request})
 
@@ -891,9 +878,7 @@ async def web_research_status(
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
-async def web_dashboard(
-    request: Request, user: User = Depends(get_current_user_required)
-):
+async def web_dashboard(request: Request, user: User = Depends(get_current_user_required)):
     """Project dashboard with overview"""
     try:
         # Get project statistics (RBAC: non-admin only sees own projects)
@@ -915,9 +900,7 @@ async def web_dashboard(
         active_todo_boards = []
         for project in projects:
             if project.status == "in_progress" and project.todo_board:
-                todo_board = await ppt_service.get_project_todo_board(
-                    project.project_id
-                )
+                todo_board = await ppt_service.get_project_todo_board(project.project_id)
                 if todo_board:
                     active_todo_boards.append(todo_board)
 
@@ -935,9 +918,7 @@ async def web_dashboard(
         )
 
     except Exception as e:
-        return templates.TemplateResponse(
-            "error.html", {"request": request, "error": str(e)}
-        )
+        return templates.TemplateResponse("error.html", {"request": request, "error": str(e)})
 
 
 @router.get("/projects", response_class=HTMLResponse)
@@ -959,7 +940,13 @@ async def web_projects_list(
         owner_name_map = {}
         try:
             if getattr(user, "is_admin", False):
-                owner_ids = list({p.owner_id for p in projects_response.projects if getattr(p, "owner_id", None) is not None})
+                owner_ids = list(
+                    {
+                        p.owner_id
+                        for p in projects_response.projects
+                        if getattr(p, "owner_id", None) is not None
+                    }
+                )
                 if owner_ids:
                     rows = db.query(User).filter(User.id.in_(owner_ids)).all()
                     owner_name_map = {u.id: (u.username or f"user-{u.id}") for u in rows}
@@ -980,9 +967,7 @@ async def web_projects_list(
         )
 
     except Exception as e:
-        return templates.TemplateResponse(
-            "error.html", {"request": request, "error": str(e)}
-        )
+        return templates.TemplateResponse("error.html", {"request": request, "error": str(e)})
 
 
 @router.get("/projects/{project_id}", response_class=HTMLResponse)
@@ -1016,9 +1001,7 @@ async def web_project_detail(
         )
 
     except Exception as e:
-        return templates.TemplateResponse(
-            "error.html", {"request": request, "error": str(e)}
-        )
+        return templates.TemplateResponse("error.html", {"request": request, "error": str(e)})
 
 
 @router.get("/projects/{project_id}/todo", response_class=HTMLResponse)
@@ -1095,16 +1078,14 @@ async def web_project_todo_board(
             use_integrated_editor = True
 
         template_name = (
-            "todo_board_with_editor.html"
-            if use_integrated_editor
-            else "todo_board.html"
+            "todo_board_with_editor.html" if use_integrated_editor else "todo_board.html"
         )
 
         # Ensure project is not None for template
         template_context = {
             "request": request,
             "todo_board": todo_board,
-            "aspect_ratio_settings": get_aspect_ratio_settings()
+            "aspect_ratio_settings": get_aspect_ratio_settings(),
         }
 
         # Only add project if it exists
@@ -1114,9 +1095,7 @@ async def web_project_todo_board(
         return templates.TemplateResponse(template_name, template_context)
 
     except Exception as e:
-        return templates.TemplateResponse(
-            "error.html", {"request": request, "error": str(e)}
-        )
+        return templates.TemplateResponse("error.html", {"request": request, "error": str(e)})
 
 
 @router.get("/projects/{project_id}/fullscreen", response_class=HTMLResponse)
@@ -1164,9 +1143,7 @@ async def web_project_fullscreen(
 
 
 @router.get("/api/projects/{project_id}/slides-data")
-async def get_project_slides_data(
-    project_id: str, user: User = Depends(get_current_user_required)
-):
+async def get_project_slides_data(project_id: str, user: User = Depends(get_current_user_required)):
     """获取项目最新的幻灯片数据 - 用于分享演示实时更新"""
     try:
         # 直接从数据库获取最新数据
@@ -1202,9 +1179,7 @@ async def get_project_slides_data(
 
 
 @router.get("/test/slides-navigation", response_class=HTMLResponse)
-async def test_slides_navigation(
-    request: Request, user: User = Depends(get_current_user_required)
-):
+async def test_slides_navigation(request: Request, user: User = Depends(get_current_user_required)):
     """测试幻灯片导航功能"""
     with open("test_slides_navigation.html", "r", encoding="utf-8") as f:
         content = f.read()
@@ -1212,9 +1187,7 @@ async def test_slides_navigation(
 
 
 @router.get("/temp/{file_path:path}")
-async def serve_temp_file(
-    file_path: str, user: User = Depends(get_current_user_required)
-):
+async def serve_temp_file(file_path: str, user: User = Depends(get_current_user_required)):
     """Serve temporary slide files"""
     try:
         # Construct the full path to the temp file using system temp directory
@@ -1272,27 +1245,19 @@ async def web_create_project(
         )
 
         # Update project status to in_progress
-        await ppt_service.project_manager.update_project_status(
-            project.project_id, "in_progress"
-        )
+        await ppt_service.project_manager.update_project_status(project.project_id, "in_progress")
 
         # Redirect directly to TODO page without showing redirect page
         from fastapi.responses import RedirectResponse
 
-        return RedirectResponse(
-            url=f"/projects/{project.project_id}/todo", status_code=302
-        )
+        return RedirectResponse(url=f"/projects/{project.project_id}/todo", status_code=302)
 
     except Exception as e:
-        return templates.TemplateResponse(
-            "error.html", {"request": request, "error": str(e)}
-        )
+        return templates.TemplateResponse("error.html", {"request": request, "error": str(e)})
 
 
 @router.post("/projects/{project_id}/start-workflow")
-async def start_project_workflow(
-    project_id: str, user: User = Depends(get_current_user_required)
-):
+async def start_project_workflow(project_id: str, user: User = Depends(get_current_user_required)):
     """Start the AI workflow for a project (only if requirements are confirmed)"""
     try:
         # Get project
@@ -1329,9 +1294,7 @@ async def start_project_workflow(
         )
 
         # Start the workflow in background
-        asyncio.create_task(
-            ppt_service._execute_project_workflow(project_id, project_request)
-        )
+        asyncio.create_task(ppt_service._execute_project_workflow(project_id, project_request))
 
         return {"status": "success", "message": "Workflow started"}
 
@@ -1374,9 +1337,7 @@ async def project_requirements_page(
         )
 
     except Exception as e:
-        return templates.TemplateResponse(
-            "error.html", {"request": request, "error": str(e)}
-        )
+        return templates.TemplateResponse("error.html", {"request": request, "error": str(e)})
 
 
 # 移除AI生成需求建议的API端点，改为使用默认选项
@@ -1411,9 +1372,7 @@ async def stream_outline_generation(
 
 
 @router.post("/projects/{project_id}/generate-outline")
-async def generate_outline(
-    project_id: str, user: User = Depends(get_current_user_required)
-):
+async def generate_outline(project_id: str, user: User = Depends(get_current_user_required)):
     """Generate outline for a project (non-streaming)"""
     try:
         project = await ppt_service.project_manager.get_project(project_id)
@@ -1453,9 +1412,7 @@ async def generate_outline(
         page_count_settings = confirmed_requirements.get("page_count_settings", {})
 
         # Generate outline using AI with page count settings
-        outline = await ppt_service.generate_outline(
-            project_request, page_count_settings
-        )
+        outline = await ppt_service.generate_outline(project_request, page_count_settings)
 
         # Convert outline to dict format
         outline_dict = {
@@ -1484,9 +1441,7 @@ async def generate_outline(
 
 
 @router.post("/projects/{project_id}/regenerate-outline")
-async def regenerate_outline(
-    project_id: str, user: User = Depends(get_current_user_required)
-):
+async def regenerate_outline(project_id: str, user: User = Depends(get_current_user_required)):
     """Regenerate outline for a project (overwrites existing outline)"""
     try:
         project = await ppt_service.project_manager.get_project(project_id)
@@ -1507,9 +1462,7 @@ async def regenerate_outline(
         project_request = PPTGenerationRequest(
             scenario=confirmed_requirements.get("scenario", "general"),
             topic=confirmed_requirements.get("topic", project.topic),
-            requirements=confirmed_requirements.get(
-                "requirements", project.requirements
-            ),
+            requirements=confirmed_requirements.get("requirements", project.requirements),
             language="zh",  # Default language
             network_mode=confirmed_requirements.get("network_mode", False),
             target_audience=confirmed_requirements.get("target_audience", "普通大众"),
@@ -1532,9 +1485,7 @@ async def regenerate_outline(
                 topic=project_request.topic,
                 scenario=project_request.scenario,
                 requirements=confirmed_requirements.get("requirements", ""),
-                target_audience=confirmed_requirements.get(
-                    "target_audience", "普通大众"
-                ),
+                target_audience=confirmed_requirements.get("target_audience", "普通大众"),
                 page_count_mode=page_count_settings.get("mode", "ai_decide"),
                 min_pages=page_count_settings.get("min_pages", 5),
                 max_pages=page_count_settings.get("max_pages", 20),
@@ -1552,9 +1503,7 @@ async def regenerate_outline(
             result = await ppt_service.generate_outline_from_file(file_request)
 
             # Update outline generation stage
-            await ppt_service._update_outline_generation_stage(
-                project_id, result["outline_dict"]
-            )
+            await ppt_service._update_outline_generation_stage(project_id, result["outline_dict"])
 
             return {
                 "status": "success",
@@ -1563,9 +1512,7 @@ async def regenerate_outline(
             }
         else:
             # Use standard outline generation
-            outline = await ppt_service.generate_outline(
-                project_request, page_count_settings
-            )
+            outline = await ppt_service.generate_outline(project_request, page_count_settings)
 
             # Convert outline to dict format
             outline_dict = {
@@ -1594,9 +1541,7 @@ async def regenerate_outline(
 
 
 @router.post("/projects/{project_id}/generate-file-outline")
-async def generate_file_outline(
-    project_id: str, user: User = Depends(get_current_user_required)
-):
+async def generate_file_outline(project_id: str, user: User = Depends(get_current_user_required)):
     """Generate outline from uploaded file (non-streaming)"""
     try:
         project = await ppt_service.project_manager.get_project(project_id)
@@ -1612,9 +1557,7 @@ async def generate_file_outline(
         if project.outline and project.outline.get("slides"):
             # 检查是否是从文件生成的大纲
             metadata = project.outline.get("metadata", {})
-            if metadata.get("generated_with_summeryfile") or metadata.get(
-                "generated_with_file"
-            ):
+            if metadata.get("generated_with_summeryfile") or metadata.get("generated_with_file"):
                 file_generated_outline = project.outline
                 logger.info(
                     f"Project {project_id} has file-generated outline in project.outline, using it"
@@ -1626,9 +1569,7 @@ async def generate_file_outline(
             and project.confirmed_requirements
             and project.confirmed_requirements.get("file_generated_outline")
         ):
-            file_generated_outline = project.confirmed_requirements[
-                "file_generated_outline"
-            ]
+            file_generated_outline = project.confirmed_requirements["file_generated_outline"]
             logger.info(
                 f"Project {project_id} has file-generated outline in confirmed_requirements, using it"
             )
@@ -1654,9 +1595,8 @@ async def generate_file_outline(
 
                 # Refresh project data
                 project = await ppt_service.project_manager.get_project(project_id)
-                if (
-                    project.confirmed_requirements
-                    and project.confirmed_requirements.get("file_generated_outline")
+                if project.confirmed_requirements and project.confirmed_requirements.get(
+                    "file_generated_outline"
                 ):
                     file_generated_outline = project.confirmed_requirements[
                         "file_generated_outline"
@@ -1690,9 +1630,7 @@ async def generate_file_outline(
             formatted_json = json.dumps(existing_outline, ensure_ascii=False, indent=2)
 
             # Update outline generation stage
-            await ppt_service._update_outline_generation_stage(
-                project_id, existing_outline
-            )
+            await ppt_service._update_outline_generation_stage(project_id, existing_outline)
 
             return {
                 "status": "success",
@@ -1715,15 +1653,11 @@ async def generate_file_outline(
                     from ..api.models import FileOutlineGenerationRequest
 
                     # Get file information from confirmed requirements
-                    uploaded_files = project.confirmed_requirements.get(
-                        "uploaded_files", []
-                    )
+                    uploaded_files = project.confirmed_requirements.get("uploaded_files", [])
                     if uploaded_files:
                         file_info = uploaded_files[0]  # Use first file
                         # 使用确认的要求或项目创建时的要求作为fallback
-                        confirmed_reqs = project.confirmed_requirements.get(
-                            "requirements", ""
-                        )
+                        confirmed_reqs = project.confirmed_requirements.get("requirements", "")
                         project_reqs = project.requirements or ""
                         final_reqs = confirmed_reqs or project_reqs
 
@@ -1748,9 +1682,7 @@ async def generate_file_outline(
                             fixed_pages=project.confirmed_requirements.get(
                                 "page_count_settings", {}
                             ).get("fixed_pages", 10),
-                            ppt_style=project.confirmed_requirements.get(
-                                "ppt_style", "general"
-                            ),
+                            ppt_style=project.confirmed_requirements.get("ppt_style", "general"),
                             custom_style_prompt=project.confirmed_requirements.get(
                                 "custom_style_prompt"
                             ),
@@ -1776,9 +1708,7 @@ async def generate_file_outline(
                             # Ensure metadata includes correct identification
                             if "metadata" not in formatted_outline:
                                 formatted_outline["metadata"] = {}
-                            formatted_outline["metadata"][
-                                "generated_with_summeryfile"
-                            ] = True
+                            formatted_outline["metadata"]["generated_with_summeryfile"] = True
                             formatted_outline["metadata"]["generated_at"] = time.time()
 
                             formatted_json = json.dumps(
@@ -1856,9 +1786,7 @@ async def update_project_outline(
 
 
 @router.post("/projects/{project_id}/confirm-outline")
-async def confirm_project_outline(
-    project_id: str, user: User = Depends(get_current_user_required)
-):
+async def confirm_project_outline(project_id: str, user: User = Depends(get_current_user_required)):
     """Confirm project outline and enable PPT generation"""
     try:
         # Access check
@@ -1906,9 +1834,7 @@ async def web_project_todo_editor(
         )
 
     except Exception as e:
-        return templates.TemplateResponse(
-            "error.html", {"request": request, "error": str(e)}
-        )
+        return templates.TemplateResponse("error.html", {"request": request, "error": str(e)})
 
 
 @router.post("/projects/{project_id}/confirm-requirements")
@@ -1986,14 +1912,10 @@ async def confirm_project_requirements(
             "custom_audience": custom_audience if audience_type == "自定义" else None,
             "page_count_settings": page_count_settings,
             "ppt_style": ppt_style,
-            "custom_style_prompt": (
-                custom_style_prompt if ppt_style == "custom" else None
-            ),
+            "custom_style_prompt": (custom_style_prompt if ppt_style == "custom" else None),
             "description": description,
             "content_source": content_source,
-            "file_processing_mode": (
-                file_processing_mode if content_source == "file" else None
-            ),
+            "file_processing_mode": (file_processing_mode if content_source == "file" else None),
             "content_analysis_depth": (
                 content_analysis_depth if content_source == "file" else None
             ),
@@ -2098,9 +2020,7 @@ async def stream_stage_response(
 
                 # Stream the response word by word for better UX
                 if isinstance(response_content, dict):
-                    content_text = response_content.get(
-                        "message", str(response_content)
-                    )
+                    content_text = response_content.get("message", str(response_content))
                 else:
                     content_text = str(response_content)
 
@@ -2165,17 +2085,16 @@ async def edit_project_ppt(
             project.slides_data = []
 
         return templates.TemplateResponse(
-            "project_slides_editor.html", {
+            "project_slides_editor.html",
+            {
                 "request": request,
                 "project": project,
-                "aspect_ratio_settings": get_aspect_ratio_settings()
-            }
+                "aspect_ratio_settings": get_aspect_ratio_settings(),
+            },
         )
 
     except Exception as e:
-        return templates.TemplateResponse(
-            "error.html", {"request": request, "error": str(e)}
-        )
+        return templates.TemplateResponse("error.html", {"request": request, "error": str(e)})
 
 
 @router.post("/api/projects/{project_id}/update-html")
@@ -2217,9 +2136,7 @@ async def update_project_html(
                 )
 
             except Exception as parse_error:
-                logger.warning(
-                    f"Failed to parse HTML content for slide extraction: {parse_error}"
-                )
+                logger.warning(f"Failed to parse HTML content for slide extraction: {parse_error}")
                 # 如果解析失败，至少标记现有的slides_data为用户编辑
                 if project.slides_data:
                     for slide_data in project.slides_data:
@@ -2261,9 +2178,7 @@ async def update_project_html(
 
 
 @router.get("/api/projects/{project_id}")
-async def get_project_data(
-    project_id: str, user: User = Depends(get_current_user_required)
-):
+async def get_project_data(project_id: str, user: User = Depends(get_current_user_required)):
     """Get project data for real-time updates"""
     try:
         project = await ppt_service.project_manager.get_project(project_id)
@@ -2394,7 +2309,11 @@ async def regenerate_project_html(project_id: str):
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         # Access control: only owner or admin can regenerate
-        user = getattr(request.state, "user", None) if isinstance(locals().get("request"), Request) else None
+        user = (
+            getattr(request.state, "user", None)
+            if isinstance(locals().get("request"), Request)
+            else None
+        )
         if user and not _user_can_access_project(user, project):
             raise HTTPException(status_code=403, detail="Access denied")
 
@@ -2437,9 +2356,7 @@ async def regenerate_project_html(project_id: str):
                 )
 
         except Exception as save_error:
-            logger.error(
-                f"Exception while saving regenerated HTML to database: {save_error}"
-            )
+            logger.error(f"Exception while saving regenerated HTML to database: {save_error}")
             # 继续返回成功，因为内存中的数据已经更新
 
         return {"success": True, "message": "Project HTML regenerated successfully"}
@@ -2456,7 +2373,11 @@ async def regenerate_slide(project_id: str, slide_number: int):
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         # Access control: only owner or admin can regenerate slides
-        user = getattr(request.state, "user", None) if isinstance(locals().get("request"), Request) else None
+        user = (
+            getattr(request.state, "user", None)
+            if isinstance(locals().get("request"), Request)
+            else None
+        )
         if user and not _user_can_access_project(user, project):
             raise HTTPException(status_code=403, detail="Access denied")
 
@@ -2464,18 +2385,14 @@ async def regenerate_slide(project_id: str, slide_number: int):
             raise HTTPException(status_code=400, detail="Project outline not found")
 
         if not project.confirmed_requirements:
-            raise HTTPException(
-                status_code=400, detail="Project requirements not confirmed"
-            )
+            raise HTTPException(status_code=400, detail="Project requirements not confirmed")
 
         # Handle different outline structures
         if isinstance(project.outline, dict):
             slides = project.outline.get("slides", [])
         else:
             # If outline is a PPTOutline object
-            slides = (
-                project.outline.slides if hasattr(project.outline, "slides") else []
-            )
+            slides = project.outline.slides if hasattr(project.outline, "slides") else []
 
         if slide_number < 1 or slide_number > len(slides):
             raise HTTPException(status_code=400, detail="Invalid slide number")
@@ -2486,9 +2403,7 @@ async def regenerate_slide(project_id: str, slide_number: int):
         system_prompt = ppt_service._load_prompts_md_system_prompt()
 
         # Ensure project has a global template selected (use default if none selected)
-        selected_template = await ppt_service._ensure_global_master_template_selected(
-            project_id
-        )
+        selected_template = await ppt_service._ensure_global_master_template_selected(project_id)
 
         # Regenerate the slide using template-based generation if template is available
         if selected_template:
@@ -2507,17 +2422,15 @@ async def regenerate_slide(project_id: str, slide_number: int):
             logger.warning(
                 f"No template available for project {project_id}, using fallback generation"
             )
-            new_html_content = (
-                await ppt_service._generate_single_slide_html_with_prompts(
-                    slide_data,
-                    project.confirmed_requirements,
-                    system_prompt,
-                    slide_number,
-                    len(slides),
-                    slides,
-                    project.slides_data,
-                    project_id=project_id,
-                )
+            new_html_content = await ppt_service._generate_single_slide_html_with_prompts(
+                slide_data,
+                project.confirmed_requirements,
+                system_prompt,
+                slide_number,
+                len(slides),
+                slides,
+                project.slides_data,
+                project_id=project_id,
             )
 
         # Update the slide in project data
@@ -2550,9 +2463,7 @@ async def regenerate_slide(project_id: str, slide_number: int):
             "page_number": slide_number,
             "title": slide_data.get("title", f"第{slide_number}页"),
             "html_content": new_html_content,
-            "slide_type": slide_data.get(
-                "slide_type", existing_slide.get("slide_type", "content")
-            ),
+            "slide_type": slide_data.get("slide_type", existing_slide.get("slide_type", "content")),
             "content_points": slide_data.get(
                 "content_points", existing_slide.get("content_points", [])
             ),
@@ -2619,9 +2530,7 @@ async def regenerate_slide(project_id: str, slide_number: int):
                 )
 
         except Exception as save_error:
-            logger.error(
-                f"Exception while saving regenerated slide to database: {save_error}"
-            )
+            logger.error(f"Exception while saving regenerated slide to database: {save_error}")
             # 继续返回成功，因为内存中的数据已经更新
 
         return {
@@ -2692,11 +2601,7 @@ async def ai_slide_edit(
         if request.chatHistory:
             logger.debug(f"AI编辑接收到对话历史，共 {len(request.chatHistory)} 条消息")
             for i, chat_msg in enumerate(request.chatHistory):
-                role = (
-                    MessageRole.USER
-                    if chat_msg.get("role") == "user"
-                    else MessageRole.ASSISTANT
-                )
+                role = MessageRole.USER if chat_msg.get("role") == "user" else MessageRole.ASSISTANT
                 content = chat_msg.get("content", "")
                 logger.debug(f"对话历史 {i+1}: {role.value} - {content[:100]}...")
                 messages.append(AIMessage(role=role, content=content))
@@ -2808,15 +2713,9 @@ async def ai_slide_edit_stream(
 
         # 添加对话历史
         if request.chatHistory:
-            logger.info(
-                f"AI流式编辑接收到对话历史，共 {len(request.chatHistory)} 条消息"
-            )
+            logger.info(f"AI流式编辑接收到对话历史，共 {len(request.chatHistory)} 条消息")
             for i, chat_msg in enumerate(request.chatHistory):
-                role = (
-                    MessageRole.USER
-                    if chat_msg.get("role") == "user"
-                    else MessageRole.ASSISTANT
-                )
+                role = MessageRole.USER if chat_msg.get("role") == "user" else MessageRole.ASSISTANT
                 content = chat_msg.get("content", "")
                 logger.info(f"对话历史 {i+1}: {role.value} - {content[:100]}...")
                 messages.append(AIMessage(role=role, content=content))
@@ -2845,9 +2744,7 @@ async def ai_slide_edit_stream(
                 if "```html" in full_response:
                     import re
 
-                    html_match = re.search(
-                        r"```html\s*(.*?)\s*```", full_response, re.DOTALL
-                    )
+                    html_match = re.search(r"```html\s*(.*?)\s*```", full_response, re.DOTALL)
                     if html_match:
                         new_html_content = html_match.group(1).strip()
 
@@ -2925,9 +2822,7 @@ async def ai_regenerate_image(
         # 初始化PPT图像处理器
         from ..services.ppt_image_processor import PPTImageProcessor
 
-        image_processor = PPTImageProcessor(
-            image_service=image_service, ai_provider=ai_provider
-        )
+        image_processor = PPTImageProcessor(image_service=image_service, ai_provider=ai_provider)
 
         # 提取图像信息和幻灯片内容
         image_info = request.image_info
@@ -2946,9 +2841,7 @@ async def ai_regenerate_image(
         }
 
         # 第二步：直接创建图像重新生成需求（跳过AI配图适用性判断）
-        logger.info(
-            f"开始图片重新生成，启用的来源: {[source.value for source in enabled_sources]}"
-        )
+        logger.info(f"开始图片重新生成，启用的来源: {[source.value for source in enabled_sources]}")
 
         # 分析原图像的用途和上下文
         image_context = await analyze_image_context(
@@ -2956,13 +2849,10 @@ async def ai_regenerate_image(
         )
 
         # 根据启用的来源和配置，智能选择最佳的图片来源
-        selected_source = select_best_image_source(
-            enabled_sources, image_config, image_context
-        )
+        selected_source = select_best_image_source(enabled_sources, image_config, image_context)
 
         # 创建图像需求对象（直接生成，不需要AI判断是否适合配图）
-        from ..services.models.slide_image_info import (ImagePurpose,
-                                                        ImageRequirement)
+        from ..services.models.slide_image_info import ImagePurpose, ImageRequirement
 
         # 将字符串用途转换为ImagePurpose枚举
         purpose_str = image_context.get("image_purpose", "illustration")
@@ -2988,15 +2878,10 @@ async def ai_regenerate_image(
         # 第三步：直接处理图片生成（单个需求）
         from ..services.models.slide_image_info import SlideImagesCollection
 
-        images_collection = SlideImagesCollection(
-            page_number=request.slide_index + 1, images=[]
-        )
+        images_collection = SlideImagesCollection(page_number=request.slide_index + 1, images=[])
 
         # 根据选择的来源处理图片生成
-        if (
-            requirement.source == ImageSource.LOCAL
-            and ImageSource.LOCAL in enabled_sources
-        ):
+        if requirement.source == ImageSource.LOCAL and ImageSource.LOCAL in enabled_sources:
             local_images = await image_processor._process_local_images(
                 requirement,
                 request.project_topic,
@@ -3006,10 +2891,7 @@ async def ai_regenerate_image(
             )
             images_collection.images.extend(local_images)
 
-        elif (
-            requirement.source == ImageSource.NETWORK
-            and ImageSource.NETWORK in enabled_sources
-        ):
+        elif requirement.source == ImageSource.NETWORK and ImageSource.NETWORK in enabled_sources:
             network_images = await image_processor._process_network_images(
                 requirement,
                 request.project_topic,
@@ -3055,9 +2937,7 @@ async def ai_regenerate_image(
             slide_content.get("html_content", ""), image_info, new_image_url
         )
 
-        logger.info(
-            f"图片重新生成成功: {new_image.source.value}来源, URL: {new_image_url}"
-        )
+        logger.info(f"图片重新生成成功: {new_image.source.value}来源, URL: {new_image_url}")
 
         return {
             "success": True,
@@ -3184,14 +3064,14 @@ async def ai_auto_generate_slide_images(
             }
 
         # 第二步：根据分析结果生成图片需求
-        from ..services.models.slide_image_info import (ImagePurpose,
-                                                        ImageRequirement,
-                                                        ImageSource,
-                                                        SlideImagesCollection)
-
-        images_collection = SlideImagesCollection(
-            page_number=request.slide_index + 1, images=[]
+        from ..services.models.slide_image_info import (
+            ImagePurpose,
+            ImageRequirement,
+            ImageSource,
+            SlideImagesCollection,
         )
+
+        images_collection = SlideImagesCollection(page_number=request.slide_index + 1, images=[])
 
         # 获取图像配置（使用与重新生成图片相同的配置键）
         from ..services.config_service import config_service
@@ -3227,14 +3107,10 @@ async def ai_auto_generate_slide_images(
             "slide_content": slide_html,
         }
 
-        selected_source = select_best_image_source(
-            enabled_sources, image_config, image_context
-        )
+        selected_source = select_best_image_source(enabled_sources, image_config, image_context)
 
         # 为每个图片需求生成图片
-        for i, image_info in enumerate(
-            analysis_result.get("images", [])[:3]
-        ):  # 最多3张图
+        for i, image_info in enumerate(analysis_result.get("images", [])[:3]):  # 最多3张图
             # 创建图片需求
             requirement = ImageRequirement(
                 purpose=ImagePurpose.ILLUSTRATION,
@@ -3263,8 +3139,7 @@ async def ai_auto_generate_slide_images(
                 images_collection.images.extend(ai_images)
 
             elif (
-                requirement.source == ImageSource.NETWORK
-                and ImageSource.NETWORK in enabled_sources
+                requirement.source == ImageSource.NETWORK and ImageSource.NETWORK in enabled_sources
             ):
                 network_images = await image_processor._process_network_images(
                     requirement=requirement,
@@ -3276,10 +3151,7 @@ async def ai_auto_generate_slide_images(
                 )
                 images_collection.images.extend(network_images)
 
-            elif (
-                requirement.source == ImageSource.LOCAL
-                and ImageSource.LOCAL in enabled_sources
-            ):
+            elif requirement.source == ImageSource.LOCAL and ImageSource.LOCAL in enabled_sources:
                 local_images = await image_processor._process_local_images(
                     requirement=requirement,
                     project_topic=request.project_topic,
@@ -3403,9 +3275,7 @@ async def ai_enhance_bullet_point(
             "success": True,
             "enhancedText": enhanced_text,
             "originalText": (
-                request.contextInfo.get("originalBulletPoint", "")
-                if request.contextInfo
-                else ""
+                request.contextInfo.get("originalBulletPoint", "") if request.contextInfo else ""
             ),
         }
 
@@ -3495,9 +3365,7 @@ async def ai_enhance_all_bullet_points(
         enhanced_points = []
         if enhanced_content:
             # 按行分割，过滤空行
-            lines = [
-                line.strip() for line in enhanced_content.split("\n") if line.strip()
-            ]
+            lines = [line.strip() for line in enhanced_content.split("\n") if line.strip()]
 
             # 过滤掉常见的无关内容
             filtered_lines = []
@@ -3566,8 +3434,7 @@ async def ai_enhance_all_bullet_points(
                 should_skip = False
                 for pattern in skip_patterns:
                     if line.startswith(pattern) or (
-                        pattern in ["好的", "作为", "我将", "我会"]
-                        and pattern in line[:10]
+                        pattern in ["好的", "作为", "我将", "我会"] and pattern in line[:10]
                     ):
                         should_skip = True
                         break
@@ -3579,9 +3446,7 @@ async def ai_enhance_all_bullet_points(
                     # 移除开头的编号和符号
                     import re
 
-                    cleaned_line = re.sub(
-                        r"^[\d\s\.\-\*\•\·\→\▪\▫]+", "", cleaned_line
-                    ).strip()
+                    cleaned_line = re.sub(r"^[\d\s\.\-\*\•\·\→\▪\▫]+", "", cleaned_line).strip()
                     if len(cleaned_line) >= 5:
                         filtered_lines.append(cleaned_line)
                     continue
@@ -3637,9 +3502,7 @@ async def get_selected_global_template(
             }
         else:
             # 如果没有选择的模板，尝试获取默认模板
-            default_template = (
-                await ppt_service.global_template_service.get_default_template()
-            )
+            default_template = await ppt_service.global_template_service.get_default_template()
             if default_template:
                 logger.info(
                     f"Project {project_id} using default template: {default_template.get('template_name', 'Unknown')}"
@@ -3657,9 +3520,7 @@ async def get_selected_global_template(
                     "is_user_selected": False,
                 }
     except Exception as e:
-        logger.error(
-            f"Error getting selected global template for project {project_id}: {e}"
-        )
+        logger.error(f"Error getting selected global template for project {project_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -3672,9 +3533,7 @@ async def save_single_slide_content(
 ):
     """保存单个幻灯片内容到数据库"""
     try:
-        logger.info(
-            f"🔄 开始保存项目 {project_id} 的第 {slide_index + 1} 页 (索引: {slide_index})"
-        )
+        logger.info(f"🔄 开始保存项目 {project_id} 的第 {slide_index + 1} 页 (索引: {slide_index})")
 
         data = await request.json()
         html_content = data.get("html_content", "")
@@ -3694,9 +3553,7 @@ async def save_single_slide_content(
 
         # 详细验证幻灯片索引
         total_slides = len(project.slides_data) if project.slides_data else 0
-        logger.debug(
-            f"📊 项目幻灯片信息: 总页数={total_slides}, 请求索引={slide_index}"
-        )
+        logger.debug(f"📊 项目幻灯片信息: 总页数={total_slides}, 请求索引={slide_index}")
 
         if slide_index < 0:
             logger.error(f"❌ 幻灯片索引不能为负数: {slide_index}")
@@ -3705,9 +3562,7 @@ async def save_single_slide_content(
             )
 
         if slide_index >= total_slides:
-            logger.error(
-                f"❌ 幻灯片索引超出范围: {slide_index}，项目共有 {total_slides} 页"
-            )
+            logger.error(f"❌ 幻灯片索引超出范围: {slide_index}，项目共有 {total_slides} 页")
             raise HTTPException(
                 status_code=400,
                 detail=f"Slide index {slide_index} out of range (total: {total_slides})",
@@ -3748,13 +3603,9 @@ async def save_single_slide_content(
             logger.debug(
                 f"📊 幻灯片数据: 标题='{slide_title}', 用户编辑={is_user_edited}, 索引={slide_index}"
             )
-            logger.debug(
-                f"🔍 保存前验证: 项目ID={project_id}, 幻灯片索引={slide_index}"
-            )
+            logger.debug(f"🔍 保存前验证: 项目ID={project_id}, 幻灯片索引={slide_index}")
 
-            save_success = await db_manager.save_single_slide(
-                project_id, slide_index, slide_data
-            )
+            save_success = await db_manager.save_single_slide(project_id, slide_index, slide_data)
 
             if save_success:
                 logger.debug(f"✅ 第 {slide_index + 1} 页已成功保存到数据库")
@@ -3795,7 +3646,9 @@ async def save_single_slide_content(
 
 
 @router.get("/api/projects/{project_id}/slides/stream")
-async def stream_slides_generation(project_id: str, user: User = Depends(get_current_user_required)):
+async def stream_slides_generation(
+    project_id: str, user: User = Depends(get_current_user_required)
+):
     """Stream slides generation process"""
     try:
         # Access control
@@ -3850,13 +3703,9 @@ async def cleanup_excess_slides(
         from ..services.db_project_manager import DatabaseProjectManager
 
         db_manager = DatabaseProjectManager()
-        deleted_count = await db_manager.cleanup_excess_slides(
-            project_id, current_slide_count
-        )
+        deleted_count = await db_manager.cleanup_excess_slides(project_id, current_slide_count)
 
-        logger.info(
-            f"✅ 项目 {project_id} 清理完成，删除了 {deleted_count} 张多余的幻灯片"
-        )
+        logger.info(f"✅ 项目 {project_id} 清理完成，删除了 {deleted_count} 张多余的幻灯片")
 
         return {
             "success": True,
@@ -3925,9 +3774,7 @@ async def batch_save_slides(
                 },
             )
 
-        logger.debug(
-            f"✅ 项目 {project_id} 批量保存完成，共 {len(slides_data)} 张幻灯片"
-        )
+        logger.debug(f"✅ 项目 {project_id} 批量保存完成，共 {len(slides_data)} 张幻灯片")
 
         return {
             "success": batch_success,
@@ -3953,7 +3800,9 @@ async def test_pdf_export_endpoint():
 
 
 @router.get("/api/projects/{project_id}/export/pdf")
-async def export_project_pdf(project_id: str, individual: bool = False, user: User = Depends(get_current_user_optional)):
+async def export_project_pdf(
+    project_id: str, individual: bool = False, user: User = Depends(get_current_user_optional)
+):
     """Export project as PDF using Pyppeteer"""
     print(f"🔥 PDF EXPORT REQUEST RECEIVED: project_id={project_id}")
     logging.info(f"🔥 PDF EXPORT REQUEST RECEIVED: project_id={project_id}")
@@ -3990,9 +3839,7 @@ async def export_project_pdf(project_id: str, individual: bool = False, user: Us
             logging.error(f"❌ PDF generation failed for project {project.project_id}")
             print(f"❌ PDF generation failed for project {project.project_id}")
             await run_blocking_io(
-                lambda: (
-                    os.unlink(temp_pdf_path) if os.path.exists(temp_pdf_path) else None
-                )
+                lambda: (os.unlink(temp_pdf_path) if os.path.exists(temp_pdf_path) else None)
             )
             raise HTTPException(status_code=500, detail="PDF generation failed")
 
@@ -4000,7 +3847,7 @@ async def export_project_pdf(project_id: str, individual: bool = False, user: Us
         logging.info("PDF generated successfully using Pyppeteer")
 
         # 创建安全的文件名
-        safe_topic = re.sub(r'[^\w\s-]', '', project.topic).strip()[:50]  # 限制长度并移除特殊字符
+        safe_topic = re.sub(r"[^\w\s-]", "", project.topic).strip()[:50]  # 限制长度并移除特殊字符
         if not safe_topic:
             safe_topic = "presentation"
         filename = f"{safe_topic}_PPT.pdf"
@@ -4022,7 +3869,7 @@ async def export_project_pdf(project_id: str, individual: bool = False, user: Us
             media_type="application/pdf",
             filename=filename,
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}',
+                "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{encoded_filename}",
                 "X-PDF-Generator": "Pyppeteer",
             },
             background=BackgroundTask(cleanup_temp_file),
@@ -4034,12 +3881,15 @@ async def export_project_pdf(project_id: str, individual: bool = False, user: Us
         logging.error(f"❌ PDF export exception: {e}", exc_info=True)
         print(f"❌ PDF export exception: {e}")
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"PDF export failed: {str(e)}")
 
 
 @router.get("/api/projects/{project_id}/export/pdf/individual")
-async def export_project_pdf_individual(project_id: str, user: User = Depends(get_current_user_required)):
+async def export_project_pdf_individual(
+    project_id: str, user: User = Depends(get_current_user_required)
+):
     """Export project as individual PDF files for each slide"""
     return await export_project_pdf(project_id, individual=True, user=user)
 
@@ -4055,7 +3905,7 @@ async def check_apryse_license(user: User = Depends(get_current_user_required)):
             return {
                 "valid": False,
                 "error": "Apryse SDK not available. Please ensure it's installed: pip install apryse-sdk",
-                "details": "SDK files or Python package not found"
+                "details": "SDK files or Python package not found",
             }
 
         # Check if license can initialize SDK
@@ -4063,20 +3913,20 @@ async def check_apryse_license(user: User = Depends(get_current_user_required)):
             return {
                 "valid": False,
                 "error": "License key is invalid or SDK initialization failed",
-                "details": "Please check your license key and ensure it's valid"
+                "details": "Please check your license key and ensure it's valid",
             }
 
         return {
             "valid": True,
             "message": "Apryse license is valid and SDK is ready",
-            "details": "PPTX conversion is available"
+            "details": "PPTX conversion is available",
         }
 
     except Exception as e:
         return {
             "valid": False,
             "error": f"License check failed: {str(e)}",
-            "details": "Unexpected error during license validation"
+            "details": "Unexpected error during license validation",
         }
 
 
@@ -4115,9 +3965,7 @@ async def export_project_pptx(project_id: str, user: User = Depends(get_current_
             temp_pdf_path = temp_pdf_file.name
 
         logging.info("Step 1: Generating PDF for PPTX conversion")
-        pdf_success = await _generate_pdf_with_pyppeteer(
-            project, temp_pdf_path, individual=False
-        )
+        pdf_success = await _generate_pdf_with_pyppeteer(project, temp_pdf_path, individual=False)
 
         if not pdf_success:
             # Clean up temp file and raise error
@@ -4131,9 +3979,7 @@ async def export_project_pptx(project_id: str, user: User = Depends(get_current_
         logging.info("Step 2: Converting PDF to PPTX")
 
         # Create temporary PPTX file
-        with tempfile.NamedTemporaryFile(
-            suffix=".pptx", delete=False
-        ) as temp_pptx_file:
+        with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as temp_pptx_file:
             temp_pptx_path = temp_pptx_file.name
 
         try:
@@ -4149,19 +3995,16 @@ async def export_project_pptx(project_id: str, user: User = Depends(get_current_
                 )
 
             # Verify PPTX file was created successfully
-            if (
-                not os.path.exists(temp_pptx_path)
-                or os.path.getsize(temp_pptx_path) == 0
-            ):
-                raise HTTPException(
-                    status_code=500, detail="PPTX file was not created or is empty"
-                )
+            if not os.path.exists(temp_pptx_path) or os.path.getsize(temp_pptx_path) == 0:
+                raise HTTPException(status_code=500, detail="PPTX file was not created or is empty")
 
             # Return PPTX file
             logging.info("PPTX generated successfully")
 
             # 创建安全的文件名
-            safe_topic = re.sub(r'[^\w\s-]', '', project.topic).strip()[:50]  # 限制长度并移除特殊字符
+            safe_topic = re.sub(r"[^\w\s-]", "", project.topic).strip()[
+                :50
+            ]  # 限制长度并移除特殊字符
             if not safe_topic:
                 safe_topic = "presentation"
             filename = f"{safe_topic}_PPT.pptx"
@@ -4187,7 +4030,7 @@ async def export_project_pptx(project_id: str, user: User = Depends(get_current_
                 media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 filename=filename,
                 headers={
-                    "Content-Disposition": f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}',
+                    "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{encoded_filename}",
                     "X-Conversion-Method": "PDF-to-PPTX",
                 },
                 background=BackgroundTask(cleanup_temp_files),
@@ -4203,9 +4046,7 @@ async def export_project_pptx(project_id: str, user: User = Depends(get_current_
                 os.unlink(temp_pptx_path)
             except:
                 pass
-            raise HTTPException(
-                status_code=500, detail=f"PPTX conversion error: {str(e)}"
-            )
+            raise HTTPException(status_code=500, detail=f"PPTX conversion error: {str(e)}")
 
     except HTTPException:
         raise
@@ -4239,9 +4080,7 @@ async def export_project_html(project_id: str, user: User = Depends(get_current_
         return Response(
             content=zip_content,
             media_type="application/zip",
-            headers={
-                "Content-Disposition": f"attachment; filename*=UTF-8''{safe_filename}"
-            },
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{safe_filename}"},
         )
 
     except Exception as e:
@@ -4302,9 +4141,9 @@ def _generate_individual_slide_html_sync(
     # Check if it's already a complete HTML document
     import re
 
-    if slide_html.strip().lower().startswith(
-        "<!doctype"
-    ) or slide_html.strip().lower().startswith("<html"):
+    if slide_html.strip().lower().startswith("<!doctype") or slide_html.strip().lower().startswith(
+        "<html"
+    ):
         # It's a complete HTML document, enhance it with navigation
         return _enhance_complete_html_with_navigation(
             slide_html, slide_number, total_slides, topic, slide_title
@@ -4615,9 +4454,9 @@ async def _generate_individual_slide_html(
     # Check if it's already a complete HTML document
     import re
 
-    if slide_html.strip().lower().startswith(
-        "<!doctype"
-    ) or slide_html.strip().lower().startswith("<html"):
+    if slide_html.strip().lower().startswith("<!doctype") or slide_html.strip().lower().startswith(
+        "<html"
+    ):
         # It's a complete HTML document, enhance it with navigation
         return _enhance_complete_html_with_navigation(
             slide_html, slide_number, total_slides, topic, slide_title
@@ -4865,9 +4704,7 @@ def _enhance_complete_html_with_navigation(
     return enhanced_html
 
 
-async def _generate_pdf_slide_html(
-    slide, slide_number: int, total_slides: int, topic: str
-) -> str:
+async def _generate_pdf_slide_html(slide, slide_number: int, total_slides: int, topic: str) -> str:
     """Generate PDF-optimized HTML for individual slide without navigation elements"""
     slide_html = slide.get("html_content", "")
     slide_title = slide.get("title", f"第{slide_number}页")
@@ -4875,9 +4712,9 @@ async def _generate_pdf_slide_html(
     # Check if it's already a complete HTML document
     import re
 
-    if slide_html.strip().lower().startswith(
-        "<!doctype"
-    ) or slide_html.strip().lower().startswith("<html"):
+    if slide_html.strip().lower().startswith("<!doctype") or slide_html.strip().lower().startswith(
+        "<html"
+    ):
         # It's a complete HTML document, clean it for PDF
         return _clean_html_for_pdf(slide_html, slide_number, total_slides)
     else:
@@ -4941,9 +4778,7 @@ async def _generate_pdf_slide_html(
 </html>"""
 
 
-def _clean_html_for_pdf(
-    original_html: str, slide_number: int, total_slides: int
-) -> str:
+def _clean_html_for_pdf(original_html: str, slide_number: int, total_slides: int) -> str:
     """Clean complete HTML document for PDF generation by removing navigation elements"""
     import re
 
@@ -5010,12 +4845,9 @@ def _clean_html_for_pdf(
 
     # Insert PDF styles before closing head tag
     head_pattern = r"</head>"
-    cleaned_html = re.sub(
-        head_pattern, pdf_styles + "\n</head>", cleaned_html, flags=re.IGNORECASE
-    )
+    cleaned_html = re.sub(head_pattern, pdf_styles + "\n</head>", cleaned_html, flags=re.IGNORECASE)
 
     return cleaned_html
-
 
 
 def _replace_placeholder_images(html: str) -> str:
@@ -5037,7 +4869,10 @@ def _replace_placeholder_images(html: str) -> str:
         return f"{before}{new_url}{after}"
 
     # 处理 <img src="...">
-    img_pattern = re.compile(r'(<img[^>]*\bsrc=")[^"]*(via\.placeholder\.com|placeholder\.com|placehold\.it|dummyimage\.com|placekitten\.com|placekitten|placehold|placeholder)[^"]*("[^>]*>)', re.IGNORECASE)
+    img_pattern = re.compile(
+        r'(<img[^>]*\bsrc=")[^"]*(via\.placeholder\.com|placeholder\.com|placehold\.it|dummyimage\.com|placekitten\.com|placekitten|placehold|placeholder)[^"]*("[^>]*>)',
+        re.IGNORECASE,
+    )
     html = re.sub(img_pattern, repl_img, html)
 
     # 处理 CSS 背景 url('...')
@@ -5053,7 +4888,10 @@ def _replace_placeholder_images(html: str) -> str:
             new_url = f"https://picsum.photos/{size}"
         return f"{before}{new_url}{after}"
 
-    css_pattern = re.compile(r'(url\(["\"])\s*[^)\"\"]*(via\.placeholder\.com|placeholder\.com|placehold\.it|dummyimage\.com|placekitten\.com|placekitten|placehold|placeholder)[^)\"\"]*(\))', re.IGNORECASE)
+    css_pattern = re.compile(
+        r'(url\(["\"])\s*[^)\"\"]*(via\.placeholder\.com|placeholder\.com|placehold\.it|dummyimage\.com|placekitten\.com|placekitten|placehold|placeholder)[^)\"\"]*(\))',
+        re.IGNORECASE,
+    )
     html = re.sub(css_pattern, repl_css, html)
 
     return html
@@ -5065,11 +4903,10 @@ def _remove_external_dependencies(html: str) -> str:
 
     # 仅替换 Tailwind CDN 为本地版本
     html = re.sub(
-        r'<script[^>]*src=["\']https://cdn\.tailwindcss\.com[^"\']*["\'][^>]*>'
-        r'</script>',
+        r'<script[^>]*src=["\']https://cdn\.tailwindcss\.com[^"\']*["\'][^>]*>' r"</script>",
         '<link href="/static/css/tailwind.min.css" rel="stylesheet">',
         html,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     # 移除可能导致PDF渲染阻塞的特定脚本（保留功能性库）
@@ -5084,22 +4921,20 @@ def _remove_external_dependencies(html: str) -> str:
     ]
 
     for pattern in problematic_scripts:
-        html = re.sub(pattern, '', html, flags=re.IGNORECASE)
+        html = re.sub(pattern, "", html, flags=re.IGNORECASE)
 
     # 保留但优化外部字体加载（添加display=swap避免阻塞）
     html = re.sub(
         r'(<link[^>]*href=["\']https://fonts\.googleapis\.com[^"\']*["\'][^>]*>)',
-        r'\1&display=swap',
+        r"\1&display=swap",
         html,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     return html
 
 
-async def _generate_pdf_with_pyppeteer(
-    project, output_path: str, individual: bool = False
-) -> bool:
+async def _generate_pdf_with_pyppeteer(project, output_path: str, individual: bool = False) -> bool:
     """Generate PDF using Pyppeteer (Python)"""
     try:
         pdf_converter = get_pdf_converter()
@@ -5128,8 +4963,10 @@ async def _generate_pdf_with_pyppeteer(
                         logging.error(f"Slide {i+1} is not a dictionary: {type(slide)}")
                         return False
 
-                    if 'html_content' not in slide:
-                        logging.error(f"Slide {i+1} missing html_content key. Keys: {list(slide.keys())}")
+                    if "html_content" not in slide:
+                        logging.error(
+                            f"Slide {i+1} missing html_content key. Keys: {list(slide.keys())}"
+                        )
                         return False
 
                     html_content = slide.get("html_content", "")
@@ -5168,7 +5005,9 @@ async def _generate_pdf_with_pyppeteer(
                         return False
 
                     html_files.append(str(html_file))
-                    logging.info(f"Generated HTML file for slide {i+1}: {html_file} ({file_size} bytes)")
+                    logging.info(
+                        f"Generated HTML file for slide {i+1}: {html_file} ({file_size} bytes)"
+                    )
 
                 except Exception as e:
                     logging.error(f"Failed to generate HTML for slide {i+1}: {e}", exc_info=True)
@@ -5240,13 +5079,9 @@ async def _generate_combined_html_for_pdf(project) -> str:
                 slide_content = body_match.group(2)
                 # Preserve body styles if any
                 if "style=" in body_attrs:
-                    body_style_match = re.search(
-                        r'style=["\']([^"\']*)["\']', body_attrs
-                    )
+                    body_style_match = re.search(r'style=["\']([^"\']*)["\']', body_attrs)
                     if body_style_match:
-                        slide_styles += (
-                            f"\n.slide-content {{ {body_style_match.group(1)} }}"
-                        )
+                        slide_styles += f"\n.slide-content {{ {body_style_match.group(1)} }}"
             else:
                 slide_content = slide_html
                 slide_links = ""
@@ -5565,9 +5400,7 @@ async def _generate_slideshow_index(project, slide_files: list) -> str:
 
 
 @router.get("/upload", response_class=HTMLResponse)
-async def web_upload_page(
-    request: Request, user: User = Depends(get_current_user_required)
-):
+async def web_upload_page(request: Request, user: User = Depends(get_current_user_required)):
     """File upload page"""
     return templates.TemplateResponse("upload.html", {"request": request})
 
@@ -5593,18 +5426,14 @@ async def _process_uploaded_file_for_outline(
 
         file_processor = FileProcessor()
 
-        is_valid, message = file_processor.validate_file(
-            file_upload.filename, file_upload.size
-        )
+        is_valid, message = file_processor.validate_file(file_upload.filename, file_upload.size)
         if not is_valid:
             logger.error(f"File validation failed: {message}")
             return None
 
         # 读取文件内容并保存临时文件（在线程池中执行）
         content = await file_upload.read()
-        temp_file_path = await run_blocking_io(
-            _save_temp_file_sync, content, file_upload.filename
-        )
+        temp_file_path = await run_blocking_io(_save_temp_file_sync, content, file_upload.filename)
 
         try:
             # 创建文件大纲生成请求
@@ -5631,9 +5460,7 @@ async def _process_uploaded_file_for_outline(
             result = await ppt_service.generate_outline_from_file(outline_request)
 
             if result.success:
-                logger.info(
-                    f"Successfully generated outline from file: {file_upload.filename}"
-                )
+                logger.info(f"Successfully generated outline from file: {file_upload.filename}")
                 return result.outline
             else:
                 logger.error(f"Failed to generate outline from file: {result.error}")
@@ -5675,32 +5502,22 @@ async def global_master_templates_page(
     """Global master templates management page"""
     try:
         return templates.TemplateResponse(
-            "global_master_templates.html", {
-                "request": request,
-                "aspect_ratio_settings": get_aspect_ratio_settings()
-            }
+            "global_master_templates.html",
+            {"request": request, "aspect_ratio_settings": get_aspect_ratio_settings()},
         )
     except Exception as e:
         logger.error(f"Error loading global master templates page: {e}")
-        return templates.TemplateResponse(
-            "error.html", {"request": request, "error": str(e)}
-        )
+        return templates.TemplateResponse("error.html", {"request": request, "error": str(e)})
 
 
 @router.get("/image-gallery", response_class=HTMLResponse)
-async def image_gallery_page(
-    request: Request, user: User = Depends(get_current_user_required)
-):
+async def image_gallery_page(request: Request, user: User = Depends(get_current_user_required)):
     """本地图床管理页面"""
     try:
-        return templates.TemplateResponse(
-            "image_gallery.html", {"request": request, "user": user}
-        )
+        return templates.TemplateResponse("image_gallery.html", {"request": request, "user": user})
     except Exception as e:
         logger.error(f"Error rendering image gallery page: {e}")
-        return templates.TemplateResponse(
-            "error.html", {"request": request, "error": str(e)}
-        )
+        return templates.TemplateResponse("error.html", {"request": request, "error": str(e)})
 
 
 @router.get("/image-generation-test", response_class=HTMLResponse)
@@ -5714,9 +5531,7 @@ async def image_generation_test_page(
         )
     except Exception as e:
         logger.error(f"Error rendering image generation test page: {e}")
-        return templates.TemplateResponse(
-            "error.html", {"request": request, "error": str(e)}
-        )
+        return templates.TemplateResponse("error.html", {"request": request, "error": str(e)})
 
 
 @router.get("/projects/{project_id}/template-selection", response_class=HTMLResponse)
@@ -5736,14 +5551,12 @@ async def template_selection_page(
                 "request": request,
                 "project_id": project_id,
                 "project_topic": project.topic,
-                "aspect_ratio_settings": get_aspect_ratio_settings()
+                "aspect_ratio_settings": get_aspect_ratio_settings(),
             },
         )
     except Exception as e:
         logger.error(f"Error loading template selection page: {e}")
-        return templates.TemplateResponse(
-            "error.html", {"request": request, "error": str(e)}
-        )
+        return templates.TemplateResponse("error.html", {"request": request, "error": str(e)})
 
 
 # 图像重新生成相关辅助函数
@@ -5767,9 +5580,7 @@ async def analyze_image_context(
     }
 
 
-def determine_image_purpose(
-    image_info: Dict[str, Any], slide_content: Dict[str, Any]
-) -> str:
+def determine_image_purpose(image_info: Dict[str, Any], slide_content: Dict[str, Any]) -> str:
     """确定图像在幻灯片中的用途"""
     # 简单的启发式规则来确定图像用途
     width = image_info.get("width", 0)
@@ -5845,9 +5656,7 @@ def select_best_image_source(
 # 现在使用 PPTImageProcessor._ai_generate_image_prompt 方法来生成提示词
 
 
-def replace_image_in_html(
-    html_content: str, image_info: Dict[str, Any], new_image_url: str
-) -> str:
+def replace_image_in_html(html_content: str, image_info: Dict[str, Any], new_image_url: str) -> str:
     """在HTML内容中替换指定的图像，支持img标签、背景图像和SVG，保持布局和样式"""
     try:
         import re
@@ -5867,21 +5676,15 @@ def replace_image_in_html(
 
         if image_type == "img":
             # 处理 <img> 标签
-            replacement_success = replace_img_tag(
-                soup, image_info, new_image_url, old_src
-            )
+            replacement_success = replace_img_tag(soup, image_info, new_image_url, old_src)
 
         elif image_type == "background":
             # 处理背景图像
-            replacement_success = replace_background_image(
-                soup, image_info, new_image_url, old_src
-            )
+            replacement_success = replace_background_image(soup, image_info, new_image_url, old_src)
 
         elif image_type == "svg":
             # 处理SVG图像
-            replacement_success = replace_svg_image(
-                soup, image_info, new_image_url, old_src
-            )
+            replacement_success = replace_svg_image(soup, image_info, new_image_url, old_src)
 
         if replacement_success:
             logger.info(f"成功替换{image_type}图像: {old_src} -> {new_image_url}")
@@ -5892,14 +5695,10 @@ def replace_image_in_html(
 
     except Exception as e:
         logger.error(f"替换HTML中的图像失败: {e}")
-        return fallback_string_replacement(
-            html_content, image_info.get("src", ""), new_image_url
-        )
+        return fallback_string_replacement(html_content, image_info.get("src", ""), new_image_url)
 
 
-def replace_img_tag(
-    soup, image_info: Dict[str, Any], new_image_url: str, old_src: str
-) -> bool:
+def replace_img_tag(soup, image_info: Dict[str, Any], new_image_url: str, old_src: str) -> bool:
     """替换img标签"""
     img_elements = soup.find_all("img")
 
@@ -5969,9 +5768,7 @@ def replace_background_image(
     return False
 
 
-def replace_svg_image(
-    soup, image_info: Dict[str, Any], new_image_url: str, old_src: str
-) -> bool:
+def replace_svg_image(soup, image_info: Dict[str, Any], new_image_url: str, old_src: str) -> bool:
     """替换SVG图像"""
     # 查找SVG元素
     svg_elements = soup.find_all("svg")
@@ -5983,9 +5780,7 @@ def replace_svg_image(
             return True
 
         # 检查SVG的内容或其他标识
-        if image_info.get("outerHTML") and svg.get_text() in image_info.get(
-            "outerHTML", ""
-        ):
+        if image_info.get("outerHTML") and svg.get_text() in image_info.get("outerHTML", ""):
             # 对于内联SVG，我们可能需要替换整个元素
             # 这里简化处理，添加一个data属性来标记已替换
             svg["data-replaced-image"] = new_image_url
@@ -5994,9 +5789,7 @@ def replace_svg_image(
     return False
 
 
-def fallback_string_replacement(
-    html_content: str, old_src: str, new_image_url: str
-) -> str:
+def fallback_string_replacement(html_content: str, old_src: str, new_image_url: str) -> str:
     """后备的字符串替换方案"""
     try:
         import re
@@ -6019,13 +5812,9 @@ def fallback_string_replacement(
             ]
 
             for pattern, replacement in patterns:
-                updated_html = re.sub(
-                    pattern, replacement, html_content, flags=re.IGNORECASE
-                )
+                updated_html = re.sub(pattern, replacement, html_content, flags=re.IGNORECASE)
                 if updated_html != html_content:
-                    logger.info(
-                        f"使用后备方案成功替换图像: {old_src} -> {new_image_url}"
-                    )
+                    logger.info(f"使用后备方案成功替换图像: {old_src} -> {new_image_url}")
                     return updated_html
 
         return html_content

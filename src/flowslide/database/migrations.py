@@ -238,9 +238,7 @@ class DatabaseMigration:
 
         try:
             # Drop indexes first
-            await session.execute(
-                text("DROP INDEX IF EXISTS idx_todo_stages_project_id")
-            )
+            await session.execute(text("DROP INDEX IF EXISTS idx_todo_stages_project_id"))
             await session.execute(text("DROP INDEX IF EXISTS idx_todo_stages_stage_id"))
 
             # Remove project_id column (SQLite doesn't support DROP COLUMN directly)
@@ -431,9 +429,7 @@ class DatabaseMigration:
     async def _migration_005_up(self, session: AsyncSession):
         """Migration 005: Add project_metadata column to projects table"""
         try:
-            logger.info(
-                "Running migration 005: Adding project_metadata column to projects table"
-            )
+            logger.info("Running migration 005: Adding project_metadata column to projects table")
 
             # Check if project_metadata column already exists
             result = await session.execute(
@@ -526,19 +522,13 @@ class DatabaseMigration:
 
             # Recreate indexes
             await session.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status)"
-                )
+                text("CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status)")
             )
             await session.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS idx_projects_scenario ON projects(scenario)"
-                )
+                text("CREATE INDEX IF NOT EXISTS idx_projects_scenario ON projects(scenario)")
             )
             await session.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS idx_projects_created_at ON projects(created_at)"
-                )
+                text("CREATE INDEX IF NOT EXISTS idx_projects_created_at ON projects(created_at)")
             )
 
             await session.commit()
@@ -552,9 +542,7 @@ class DatabaseMigration:
     async def _migration_006_up(self, session: AsyncSession):
         """Migration 006: Add is_user_edited field to slide_data table"""
         try:
-            logger.info(
-                "Running migration 006: Adding is_user_edited field to slide_data table"
-            )
+            logger.info("Running migration 006: Adding is_user_edited field to slide_data table")
 
             # Check if is_user_edited column already exists
             result = await session.execute(
@@ -749,9 +737,15 @@ class DatabaseMigration:
             await session.execute(text("DROP TABLE projects_backup"))
 
             # Recreate indexes
-            await session.execute(text("CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status)"))
-            await session.execute(text("CREATE INDEX IF NOT EXISTS idx_projects_scenario ON projects(scenario)"))
-            await session.execute(text("CREATE INDEX IF NOT EXISTS idx_projects_created_at ON projects(created_at)"))
+            await session.execute(
+                text("CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status)")
+            )
+            await session.execute(
+                text("CREATE INDEX IF NOT EXISTS idx_projects_scenario ON projects(scenario)")
+            )
+            await session.execute(
+                text("CREATE INDEX IF NOT EXISTS idx_projects_created_at ON projects(created_at)")
+            )
 
             await session.commit()
             logger.info("Migration 007 rollback completed")
@@ -835,20 +829,14 @@ class DatabaseMigration:
 
                 # Apply migrations
                 for migration in to_apply:
-                    logger.info(
-                        f"Applying migration {migration['version']}: {migration['name']}"
-                    )
+                    logger.info(f"Applying migration {migration['version']}: {migration['name']}")
 
                     try:
                         await migration["up"](session)
                         await self._record_migration(session, migration)
-                        logger.info(
-                            f"Migration {migration['version']} applied successfully"
-                        )
+                        logger.info(f"Migration {migration['version']} applied successfully")
                     except Exception as e:
-                        logger.error(
-                            f"Failed to apply migration {migration['version']}: {e}"
-                        )
+                        logger.error(f"Failed to apply migration {migration['version']}: {e}")
                         raise
 
                 logger.info("All migrations applied successfully")
@@ -868,10 +856,7 @@ class DatabaseMigration:
                 # Find migrations to rollback
                 to_rollback = []
                 for migration in reversed(self.migrations):
-                    if (
-                        migration["version"] in applied
-                        and migration["version"] > target_version
-                    ):
+                    if migration["version"] in applied and migration["version"] > target_version:
                         to_rollback.append(migration)
 
                 if not to_rollback:
@@ -886,16 +871,10 @@ class DatabaseMigration:
 
                     try:
                         await migration["down"](session)
-                        await self._remove_migration_record(
-                            session, migration["version"]
-                        )
-                        logger.info(
-                            f"Migration {migration['version']} rolled back successfully"
-                        )
+                        await self._remove_migration_record(session, migration["version"])
+                        logger.info(f"Migration {migration['version']} rolled back successfully")
                     except Exception as e:
-                        logger.error(
-                            f"Failed to rollback migration {migration['version']}: {e}"
-                        )
+                        logger.error(f"Failed to rollback migration {migration['version']}: {e}")
                         raise
 
                 logger.info("Migrations rolled back successfully")
@@ -917,9 +896,7 @@ class DatabaseMigration:
                     "applied_migrations": applied,
                     "available_migrations": [m["version"] for m in self.migrations],
                     "pending_migrations": [
-                        m["version"]
-                        for m in self.migrations
-                        if m["version"] not in applied
+                        m["version"] for m in self.migrations if m["version"] not in applied
                     ],
                 }
 

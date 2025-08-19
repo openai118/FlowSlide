@@ -91,9 +91,7 @@ class DatabaseHealthChecker:
 
             for table in tables:
                 try:
-                    result = await session.execute(
-                        text(f"SELECT COUNT(*) FROM {table}")
-                    )
+                    result = await session.execute(text(f"SELECT COUNT(*) FROM {table}"))
                     count = result.scalar()
                     existing_tables.append({"name": table, "row_count": count})
                 except Exception:
@@ -282,9 +280,7 @@ class DatabaseHealthChecker:
 
             # Check for large tables
             large_tables = [
-                table
-                for table, info in storage_info.items()
-                if info["row_count"] > 10000
+                table for table, info in storage_info.items() if info["row_count"] > 10000
             ]
 
             return {
@@ -307,9 +303,7 @@ class DatabaseHealthChecker:
         if check_names is None:
             checks_to_run = self.checks
         else:
-            checks_to_run = [
-                check for check in self.checks if check["name"] in check_names
-            ]
+            checks_to_run = [check for check in self.checks if check["name"] in check_names]
 
         results = {}
         overall_status = "healthy"
@@ -335,10 +329,7 @@ class DatabaseHealthChecker:
                                 critical_failures.append(check["name"])
                             elif overall_status == "healthy":
                                 overall_status = "warning"
-                        elif (
-                            result["status"] == "warning"
-                            and overall_status == "healthy"
-                        ):
+                        elif result["status"] == "warning" and overall_status == "healthy":
                             overall_status = "warning"
 
                     except Exception as e:
@@ -370,15 +361,9 @@ class DatabaseHealthChecker:
             "checks": results,
             "summary": {
                 "total_checks": len(checks_to_run),
-                "healthy": len(
-                    [r for r in results.values() if r["status"] == "healthy"]
-                ),
-                "warning": len(
-                    [r for r in results.values() if r["status"] == "warning"]
-                ),
-                "unhealthy": len(
-                    [r for r in results.values() if r["status"] == "unhealthy"]
-                ),
+                "healthy": len([r for r in results.values() if r["status"] == "healthy"]),
+                "warning": len([r for r in results.values() if r["status"] == "warning"]),
+                "unhealthy": len([r for r in results.values() if r["status"] == "unhealthy"]),
             },
         }
 
@@ -421,9 +406,7 @@ class DatabaseHealthChecker:
                 stats["total_slides"] = result.scalar()
 
                 # Version statistics
-                result = await session.execute(
-                    text("SELECT COUNT(*) FROM project_versions")
-                )
+                result = await session.execute(text("SELECT COUNT(*) FROM project_versions"))
                 stats["total_versions"] = result.scalar()
 
                 # Recent activity (last 24 hours)

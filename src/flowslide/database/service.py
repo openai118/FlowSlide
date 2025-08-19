@@ -11,17 +11,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-from ..api.models import (PPTGenerationRequest, PPTProject,
-                          ProjectListResponse, TodoBoard, TodoStage)
+from ..api.models import PPTGenerationRequest, PPTProject, ProjectListResponse, TodoBoard, TodoStage
 from .models import GlobalMasterTemplate as DBGlobalMasterTemplate
 from .models import PPTTemplate as DBPPTTemplate
 from .models import Project as DBProject
 from .models import TodoBoard as DBTodoBoard
 from .models import TodoStage as DBTodoStage
-from .repositories import (GlobalMasterTemplateRepository,
-                           PPTTemplateRepository, ProjectRepository,
-                           ProjectVersionRepository, SlideDataRepository,
-                           TodoBoardRepository, TodoStageRepository)
+from .repositories import (
+    GlobalMasterTemplateRepository,
+    PPTTemplateRepository,
+    ProjectRepository,
+    ProjectVersionRepository,
+    SlideDataRepository,
+    TodoBoardRepository,
+    TodoStageRepository,
+)
 
 
 class DatabaseService:
@@ -116,7 +120,9 @@ class DatabaseService:
             updated_at=db_project.updated_at,
         )
 
-    async def create_project(self, request: PPTGenerationRequest, owner_id: Optional[int] = None) -> PPTProject:
+    async def create_project(
+        self, request: PPTGenerationRequest, owner_id: Optional[int] = None
+    ) -> PPTProject:
         """Create a new project with todo board"""
         project_id = str(uuid.uuid4())
 
@@ -141,6 +147,7 @@ class DatabaseService:
         else:
             try:
                 from starlette_context import context as _ctx  # optional
+
                 owner = _ctx.get("user") if _ctx else None
                 if owner and isinstance(getattr(owner, "id", None), int):
                     project_data["owner_id"] = owner.id
@@ -204,19 +211,21 @@ class DatabaseService:
         return self._convert_db_project_to_api(db_project)
 
     async def list_projects(
-        self, page: int = 1, page_size: int = 10, status: Optional[str] = None, owner_id: Optional[int] = None
+        self,
+        page: int = 1,
+        page_size: int = 10,
+        status: Optional[str] = None,
+        owner_id: Optional[int] = None,
     ) -> ProjectListResponse:
         """List projects with pagination"""
-        db_projects = await self.project_repo.list_projects(page, page_size, status, owner_id=owner_id)
+        db_projects = await self.project_repo.list_projects(
+            page, page_size, status, owner_id=owner_id
+        )
         total = await self.project_repo.count_projects(status, owner_id=owner_id)
 
-        projects = [
-            self._convert_db_project_to_api(db_project) for db_project in db_projects
-        ]
+        projects = [self._convert_db_project_to_api(db_project) for db_project in db_projects]
 
-        return ProjectListResponse(
-            projects=projects, total=total, page=page, page_size=page_size
-        )
+        return ProjectListResponse(projects=projects, total=total, page=page, page_size=page_size)
 
     async def update_project_status(self, project_id: str, status: str) -> bool:
         """Update project status"""
@@ -279,15 +288,11 @@ class DatabaseService:
                         f"Updated TODO board progress: {overall_progress}%, current stage: {current_stage_index}"
                     )
                 else:
-                    logger.error(
-                        f"Failed to update TODO board progress for project {project_id}"
-                    )
+                    logger.error(f"Failed to update TODO board progress for project {project_id}")
 
         return success
 
-    async def save_project_outline(
-        self, project_id: str, outline: Dict[str, Any]
-    ) -> bool:
+    async def save_project_outline(self, project_id: str, outline: Dict[str, Any]) -> bool:
         """Save project outline"""
         try:
             logger.info(f"Saving outline for project {project_id}")
@@ -314,9 +319,7 @@ class DatabaseService:
                     )
                     return True
                 else:
-                    logger.error(
-                        f"Outline verification failed for project {project_id}"
-                    )
+                    logger.error(f"Outline verification failed for project {project_id}")
                     return False
             else:
                 logger.error(f"Failed to update project {project_id} with outline")
@@ -345,9 +348,7 @@ class DatabaseService:
             existing_count = len(existing_slides)
             new_count = len(slides_data)
 
-            logger.info(
-                f"🔄 开始批量更新幻灯片: 现有{existing_count}页, 新数据{new_count}页"
-            )
+            logger.info(f"🔄 开始批量更新幻灯片: 现有{existing_count}页, 新数据{new_count}页")
 
             # 准备幻灯片数据
             slides_records = []
@@ -381,13 +382,9 @@ class DatabaseService:
         result = await self.project_repo.update(project_id, update_data)
         return result is not None
 
-    async def cleanup_excess_slides(
-        self, project_id: str, current_slide_count: int
-    ) -> int:
+    async def cleanup_excess_slides(self, project_id: str, current_slide_count: int) -> int:
         """清理多余的幻灯片 - 删除索引 >= current_slide_count 的幻灯片"""
-        logger.info(
-            f"🧹 开始清理项目 {project_id} 的多余幻灯片，保留前 {current_slide_count} 张"
-        )
+        logger.info(f"🧹 开始清理项目 {project_id} 的多余幻灯片，保留前 {current_slide_count} 张")
         deleted_count = await self.slide_repo.delete_slides_after_index(
             project_id, current_slide_count
         )
@@ -435,9 +432,7 @@ class DatabaseService:
     ) -> bool:
         """Save a single slide to database immediately"""
         try:
-            logger.debug(
-                f"🔄 数据库服务开始保存幻灯片: 项目ID={project_id}, 索引={slide_index}"
-            )
+            logger.debug(f"🔄 数据库服务开始保存幻灯片: 项目ID={project_id}, 索引={slide_index}")
 
             # 验证输入参数
             if not project_id:
@@ -465,9 +460,7 @@ class DatabaseService:
             logger.debug(f"📄 HTML内容长度: {len(slide_record['html_content'])} 字符")
 
             # Use upsert to insert or update the slide
-            result_slide = await self.slide_repo.upsert_slide(
-                project_id, slide_index, slide_record
-            )
+            result_slide = await self.slide_repo.upsert_slide(project_id, slide_index, slide_record)
 
             if result_slide:
                 logger.debug(
@@ -487,9 +480,7 @@ class DatabaseService:
             logger.error(f"❌ 错误堆栈: {traceback.format_exc()}")
             return False
 
-    async def update_project(
-        self, project_id: str, update_data: Dict[str, Any]
-    ) -> bool:
+    async def update_project(self, project_id: str, update_data: Dict[str, Any]) -> bool:
         """Update project data"""
         try:
             result = await self.project_repo.update(project_id, update_data)
@@ -510,24 +501,16 @@ class DatabaseService:
 
             # Also update the slides_data in the project
             project = await self.project_repo.get_by_id(project_id)
-            if (
-                project
-                and project.slides_data
-                and slide_index < len(project.slides_data)
-            ):
+            if project and project.slides_data and slide_index < len(project.slides_data):
                 project.slides_data[slide_index]["is_user_edited"] = is_user_edited
-                await self.project_repo.update(
-                    project_id, {"slides_data": project.slides_data}
-                )
+                await self.project_repo.update(project_id, {"slides_data": project.slides_data})
 
             return True
         except Exception as e:
             logger.error(f"Failed to update slide user edited status: {e}")
             return False
 
-    async def save_project_version(
-        self, project_id: str, version_data: Dict[str, Any]
-    ) -> bool:
+    async def save_project_version(self, project_id: str, version_data: Dict[str, Any]) -> bool:
         """Save a project version"""
         project = await self.project_repo.get_by_id(project_id)
         if not project:
@@ -569,9 +552,7 @@ class DatabaseService:
         template_repo = PPTTemplateRepository(self.session)
         return await template_repo.get_templates_by_type(project_id, template_type)
 
-    async def update_template(
-        self, template_id: int, update_data: Dict[str, Any]
-    ) -> bool:
+    async def update_template(self, template_id: int, update_data: Dict[str, Any]) -> bool:
         """Update a template"""
         template_repo = PPTTemplateRepository(self.session)
         return await template_repo.update_template(template_id, update_data)
@@ -636,9 +617,7 @@ class DatabaseService:
     ) -> Tuple[List[DBGlobalMasterTemplate], int]:
         """Get global master templates with pagination"""
         template_repo = GlobalMasterTemplateRepository(self.session)
-        return await template_repo.get_templates_paginated(
-            active_only, offset, limit, search
-        )
+        return await template_repo.get_templates_paginated(active_only, offset, limit, search)
 
     async def get_global_master_templates_by_tags_paginated(
         self,

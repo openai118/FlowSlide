@@ -64,9 +64,7 @@ class ParagraphChunker(BaseChunker):
 
         for paragraph in paragraphs:
             # 检查添加此段落是否会超过块大小
-            potential_chunk = (
-                current_chunk + "\n\n" + paragraph if current_chunk else paragraph
-            )
+            potential_chunk = current_chunk + "\n\n" + paragraph if current_chunk else paragraph
 
             if len(potential_chunk) <= self.chunk_size:
                 current_chunk = potential_chunk
@@ -82,9 +80,7 @@ class ParagraphChunker(BaseChunker):
 
                 # 如果单个段落太长，需要进一步分割
                 if len(paragraph) > self.chunk_size:
-                    sub_chunks = self._split_long_paragraph(
-                        paragraph, metadata, chunk_index
-                    )
+                    sub_chunks = self._split_long_paragraph(paragraph, metadata, chunk_index)
                     chunks.extend(sub_chunks)
                     chunk_index += len(sub_chunks)
                     current_chunk = ""
@@ -94,9 +90,7 @@ class ParagraphChunker(BaseChunker):
         # 添加最后一个块
         if current_chunk:
             chunk_metadata = metadata.copy()
-            chunk_metadata.update(
-                {"chunk_index": chunk_index, "chunking_strategy": "paragraph"}
-            )
+            chunk_metadata.update({"chunk_index": chunk_index, "chunking_strategy": "paragraph"})
             chunks.append(self._create_chunk(current_chunk, chunk_metadata))
 
         # 添加重叠
@@ -146,9 +140,7 @@ class ParagraphChunker(BaseChunker):
 
         for sentence in sentences:
             # 检查添加此句子是否会超过限制
-            potential_chunk = (
-                current_chunk + ". " + sentence if current_chunk else sentence
-            )
+            potential_chunk = current_chunk + ". " + sentence if current_chunk else sentence
 
             if len(potential_chunk) <= self.chunk_size:
                 current_chunk = potential_chunk
@@ -199,9 +191,7 @@ class ParagraphChunker(BaseChunker):
 
         return chunks
 
-    def _add_overlap_to_chunks(
-        self, chunks: List[DocumentChunk]
-    ) -> List[DocumentChunk]:
+    def _add_overlap_to_chunks(self, chunks: List[DocumentChunk]) -> List[DocumentChunk]:
         """
         为块添加重叠
 

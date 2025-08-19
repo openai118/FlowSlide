@@ -83,9 +83,7 @@ class SDKDownloadManager:
     def download_and_extract_sdk(self) -> bool:
         """Download and extract SDK for current platform"""
         if self.platform_name not in self.SDK_URLS:
-            logger.error(
-                f"No SDK download URL available for platform: {self.platform_name}"
-            )
+            logger.error(f"No SDK download URL available for platform: {self.platform_name}")
             return False
 
         url = self.SDK_URLS[self.platform_name]
@@ -210,8 +208,7 @@ class PDFToPPTXConverter:
             return False
 
         try:
-            from apryse_sdk.PDFNetPython import (Convert, PDFNet,
-                                                 StructuredOutputModule)
+            from apryse_sdk.PDFNetPython import Convert, PDFNet, StructuredOutputModule
 
             self._sdk_available = True
             logger.info("Apryse SDK is available")
@@ -329,9 +326,7 @@ class PDFToPPTXConverter:
                 logger.info(f"PDF to PPTX conversion successful: {output_path}")
                 return True, output_path
             else:
-                error_msg = (
-                    "Conversion completed but output file is empty or not created"
-                )
+                error_msg = "Conversion completed but output file is empty or not created"
                 logger.error(error_msg)
                 return False, error_msg
 

@@ -12,9 +12,16 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 
-from ..models import (ImageInfo, ImageLicense, ImageMetadata,
-                      ImageOperationResult, ImageProvider, ImageSearchRequest,
-                      ImageSearchResult, ImageSourceType)
+from ..models import (
+    ImageInfo,
+    ImageLicense,
+    ImageMetadata,
+    ImageOperationResult,
+    ImageProvider,
+    ImageSearchRequest,
+    ImageSearchResult,
+    ImageSourceType,
+)
 from .base import ImageSearchProvider
 
 logger = logging.getLogger(__name__)
@@ -282,9 +289,7 @@ class SearXNGSearchProvider(ImageSearchProvider):
         logger.warning("SearXNG does not support getting image details by ID")
         return None
 
-    async def download_image(
-        self, image_info: ImageInfo, save_path: Path
-    ) -> ImageOperationResult:
+    async def download_image(self, image_info: ImageInfo, save_path: Path) -> ImageOperationResult:
         """下载图片到本地"""
         try:
             if not image_info.original_url:

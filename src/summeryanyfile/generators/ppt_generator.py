@@ -7,8 +7,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from ..core.document_processor import DocumentProcessor
 from ..core.llm_manager import LLMManager
-from ..core.models import (ChunkStrategy, PPTOutline, PPTState,
-                           ProcessingConfig, SlideInfo)
+from ..core.models import ChunkStrategy, PPTOutline, PPTState, ProcessingConfig, SlideInfo
 from ..generators.chains import ChainManager
 from ..graph.workflow import WorkflowExecutor, WorkflowManager
 from ..utils.logger import LoggerMixin, ProgressLogger

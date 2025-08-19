@@ -134,9 +134,7 @@ class ImageInfo(BaseModel):
     created_at: float = Field(default_factory=time.time)
     updated_at: float = Field(default_factory=time.time)
 
-    def add_tag(
-        self, name: str, category: Optional[str] = None, confidence: float = 1.0
-    ):
+    def add_tag(self, name: str, category: Optional[str] = None, confidence: float = 1.0):
         """添加标签"""
         tag = ImageTag(name=name, category=category, confidence=confidence)
         if tag not in self.tags:
@@ -222,9 +220,7 @@ class ImageUploadRequest(BaseModel):
     category: Optional[str] = None
 
     # 来源信息
-    source_type: Optional[ImageSourceType] = (
-        None  # 实际来源类型，如果为None则默认为LOCAL_STORAGE
-    )
+    source_type: Optional[ImageSourceType] = None  # 实际来源类型，如果为None则默认为LOCAL_STORAGE
     original_url: Optional[str] = None  # 原始URL（用于网络图片）
 
     # 处理选项

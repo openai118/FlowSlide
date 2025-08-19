@@ -16,8 +16,7 @@ from langchain.schema import Document
 
 from ...ai import AIMessage, MessageRole, get_ai_provider
 from ...core.simple_config import ai_config
-from ..deep_research_service import (DEEPResearchService, ResearchReport,
-                                     ResearchStep)
+from ..deep_research_service import DEEPResearchService, ResearchReport, ResearchStep
 from .content_extractor import ExtractedContent, WebContentExtractor
 from .searxng_provider import SearXNGContentProvider, SearXNGSearchResponse
 
@@ -74,9 +73,7 @@ class EnhancedResearchService:
             from summeryanyfile.core.chunkers.fast_chunker import FastChunker
 
             self.text_splitter = FastChunker(max_tokens=ai_config.max_tokens)
-            logger.info(
-                f"使用 FastChunker 进行文本分块，max_tokens={ai_config.max_tokens}"
-            )
+            logger.info(f"使用 FastChunker 进行文本分块，max_tokens={ai_config.max_tokens}")
         except ImportError as e:
             logger.warning(f"无法导入 FastChunker，使用简单分块策略: {e}")
             # 回退到简单的分块策略
@@ -267,9 +264,7 @@ class EnhancedResearchService:
                 provider_stats,
             )
 
-            logger.info(
-                f"Enhanced research completed in {report.total_duration:.2f} seconds"
-            )
+            logger.info(f"Enhanced research completed in {report.total_duration:.2f} seconds")
             return report
 
         except Exception as e:
@@ -283,9 +278,7 @@ class EnhancedResearchService:
 
         # Extract context information
         scenario = context.get("scenario", "通用") if context else "通用"
-        target_audience = (
-            context.get("target_audience", "普通大众") if context else "普通大众"
-        )
+        target_audience = context.get("target_audience", "普通大众") if context else "普通大众"
         requirements = context.get("requirements", "") if context else ""
         ppt_style = context.get("ppt_style", "general") if context else "general"
         description = context.get("description", "") if context else ""
@@ -340,9 +333,7 @@ class EnhancedResearchService:
                 temperature=0.7,
             )
             # Extract text content from AIResponse object
-            response_text = (
-                response.content if hasattr(response, "content") else str(response)
-            )
+            response_text = response.content if hasattr(response, "content") else str(response)
 
             # Extract JSON from response
             import json
@@ -364,9 +355,7 @@ class EnhancedResearchService:
 
         except Exception as e:
             logger.error(f"Failed to generate AI research plan: {e}")
-            raise Exception(
-                f"Unable to generate research plan for topic '{topic}': {e}"
-            )
+            raise Exception(f"Unable to generate research plan for topic '{topic}': {e}")
 
     async def _execute_enhanced_research_step(
         self,
@@ -378,9 +367,7 @@ class EnhancedResearchService:
     ) -> EnhancedResearchStep:
         """Execute a single enhanced research step with multiple providers"""
         step_start_time = time.time()
-        logger.info(
-            f"Executing enhanced research step {step_number}: {step_plan['query']}"
-        )
+        logger.info(f"Executing enhanced research step {step_number}: {step_plan['query']}")
 
         step = EnhancedResearchStep(
             step_number=step_number,
@@ -438,18 +425,14 @@ class EnhancedResearchService:
                 step.extracted_content = await self.content_extractor.extract_multiple(
                     urls[:10], max_concurrent=3  # Limit to top 10 URLs
                 )
-                provider_stats["content_extraction"] += len(
-                    step.extracted_content or []
-                )
+                provider_stats["content_extraction"] += len(step.extracted_content or [])
 
         # Analyze collected data
         step.analysis = await self._analyze_step_data(step, topic, language)
         step.completed = True
         step.duration = time.time() - step_start_time
 
-        logger.info(
-            f"Completed enhanced research step {step_number} in {step.duration:.2f}s"
-        )
+        logger.info(f"Completed enhanced research step {step_number} in {step.duration:.2f}s")
         return step
 
     async def _search_with_tavily(
@@ -509,9 +492,7 @@ class EnhancedResearchService:
             for i, result in enumerate(step.tavily_results[:5], 1):
                 content_parts.append(f"{i}. {result.get('title', 'No title')}")
                 content_parts.append(f"   URL: {result.get('url', 'No URL')}")
-                content_parts.append(
-                    f"   内容: {result.get('content', 'No content')[:300]}..."
-                )
+                content_parts.append(f"   内容: {result.get('content', 'No content')[:300]}...")
                 content_parts.append("")
 
         # Add SearXNG results
@@ -650,9 +631,7 @@ class EnhancedResearchService:
                 "content_stats": content_stats,
                 "total_sources": total_sources,
                 "analysis_quality": (
-                    "high"
-                    if total_sources >= 20
-                    else "medium" if total_sources >= 10 else "basic"
+                    "high" if total_sources >= 20 else "medium" if total_sources >= 10 else "basic"
                 ),
             }
         except Exception as e:
@@ -731,7 +710,9 @@ class EnhancedResearchService:
             )
         except Exception as e:
             logger.warning(f"Failed to generate executive summary: {e}")
-            executive_summary = f"针对主题'{topic}'的综合研究报告，包含{len(steps)}个研究步骤的深入分析。"
+            executive_summary = (
+                f"针对主题'{topic}'的综合研究报告，包含{len(steps)}个研究步骤的深入分析。"
+            )
 
         return EnhancedResearchReport(
             topic=topic,

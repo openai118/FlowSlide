@@ -29,9 +29,7 @@ def _is_image_service_enabled() -> bool:
         from ..image.providers.base import provider_registry
 
         # 检查是否有AI生成提供者
-        generation_providers = provider_registry.get_generation_providers(
-            enabled_only=True
-        )
+        generation_providers = provider_registry.get_generation_providers(enabled_only=True)
 
         # 检查是否有网络搜索提供者
         search_providers = provider_registry.get_search_providers(enabled_only=True)
@@ -41,9 +39,7 @@ def _is_image_service_enabled() -> bool:
 
         # 如果有任何可用的提供者（AI生成、网络搜索或本地存储），则认为服务可用
         has_providers = (
-            len(generation_providers) > 0
-            or len(search_providers) > 0
-            or len(storage_providers) > 0
+            len(generation_providers) > 0 or len(search_providers) > 0 or len(storage_providers) > 0
         )
 
         logger.debug(

@@ -60,9 +60,7 @@ class AIProvider(ABC):
         response = await self.chat_completion(messages, **kwargs)
         yield response.content
 
-    async def stream_text_completion(
-        self, prompt: str, **kwargs
-    ) -> AsyncGenerator[str, None]:
+    async def stream_text_completion(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
         """Stream text completion (optional)"""
         # Default implementation: return full response at once
         response = await self.text_completion(prompt, **kwargs)

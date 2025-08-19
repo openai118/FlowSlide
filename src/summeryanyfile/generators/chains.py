@@ -30,37 +30,27 @@ class ChainManager(LoggerMixin):
 
         # 文档结构分析链
         self._chains["structure_analysis"] = (
-            self.prompt_templates.get_structure_analysis_prompt()
-            | self.llm
-            | StrOutputParser()
+            self.prompt_templates.get_structure_analysis_prompt() | self.llm | StrOutputParser()
         )
 
         # 初始PPT框架生成链
         self._chains["initial_outline"] = (
-            self.prompt_templates.get_initial_outline_prompt()
-            | self.llm
-            | StrOutputParser()
+            self.prompt_templates.get_initial_outline_prompt() | self.llm | StrOutputParser()
         )
 
         # 内容细化链
         self._chains["refine_outline"] = (
-            self.prompt_templates.get_refine_outline_prompt()
-            | self.llm
-            | StrOutputParser()
+            self.prompt_templates.get_refine_outline_prompt() | self.llm | StrOutputParser()
         )
 
         # 最终优化链
         self._chains["finalize_outline"] = (
-            self.prompt_templates.get_finalize_outline_prompt()
-            | self.llm
-            | StrOutputParser()
+            self.prompt_templates.get_finalize_outline_prompt() | self.llm | StrOutputParser()
         )
 
         # 错误恢复链
         self._chains["error_recovery"] = (
-            self.prompt_templates.get_error_recovery_prompt()
-            | self.llm
-            | StrOutputParser()
+            self.prompt_templates.get_error_recovery_prompt() | self.llm | StrOutputParser()
         )
 
         self.logger.debug(f"已设置 {len(self._chains)} 个处理链")
@@ -172,19 +162,13 @@ class ChainExecutor:
 
         for attempt in range(self.max_retries):
             try:
-                result = await self.chain_manager.invoke_chain(
-                    chain_name, inputs, config
-                )
+                result = await self.chain_manager.invoke_chain(chain_name, inputs, config)
                 if attempt > 0:
-                    self.logger.info(
-                        f"处理链 {chain_name} 在第 {attempt + 1} 次尝试后成功"
-                    )
+                    self.logger.info(f"处理链 {chain_name} 在第 {attempt + 1} 次尝试后成功")
                 return result
             except Exception as e:
                 last_exception = e
-                self.logger.warning(
-                    f"处理链 {chain_name} 第 {attempt + 1} 次尝试失败: {e}"
-                )
+                self.logger.warning(f"处理链 {chain_name} 第 {attempt + 1} 次尝试失败: {e}")
 
                 if attempt < self.max_retries - 1:
                     # 可以在这里添加退避策略
@@ -225,9 +209,7 @@ class ChainExecutor:
 
             fallback_inputs = fallback_inputs or inputs
             try:
-                return await self.execute_with_retry(
-                    fallback_chain, fallback_inputs, config
-                )
+                return await self.execute_with_retry(fallback_chain, fallback_inputs, config)
             except Exception as fallback_e:
                 self.logger.error(f"回退处理链 {fallback_chain} 也失败了: {fallback_e}")
                 raise fallback_e

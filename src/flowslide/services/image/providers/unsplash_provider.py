@@ -11,9 +11,18 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 
-from ..models import (ImageFormat, ImageInfo, ImageLicense, ImageMetadata,
-                      ImageOperationResult, ImageProvider, ImageSearchRequest,
-                      ImageSearchResult, ImageSourceType, ImageTag)
+from ..models import (
+    ImageFormat,
+    ImageInfo,
+    ImageLicense,
+    ImageMetadata,
+    ImageOperationResult,
+    ImageProvider,
+    ImageSearchRequest,
+    ImageSearchResult,
+    ImageSourceType,
+    ImageTag,
+)
 from .base import ImageSearchProvider
 
 logger = logging.getLogger(__name__)
@@ -89,9 +98,7 @@ class UnsplashSearchProvider(ImageSearchProvider):
                     "zh-cn": "en",
                     "zh-tw": "en",
                 }
-                params["lang"] = lang_map.get(
-                    request.language.lower(), request.language.lower()
-                )
+                params["lang"] = lang_map.get(request.language.lower(), request.language.lower())
 
             # 发送请求
             logger.debug(f"Unsplash search: {url} with params: {params}")
@@ -171,9 +178,7 @@ class UnsplashSearchProvider(ImageSearchProvider):
 
         return images
 
-    async def _create_image_info_from_unsplash(
-        self, item: Dict[str, Any]
-    ) -> Optional[ImageInfo]:
+    async def _create_image_info_from_unsplash(self, item: Dict[str, Any]) -> Optional[ImageInfo]:
         """从Unsplash数据创建ImageInfo"""
         try:
             # 基本信息
@@ -214,9 +219,7 @@ class UnsplashSearchProvider(ImageSearchProvider):
             if "tags" in item:
                 for tag_item in item["tags"]:
                     if isinstance(tag_item, dict) and "title" in tag_item:
-                        tags.append(
-                            ImageTag(name=tag_item["title"], category="unsplash")
-                        )
+                        tags.append(ImageTag(name=tag_item["title"], category="unsplash"))
                     elif isinstance(tag_item, str):
                         tags.append(ImageTag(name=tag_item, category="unsplash"))
 
@@ -274,18 +277,14 @@ class UnsplashSearchProvider(ImageSearchProvider):
                         data = await response.json()
                         return await self._create_image_info_from_unsplash(data)
                     else:
-                        logger.error(
-                            f"Failed to get Unsplash image details: {response.status}"
-                        )
+                        logger.error(f"Failed to get Unsplash image details: {response.status}")
                         return None
 
         except Exception as e:
             logger.error(f"Failed to get Unsplash image details: {e}")
             return None
 
-    async def download_image(
-        self, image_info: ImageInfo, save_path: Path
-    ) -> ImageOperationResult:
+    async def download_image(self, image_info: ImageInfo, save_path: Path) -> ImageOperationResult:
         """下载图片到本地"""
         try:
             if not image_info.original_url:
@@ -299,9 +298,7 @@ class UnsplashSearchProvider(ImageSearchProvider):
             save_path.parent.mkdir(parents=True, exist_ok=True)
 
             # 下载图片
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=60)
-            ) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
                 async with session.get(image_info.original_url) as response:
                     if response.status == 200:
                         with open(save_path, "wb") as f:

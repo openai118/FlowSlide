@@ -8,11 +8,12 @@ This module provides comprehensive research functionality including:
 """
 
 from .content_extractor import ExtractedContent, WebContentExtractor
-from .enhanced_research_service import (EnhancedResearchReport,
-                                        EnhancedResearchService,
-                                        EnhancedResearchStep)
-from .searxng_provider import (SearXNGContentProvider, SearXNGSearchResponse,
-                               SearXNGSearchResult)
+from .enhanced_research_service import (
+    EnhancedResearchReport,
+    EnhancedResearchService,
+    EnhancedResearchStep,
+)
+from .searxng_provider import SearXNGContentProvider, SearXNGSearchResponse, SearXNGSearchResult
 
 __all__ = [
     "SearXNGContentProvider",

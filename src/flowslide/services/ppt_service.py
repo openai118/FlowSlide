@@ -55,18 +55,14 @@ class PPTService:
             },
         }
 
-    async def generate_ppt(
-        self, task_id: str, request: PPTGenerationRequest
-    ) -> Dict[str, Any]:
+    async def generate_ppt(self, task_id: str, request: PPTGenerationRequest) -> Dict[str, Any]:
         """Generate complete PPT based on request"""
         try:
             # Step 1: Generate outline
             outline = await self.generate_outline(request)
 
             # Step 2: Generate slides HTML
-            slides_html = await self.generate_slides_from_outline(
-                outline, request.scenario
-            )
+            slides_html = await self.generate_slides_from_outline(outline, request.scenario)
 
             return {
                 "success": True,
@@ -95,9 +91,7 @@ class PPTService:
                 "id": 1,
                 "type": "title",
                 "title": topic,
-                "subtitle": (
-                    "专业演示" if language == "zh" else "Professional Presentation"
-                ),
+                "subtitle": ("专业演示" if language == "zh" else "Professional Presentation"),
                 "content": "",
             }
         )
@@ -126,9 +120,7 @@ class PPTService:
                 "id": len(slides) + 1,
                 "type": "thankyou",
                 "title": "谢谢" if language == "zh" else "Thank You",
-                "subtitle": (
-                    "感谢聆听" if language == "zh" else "Thank you for your attention"
-                ),
+                "subtitle": ("感谢聆听" if language == "zh" else "Thank you for your attention"),
                 "content": "",
             }
         )
@@ -144,9 +136,7 @@ class PPTService:
             },
         )
 
-    async def generate_slides_from_outline(
-        self, outline: PPTOutline, scenario: str
-    ) -> str:
+    async def generate_slides_from_outline(self, outline: PPTOutline, scenario: str) -> str:
         """Generate HTML slides from outline"""
         config = self.scenario_configs.get(scenario, self.scenario_configs["general"])
 
@@ -246,9 +236,7 @@ class PPTService:
 
         return complete_html
 
-    async def process_uploaded_file(
-        self, filename: str, content: bytes, file_type: str
-    ) -> str:
+    async def process_uploaded_file(self, filename: str, content: bytes, file_type: str) -> str:
         """Process uploaded file and extract content"""
         try:
             if file_type == ".docx":
@@ -423,9 +411,7 @@ class PPTService:
         template = agenda_templates.get(scenario, agenda_templates["general"])
         items = template.get(language, template["en"])
 
-        for i, item in enumerate(
-            items, 3
-        ):  # Start from slide 3 (after title and agenda)
+        for i, item in enumerate(items, 3):  # Start from slide 3 (after title and agenda)
             content = self._generate_slide_content(topic, item, scenario, language)
             slides.append(
                 {
@@ -683,9 +669,7 @@ class PPTService:
         }}
         """
 
-    def _generate_slide_html(
-        self, slide: Dict[str, Any], config: Dict[str, Any]
-    ) -> str:
+    def _generate_slide_html(self, slide: Dict[str, Any], config: Dict[str, Any]) -> str:
         """Generate HTML for a single slide"""
         slide_type = slide.get("type", "content")
         slide_id = slide.get("id", 1)
@@ -703,14 +687,8 @@ class PPTService:
 
         elif slide_type == "agenda":
             # Convert content to HTML list
-            agenda_items = [
-                item.strip() for item in content.split("\n") if item.strip()
-            ]
-            agenda_html = (
-                "<ul>"
-                + "".join([f"<li>{item}</li>" for item in agenda_items])
-                + "</ul>"
-            )
+            agenda_items = [item.strip() for item in content.split("\n") if item.strip()]
+            agenda_html = "<ul>" + "".join([f"<li>{item}</li>" for item in agenda_items]) + "</ul>"
 
             return f"""
             <div class="slide agenda-slide" id="slide-{slide_id}">

@@ -2,29 +2,29 @@
 Database configuration and session management
 """
 
-import os
 import logging
+import os
 
 from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
-                                    create_async_engine)
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-from ..core.simple_config import app_config, DATABASE_URL, ASYNC_DATABASE_URL
+from ..core.simple_config import ASYNC_DATABASE_URL, DATABASE_URL, app_config
 
 logger = logging.getLogger(__name__)
+
 
 # Database fallback configuration
 def get_safe_database_urls():
     """Get database URLs with fallback to SQLite if PostgreSQL fails"""
     primary_db_url = DATABASE_URL
     primary_async_url = ASYNC_DATABASE_URL
-    
+
     # SQLite fallback
     fallback_db_url = "sqlite:///./data/flowslide.db"
     fallback_async_url = "sqlite+aiosqlite:///./data/flowslide.db"
-    
+
     # If PostgreSQL URL is provided but we're in a container/cloud environment
     # where the PostgreSQL server might not be available, prepare fallback
     if primary_db_url.startswith("postgresql://"):
@@ -34,6 +34,7 @@ def get_safe_database_urls():
     else:
         logger.info(f"Using SQLite database: {primary_db_url}")
         return (primary_db_url, primary_async_url, None, None)
+
 
 # Get database URLs
 primary_url, primary_async_url, fallback_url, fallback_async_url = get_safe_database_urls()
@@ -48,10 +49,7 @@ try:
             connect_args={"check_same_thread": False},
             echo=False,
         )
-        async_engine = create_async_engine(
-            primary_async_url,
-            echo=False
-        )
+        async_engine = create_async_engine(primary_async_url, echo=False)
     else:
         # PostgreSQL configuration with connection pooling
         engine = create_engine(
@@ -68,15 +66,16 @@ try:
             max_overflow=20,
             pool_pre_ping=True,
             pool_recycle=3600,
-            echo=False
+            echo=False,
         )
-    
+
     # Test connection for PostgreSQL
     if primary_url.startswith("postgresql://"):
         try:
             # Quick connection test
             with engine.connect() as conn:
                 from sqlalchemy import text
+
                 conn.execute(text("SELECT 1"))
             logger.info("✅ PostgreSQL connection successful")
             DATABASE_TYPE = "postgresql"
@@ -89,10 +88,7 @@ try:
                     connect_args={"check_same_thread": False},
                     echo=False,
                 )
-                async_engine = create_async_engine(
-                    fallback_async_url,
-                    echo=False
-                )
+                async_engine = create_async_engine(fallback_async_url, echo=False)
                 DATABASE_TYPE = "sqlite"
                 logger.info("✅ SQLite fallback successful")
             else:
@@ -100,7 +96,7 @@ try:
     else:
         DATABASE_TYPE = "sqlite"
         logger.info("✅ SQLite database ready")
-        
+
 except Exception as e:
     logger.error(f"❌ Database initialization failed: {e}")
     # Final fallback to SQLite
@@ -116,9 +112,7 @@ except Exception as e:
 
 # Create session makers
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-AsyncSessionLocal = async_sessionmaker(
-    async_engine, class_=AsyncSession, expire_on_commit=False
-)
+AsyncSessionLocal = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
 
 
 def get_db():
@@ -143,11 +137,11 @@ async def init_db():
         from .models import Base
 
         logger.info(f"🗄️ Initializing database tables using {DATABASE_TYPE}...")
-        
+
         async with async_engine.begin() as conn:
             # Create all tables
             await conn.run_sync(Base.metadata.create_all)
-        
+
         logger.info("✅ Database tables created successfully")
 
         # Initialize default admin user
@@ -161,7 +155,7 @@ async def init_db():
             logger.warning(f"⚠️ Admin user initialization warning: {e}")
         finally:
             db.close()
-            
+
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
         # Try to handle the error gracefully

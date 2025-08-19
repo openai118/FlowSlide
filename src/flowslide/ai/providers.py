@@ -25,9 +25,7 @@ class OpenAIProvider(AIProvider):
                 api_key=config.get("api_key"), base_url=config.get("base_url")
             )
         except ImportError:
-            logger.warning(
-                "OpenAI library not installed. Install with: pip install openai"
-            )
+            logger.warning("OpenAI library not installed. Install with: pip install openai")
             self.client = None
 
     async def chat_completion(self, messages: List[AIMessage], **kwargs) -> AIResponse:
@@ -38,9 +36,7 @@ class OpenAIProvider(AIProvider):
         config = self._merge_config(**kwargs)
 
         # Convert messages to OpenAI format
-        openai_messages = [
-            {"role": msg.role.value, "content": msg.content} for msg in messages
-        ]
+        openai_messages = [{"role": msg.role.value, "content": msg.content} for msg in messages]
 
         try:
             response = await self.client.chat.completions.create(
@@ -95,9 +91,7 @@ class OpenAIProvider(AIProvider):
         config = self._merge_config(**kwargs)
 
         # Convert messages to OpenAI format
-        openai_messages = [
-            {"role": msg.role.value, "content": msg.content} for msg in messages
-        ]
+        openai_messages = [{"role": msg.role.value, "content": msg.content} for msg in messages]
 
         try:
             stream = await self.client.chat.completions.create(
@@ -117,9 +111,7 @@ class OpenAIProvider(AIProvider):
             logger.error(f"OpenAI streaming error: {e}")
             raise
 
-    async def stream_text_completion(
-        self, prompt: str, **kwargs
-    ) -> AsyncGenerator[str, None]:
+    async def stream_text_completion(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
         """Stream text completion using OpenAI chat format"""
         messages = [AIMessage(role=MessageRole.USER, content=prompt)]
         async for chunk in self.stream_chat_completion(messages, **kwargs):
@@ -138,9 +130,7 @@ class AnthropicProvider(AIProvider):
                 api_key=config.get("api_key"), base_url=config.get("base_url")
             )
         except ImportError:
-            logger.warning(
-                "Anthropic library not installed. Install with: pip install anthropic"
-            )
+            logger.warning("Anthropic library not installed. Install with: pip install anthropic")
             self.client = None
 
     async def chat_completion(self, messages: List[AIMessage], **kwargs) -> AIResponse:
@@ -177,8 +167,7 @@ class AnthropicProvider(AIProvider):
                 usage={
                     "prompt_tokens": response.usage.input_tokens,
                     "completion_tokens": response.usage.output_tokens,
-                    "total_tokens": response.usage.input_tokens
-                    + response.usage.output_tokens,
+                    "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
                 },
                 finish_reason=response.stop_reason,
                 metadata={"provider": "anthropic"},
@@ -201,9 +190,9 @@ class GoogleProvider(AIProvider):
         super().__init__(config)
         # Always capture config bits we need
         self.api_key = config.get("api_key")
-        self.base_url = config.get(
-            "base_url", "https://generativelanguage.googleapis.com"
-        ).rstrip("/")
+        self.base_url = config.get("base_url", "https://generativelanguage.googleapis.com").rstrip(
+            "/"
+        )
         self._use_rest = False
         try:
             import google.generativeai as genai
@@ -212,9 +201,7 @@ class GoogleProvider(AIProvider):
             if self.base_url == "https://generativelanguage.googleapis.com":
                 genai.configure(api_key=self.api_key)
                 self.client = genai
-                self.model_instance = genai.GenerativeModel(
-                    config.get("model", "gemini-1.5-flash")
-                )
+                self.model_instance = genai.GenerativeModel(config.get("model", "gemini-1.5-flash"))
             else:
                 # Custom base URL requested – fall back to REST implementation
                 self.client = None
@@ -295,9 +282,7 @@ class GoogleProvider(AIProvider):
                 },
             ]
 
-            response = await self._generate_async(
-                prompt, generation_config, safety_settings
-            )
+            response = await self._generate_async(prompt, generation_config, safety_settings)
             logger.debug(f"Google Gemini API response: {response}")
 
             # 检查响应状态和安全过滤
@@ -337,9 +322,7 @@ class GoogleProvider(AIProvider):
                         else:
                             content = "[响应因token限制被截断，无内容]"
                     except Exception as text_error:
-                        logger.warning(
-                            f"Failed to get truncated response text: {text_error}"
-                        )
+                        logger.warning(f"Failed to get truncated response text: {text_error}")
                         content = "[响应因token限制被截断，无法获取内容]"
                 elif finish_reason == "OTHER":
                     logger.warning("Content was blocked for other reasons")
@@ -361,9 +344,7 @@ class GoogleProvider(AIProvider):
                         else:
                             # 回退到response.text
                             content = (
-                                response.text
-                                if hasattr(response, "text") and response.text
-                                else ""
+                                response.text if hasattr(response, "text") and response.text else ""
                             )
                     except Exception as text_error:
                         logger.warning(f"Failed to get response text: {text_error}")
@@ -423,9 +404,7 @@ class GoogleProvider(AIProvider):
             async with session.post(url, json=payload, timeout=60) as resp:
                 if resp.status != 200:
                     text = await resp.text()
-                    raise RuntimeError(
-                        f"Google REST API error {resp.status}: {text[:200]}"
-                    )
+                    raise RuntimeError(f"Google REST API error {resp.status}: {text[:200]}")
                 data = await resp.json()
 
         # Extract text
@@ -433,11 +412,7 @@ class GoogleProvider(AIProvider):
         try:
             candidates = data.get("candidates") or []
             if candidates:
-                parts = (
-                    candidates[0]
-                    .get("content", {})
-                    .get("parts", [{}])
-                )
+                parts = candidates[0].get("content", {}).get("parts", [{}])
                 content = parts[0].get("text", "")
         except Exception:
             content = ""
@@ -481,13 +456,9 @@ class OllamaProvider(AIProvider):
         try:
             import ollama
 
-            self.client = ollama.AsyncClient(
-                host=config.get("base_url", "http://localhost:11434")
-            )
+            self.client = ollama.AsyncClient(host=config.get("base_url", "http://localhost:11434"))
         except ImportError:
-            logger.warning(
-                "Ollama library not installed. Install with: pip install ollama"
-            )
+            logger.warning("Ollama library not installed. Install with: pip install ollama")
             self.client = None
 
     async def chat_completion(self, messages: List[AIMessage], **kwargs) -> AIResponse:
@@ -498,9 +469,7 @@ class OllamaProvider(AIProvider):
         config = self._merge_config(**kwargs)
 
         # Convert messages to Ollama format
-        ollama_messages = [
-            {"role": msg.role.value, "content": msg.content} for msg in messages
-        ]
+        ollama_messages = [{"role": msg.role.value, "content": msg.content} for msg in messages]
 
         try:
             response = await self.client.chat(
@@ -518,9 +487,7 @@ class OllamaProvider(AIProvider):
             return AIResponse(
                 content=content,
                 model=config.get("model", self.model),
-                usage=self._calculate_usage(
-                    " ".join([msg.content for msg in messages]), content
-                ),
+                usage=self._calculate_usage(" ".join([msg.content for msg in messages]), content),
                 finish_reason="stop",
                 metadata={"provider": "ollama"},
             )

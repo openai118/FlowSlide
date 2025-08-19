@@ -12,8 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
-    from playwright.async_api import (Browser, BrowserContext, Page,
-                                      async_playwright)
+    from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
@@ -53,9 +52,7 @@ class PlaywrightPDFConverter:
     def install_chromium():
         """手动安装 Chromium 的辅助方法"""
         if not PLAYWRIGHT_AVAILABLE:
-            raise ImportError(
-                "Playwright is not available. Please install: pip install playwright"
-            )
+            raise ImportError("Playwright is not available. Please install: pip install playwright")
 
         try:
             logger.info("🔄 开始手动安装 Chromium...")
@@ -107,9 +104,7 @@ class PlaywrightPDFConverter:
     async def _launch_browser(self) -> Browser:
         """Launch browser with enhanced settings optimized for chart rendering"""
         if not self.is_available():
-            raise ImportError(
-                "Playwright is not available. Please install: pip install playwright"
-            )
+            raise ImportError("Playwright is not available. Please install: pip install playwright")
 
         # Enhanced launch options with better Windows compatibility
         launch_args = [
@@ -165,16 +160,12 @@ class PlaywrightPDFConverter:
             # Method 1: Try Playwright's installed Chromium first (especially for Docker)
             logger.info("🔄 Trying Playwright's installed Chromium...")
             try:
-                browser = await self.playwright.chromium.launch(
-                    headless=True, args=launch_args
-                )
+                browser = await self.playwright.chromium.launch(headless=True, args=launch_args)
                 logger.info("✅ Playwright Chromium launched successfully")
                 return browser
 
             except Exception as playwright_error:
-                logger.warning(
-                    f"❌ Playwright Chromium launch failed: {playwright_error}"
-                )
+                logger.warning(f"❌ Playwright Chromium launch failed: {playwright_error}")
 
             # Method 2: Try system Chrome with enhanced error handling
             system_chrome_paths = [
@@ -250,9 +241,7 @@ class PlaywrightPDFConverter:
                             "headless": True,
                             "args": ["--no-sandbox", "--disable-setuid-sandbox"],
                         }
-                        browser = await self.playwright.chromium.launch(
-                            **portable_config
-                        )
+                        browser = await self.playwright.chromium.launch(**portable_config)
                         logger.info(f"✅ Portable browser launched: {browser_exe}")
                         return browser
                     except Exception as e:
@@ -298,9 +287,7 @@ class PlaywrightPDFConverter:
                 )
             return self.browser
 
-    async def _wait_for_charts_and_dynamic_content(
-        self, page: Page, max_wait_time: int = 15000
-    ):
+    async def _wait_for_charts_and_dynamic_content(self, page: Page, max_wait_time: int = 15000):
         """
         Enhanced function to wait for Chart.js, ECharts.js, D3.js charts and dynamic content to fully render
         Improved detection for multiple chart libraries and animations with extended wait time
@@ -347,9 +334,7 @@ class PlaywrightPDFConverter:
         }"""
         )
 
-        while (
-            time.time() * 1000 - start_time
-        ) < max_wait_time and attempts < max_attempts:
+        while (time.time() * 1000 - start_time) < max_wait_time and attempts < max_attempts:
             attempts += 1
 
             try:
@@ -548,8 +533,7 @@ class PlaywrightPDFConverter:
                     )
                     and (
                         chart_status["echartsInstances"] == 0
-                        or chart_status["renderedEcharts"]
-                        >= chart_status["echartsInstances"]
+                        or chart_status["renderedEcharts"] >= chart_status["echartsInstances"]
                     )
                     and (
                         chart_status["d3Elements"] == 0
@@ -929,9 +913,7 @@ class PlaywrightPDFConverter:
             )
 
             if final_status["errors"]:
-                logger.debug(
-                    f"⚠️ 验证中发现错误: {final_status['errors'][:3]}"
-                )  # 只显示前3个错误
+                logger.debug(f"⚠️ 验证中发现错误: {final_status['errors'][:3]}")  # 只显示前3个错误
 
             if not final_status["contentVerified"]:
                 logger.info(
@@ -1187,9 +1169,7 @@ class PlaywrightPDFConverter:
         except Exception as error:
             logger.debug(f"⚠️ 图表强制初始化失败: {error}")
 
-    async def _wait_for_fonts_and_resources(
-        self, page: Page, max_wait_time: int = 8000
-    ):
+    async def _wait_for_fonts_and_resources(self, page: Page, max_wait_time: int = 8000):
         """等待所有字体和外部资源加载完成"""
         logger.debug("🔤 等待字体和外部资源加载...")
 
@@ -1396,9 +1376,7 @@ class PlaywrightPDFConverter:
             )
 
             if page_status["errors"]:
-                logger.debug(
-                    f"⚠️ 检查中发现问题: {page_status['errors'][:5]}"
-                )  # 只显示前5个错误
+                logger.debug(f"⚠️ 检查中发现问题: {page_status['errors'][:5]}")  # 只显示前5个错误
 
             # 判断页面是否完全就绪
             is_ready = (
@@ -1802,9 +1780,7 @@ class PlaywrightPDFConverter:
             # Set viewport for 16:9 aspect ratio (1280x720)
             viewport_width = options.get("viewportWidth", 1280)
             viewport_height = options.get("viewportHeight", 720)
-            await page.set_viewport_size(
-                {"width": viewport_width, "height": viewport_height}
-            )
+            await page.set_viewport_size({"width": viewport_width, "height": viewport_height})
 
             # Navigate to the HTML file
             absolute_html_path = Path(html_file_path).resolve()
@@ -2116,9 +2092,7 @@ class PlaywrightPDFConverter:
                 batch = html_files[i : i + batch_size]
                 batch_num = i // batch_size + 1
                 total_batches = (len(html_files) + batch_size - 1) // batch_size
-                logger.info(
-                    f"📦 Processing batch {batch_num}/{total_batches} ({len(batch)} files)"
-                )
+                logger.info(f"📦 Processing batch {batch_num}/{total_batches} ({len(batch)} files)")
 
                 # Process batch with retry mechanism
                 batch_results = []
@@ -2127,9 +2101,7 @@ class PlaywrightPDFConverter:
                     base_name = Path(html_file).stem
                     pdf_file = os.path.join(output_dir, f"{base_name}.pdf")
 
-                    logger.info(
-                        f"📄 Converting {global_index + 1}/{len(html_files)}: {html_file}"
-                    )
+                    logger.info(f"📄 Converting {global_index + 1}/{len(html_files)}: {html_file}")
 
                     # Try conversion with retry mechanism
                     success = False
@@ -2138,15 +2110,11 @@ class PlaywrightPDFConverter:
 
                     while not success and retry_count <= max_retries:
                         if retry_count > 0:
-                            logger.info(
-                                f"🔄 Retry {retry_count}/{max_retries} for: {html_file}"
-                            )
+                            logger.info(f"🔄 Retry {retry_count}/{max_retries} for: {html_file}")
                             # Wait a bit before retry
                             await asyncio.sleep(2)
 
-                        success = await self.html_to_pdf_with_browser(
-                            browser, html_file, pdf_file
-                        )
+                        success = await self.html_to_pdf_with_browser(browser, html_file, pdf_file)
                         retry_count += 1
 
                     if success:
@@ -2163,9 +2131,7 @@ class PlaywrightPDFConverter:
                     logger.info("💾 Memory cleanup between batches...")
                     await asyncio.sleep(2)
 
-            logger.info(
-                f"✅ Batch conversion completed. Generated {len(pdf_files)} PDF files."
-            )
+            logger.info(f"✅ Batch conversion completed. Generated {len(pdf_files)} PDF files.")
 
             # If merging is requested and we have PDFs
             if merged_pdf_path and len(pdf_files) > 0:
@@ -2177,9 +2143,7 @@ class PlaywrightPDFConverter:
 
                         from ..utils.thread_pool import run_blocking_io
 
-                        await run_blocking_io(
-                            shutil.copy2, pdf_files[0], merged_pdf_path
-                        )
+                        await run_blocking_io(shutil.copy2, pdf_files[0], merged_pdf_path)
                         logger.info(f"✅ Single PDF copied to: {merged_pdf_path}")
                     except Exception as e:
                         logger.error(f"❌ Failed to copy single PDF: {e}")
@@ -2287,6 +2251,4 @@ async def convert_multiple_html_to_pdf(
 ) -> List[str]:
     """Convenience function for batch HTML to PDF conversion"""
     converter = get_pdf_converter()
-    return await converter.convert_multiple_html_to_pdf(
-        html_files, output_dir, merged_pdf_path
-    )
+    return await converter.convert_multiple_html_to_pdf(html_files, output_dir, merged_pdf_path)

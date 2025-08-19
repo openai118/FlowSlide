@@ -12,8 +12,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
-from ..models import (ImageFormat, ImageInfo, ImageMetadata,
-                      ImageOperationResult, ImageProcessingOptions)
+from ..models import (
+    ImageFormat,
+    ImageInfo,
+    ImageMetadata,
+    ImageOperationResult,
+    ImageProcessingOptions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -94,9 +99,7 @@ class ImageProcessor:
                         background = Image.new("RGB", img.size, (255, 255, 255))
                         if img.mode == "P":
                             img = img.convert("RGBA")
-                        background.paste(
-                            img, mask=img.split()[-1] if img.mode == "RGBA" else None
-                        )
+                        background.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
                         img = background
                     elif img.mode == "P":
                         img = img.convert("RGBA")
@@ -150,9 +153,7 @@ class ImageProcessor:
         except Exception as e:
             raise Exception(f"Synchronous image processing failed: {str(e)}")
 
-    def _resize_image(
-        self, img: Image.Image, options: ImageProcessingOptions
-    ) -> Image.Image:
+    def _resize_image(self, img: Image.Image, options: ImageProcessingOptions) -> Image.Image:
         """调整图片尺寸"""
         original_width, original_height = img.size
         target_width = options.resize_width
@@ -184,15 +185,11 @@ class ImageProcessor:
             new_height = target_height or original_height
 
         # 获取重采样方法
-        resample = self.resample_methods.get(
-            options.resize_method, Image.Resampling.LANCZOS
-        )
+        resample = self.resample_methods.get(options.resize_method, Image.Resampling.LANCZOS)
 
         return img.resize((new_width, new_height), resample)
 
-    def _enhance_image(
-        self, img: Image.Image, options: ImageProcessingOptions
-    ) -> Image.Image:
+    def _enhance_image(self, img: Image.Image, options: ImageProcessingOptions) -> Image.Image:
         """图片增强"""
         enhanced_img = img
 
@@ -227,9 +224,7 @@ class ImageProcessor:
 
         return enhanced_img
 
-    def _add_watermark(
-        self, img: Image.Image, options: ImageProcessingOptions
-    ) -> Image.Image:
+    def _add_watermark(self, img: Image.Image, options: ImageProcessingOptions) -> Image.Image:
         """添加水印"""
         try:
             # 创建水印图层
@@ -265,9 +260,7 @@ class ImageProcessor:
                 ),
             }
 
-            position = positions.get(
-                options.watermark_position, positions["bottom_right"]
-            )
+            position = positions.get(options.watermark_position, positions["bottom_right"])
 
             # 绘制水印
             alpha = int(255 * options.watermark_opacity)
@@ -355,11 +348,7 @@ class ImageProcessor:
                 return ImageMetadata(
                     width=img.width,
                     height=img.height,
-                    format=(
-                        ImageFormat(img.format.lower())
-                        if img.format
-                        else ImageFormat.JPEG
-                    ),
+                    format=(ImageFormat(img.format.lower()) if img.format else ImageFormat.JPEG),
                     file_size=image_path.stat().st_size,
                     color_mode=img.mode,
                     has_transparency=img.mode in ("RGBA", "LA", "P"),

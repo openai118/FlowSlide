@@ -35,9 +35,7 @@ class JSONParser:
             logger.debug("直接JSON解析失败，尝试其他方法")
 
         # 尝试方法2：提取JSON代码块
-        json_match = re.search(
-            r"```json\s*(.*?)\s*```", response, re.DOTALL | re.IGNORECASE
-        )
+        json_match = re.search(r"```json\s*(.*?)\s*```", response, re.DOTALL | re.IGNORECASE)
         if json_match:
             try:
                 json_content = json_match.group(1).strip()

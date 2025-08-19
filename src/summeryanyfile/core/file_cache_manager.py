@@ -138,9 +138,7 @@ class FileCacheManager:
             logger.error(f"检查缓存状态失败: {e}")
             return False, None
 
-    def get_cached_content(
-        self, md5_hash: str
-    ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    def get_cached_content(self, md5_hash: str) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
         """
         获取缓存的内容和元数据
 
@@ -300,9 +298,7 @@ class FileCacheManager:
                     with open(metadata_file, "r", encoding="utf-8") as f:
                         metadata = json.load(f)
 
-                    cached_time = datetime.fromisoformat(
-                        metadata.get("cached_time", "")
-                    )
+                    cached_time = datetime.fromisoformat(metadata.get("cached_time", ""))
                     expiry_time = cached_time + timedelta(hours=self.cache_ttl_hours)
 
                     if datetime.now() > expiry_time:

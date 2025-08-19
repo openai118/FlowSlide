@@ -186,9 +186,7 @@ def get_template_examples_path() -> Path:
     logger.info(f"Looking for template_examples at: {template_examples_path}")
 
     if not template_examples_path.exists():
-        logger.warning(
-            f"Template examples directory not found at: {template_examples_path}"
-        )
+        logger.warning(f"Template examples directory not found at: {template_examples_path}")
         return None
 
     return template_examples_path
@@ -238,9 +236,7 @@ async def import_templates_from_examples() -> List[int]:
 
             # 获取所有JSON文件
             json_files = list(template_examples_path.glob("*.json"))
-            logger.info(
-                f"Found {len(json_files)} template files in {template_examples_path}"
-            )
+            logger.info(f"Found {len(json_files)} template files in {template_examples_path}")
 
             for json_file in json_files:
                 logger.info(f"Processing template file: {json_file.name}")
@@ -262,9 +258,7 @@ async def import_templates_from_examples() -> List[int]:
 
                 # 创建模板
                 try:
-                    template = await db_service.create_global_master_template(
-                        template_data
-                    )
+                    template = await db_service.create_global_master_template(template_data)
                     imported_template_ids.append(template.id)
                     logger.info(
                         f"Successfully imported template '{template_data['template_name']}' with ID: {template.id}"
@@ -292,9 +286,7 @@ async def create_default_global_template():
             db_service = DatabaseService(session)
 
             # Check if default template already exists
-            existing = await db_service.get_global_master_template_by_name(
-                "默认商务模板"
-            )
+            existing = await db_service.get_global_master_template_by_name("默认商务模板")
             if existing:
                 logger.info("Default global master template already exists")
                 return existing.id
@@ -311,9 +303,7 @@ async def create_default_global_template():
             }
 
             template = await db_service.create_global_master_template(template_data)
-            logger.info(
-                f"Created default global master template with ID: {template.id}"
-            )
+            logger.info(f"Created default global master template with ID: {template.id}")
             return template.id
 
     except Exception as e:
@@ -346,9 +336,7 @@ async def ensure_default_templates_exist(force_import: bool = False):
         imported_ids = await import_templates_from_examples()
 
         if imported_ids:
-            logger.info(
-                f"Successfully imported {len(imported_ids)} templates from examples"
-            )
+            logger.info(f"Successfully imported {len(imported_ids)} templates from examples")
 
             # 检查是否有默认模板，如果没有则设置第一个导入的模板为默认
             async with AsyncSessionLocal() as session:
@@ -360,16 +348,12 @@ async def ensure_default_templates_exist(force_import: bool = False):
                     await db_service.update_global_master_template(
                         imported_ids[0], {"is_default": True}
                     )
-                    logger.info(
-                        f"Set template ID {imported_ids[0]} as default template"
-                    )
+                    logger.info(f"Set template ID {imported_ids[0]} as default template")
 
             return imported_ids
         else:
             # 如果没有成功导入任何模板，则创建默认模板
-            logger.info(
-                "No templates imported from examples, creating fallback default template"
-            )
+            logger.info("No templates imported from examples, creating fallback default template")
             template_id = await create_default_global_template()
             logger.info(f"Fallback default template created with ID: {template_id}")
             return [template_id] if template_id else []

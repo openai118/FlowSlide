@@ -11,8 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .enhanced_research_service import (EnhancedResearchReport,
-                                        EnhancedResearchStep)
+from .enhanced_research_service import EnhancedResearchReport, EnhancedResearchStep
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +22,7 @@ class EnhancedReportGenerator:
     def __init__(self, reports_dir: str = "research_reports"):
         self.reports_dir = Path(reports_dir)
         self.reports_dir.mkdir(exist_ok=True)
-        logger.info(
-            f"Enhanced research reports directory: {self.reports_dir.absolute()}"
-        )
+        logger.info(f"Enhanced research reports directory: {self.reports_dir.absolute()}")
 
     def generate_markdown_report(self, report: EnhancedResearchReport) -> str:
         """Generate comprehensive Markdown formatted research report"""
@@ -83,9 +80,7 @@ class EnhancedReportGenerator:
         content.append("")
         content.append(f"- **研究主题**: {report.topic}")
         content.append(f"- **报告语言**: {report.language}")
-        content.append(
-            f"- **生成时间**: {report.created_at.strftime('%Y年%m月%d日 %H:%M:%S')}"
-        )
+        content.append(f"- **生成时间**: {report.created_at.strftime('%Y年%m月%d日 %H:%M:%S')}")
         content.append(f"- **研究时长**: {report.total_duration:.2f} 秒")
         content.append(f"- **研究步骤**: {len(report.steps)} 个")
         content.append(f"- **信息来源**: {len(report.sources)} 个")
@@ -114,13 +109,9 @@ class EnhancedReportGenerator:
                 if stats.get("total_words", 0) > 0:
                     content.append(f"- **提取文字总数**: {stats['total_words']:,} 字")
                 if stats.get("tavily_results", 0) > 0:
-                    content.append(
-                        f"- **Tavily 搜索结果**: {stats['tavily_results']} 条"
-                    )
+                    content.append(f"- **Tavily 搜索结果**: {stats['tavily_results']} 条")
                 if stats.get("searxng_results", 0) > 0:
-                    content.append(
-                        f"- **SearXNG 搜索结果**: {stats['searxng_results']} 条"
-                    )
+                    content.append(f"- **SearXNG 搜索结果**: {stats['searxng_results']} 条")
                 if stats.get("extracted_pages", 0) > 0:
                     content.append(f"- **深度提取页面**: {stats['extracted_pages']} 个")
 
@@ -140,9 +131,7 @@ class EnhancedReportGenerator:
         content.append("")
 
         # Comprehensive Analysis (if available)
-        if report.content_analysis and report.content_analysis.get(
-            "comprehensive_analysis"
-        ):
+        if report.content_analysis and report.content_analysis.get("comprehensive_analysis"):
             content.append("## 🔬 综合分析")
             content.append("")
             content.append(report.content_analysis["comprehensive_analysis"])
@@ -172,9 +161,7 @@ class EnhancedReportGenerator:
             if step.tavily_results:
                 sources_info.append(f"Tavily: {len(step.tavily_results)} 条结果")
             if step.searxng_results:
-                sources_info.append(
-                    f"SearXNG: {len(step.searxng_results.results)} 条结果"
-                )
+                sources_info.append(f"SearXNG: {len(step.searxng_results.results)} 条结果")
             if step.extracted_content:
                 sources_info.append(f"深度提取: {len(step.extracted_content)} 个页面")
 
@@ -253,9 +240,7 @@ class EnhancedReportGenerator:
         content.append("")
         content.append("*本报告由 FlowSlide 增强研究系统生成*")
         content.append("")
-        content.append(
-            f"**生成时间**: {datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}"
-        )
+        content.append(f"**生成时间**: {datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}")
 
         return "\n".join(content)
 

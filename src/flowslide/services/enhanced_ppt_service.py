@@ -14,8 +14,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..ai import AIMessage, MessageRole, get_ai_provider
-from ..api.models import (EnhancedPPTOutline, PPTGenerationRequest, PPTOutline,
-                          PPTProject, SlideContent, TodoBoard)
+from ..api.models import (
+    EnhancedPPTOutline,
+    PPTGenerationRequest,
+    PPTOutline,
+    PPTProject,
+    SlideContent,
+    TodoBoard,
+)
 from ..core.config import ai_config
 from ..utils.thread_pool import run_blocking_io, to_thread
 from .db_project_manager import DatabaseProjectManager
@@ -89,9 +95,7 @@ class EnhancedPPTService(PPTService):
                 cache_path.mkdir(parents=True, exist_ok=True)
 
             # 初始化主要的文件缓存管理器（用于summeryanyfile）
-            self.file_cache_manager = FileCacheManager(
-                cache_dir=str(cache_dirs["summeryanyfile"])
-            )
+            self.file_cache_manager = FileCacheManager(cache_dir=str(cache_dirs["summeryanyfile"]))
 
             # 存储缓存目录配置供其他功能使用
             self.cache_dirs = cache_dirs
@@ -129,17 +133,11 @@ class EnhancedPPTService(PPTService):
 
             if enhanced_available:
                 logger.info("Enhanced Research service initialized successfully")
-                available_providers = (
-                    self.enhanced_research_service.get_available_providers()
-                )
-                logger.info(
-                    f"Available research providers: {', '.join(available_providers)}"
-                )
+                available_providers = self.enhanced_research_service.get_available_providers()
+                logger.info(f"Available research providers: {', '.join(available_providers)}")
             else:
                 # 改为 info 级别，避免在未配置研究服务时产生误导性的告警
-                logger.info(
-                    "Enhanced research service not available - check API configurations"
-                )
+                logger.info("Enhanced research service not available - check API configurations")
 
         except Exception as e:
             logger.warning(f"Failed to initialize enhanced research service: {e}")
@@ -202,10 +200,7 @@ class EnhancedPPTService(PPTService):
 
     def reload_research_config(self):
         """Reload enhanced research service configuration"""
-        if (
-            hasattr(self, "enhanced_research_service")
-            and self.enhanced_research_service
-        ):
+        if hasattr(self, "enhanced_research_service") and self.enhanced_research_service:
             try:
                 # Enhanced research service doesn't have reload_config method, so reinitialize
                 self._initialize_research_services()
@@ -213,9 +208,7 @@ class EnhancedPPTService(PPTService):
                     "Enhanced research service configuration reloaded in EnhancedPPTService"
                 )
             except Exception as e:
-                logger.warning(
-                    f"Failed to reload enhanced research service config: {e}"
-                )
+                logger.warning(f"Failed to reload enhanced research service config: {e}")
                 # If reload fails, reinitialize
                 self._initialize_research_services()
 
@@ -396,40 +389,34 @@ class EnhancedPPTService(PPTService):
                     hasattr(self, "enhanced_research_service")
                     and self.enhanced_research_service.is_available()
                 ):
-                    logger.info(
-                        f"Starting Enhanced research for topic: {request.topic}"
-                    )
+                    logger.info(f"Starting Enhanced research for topic: {request.topic}")
                     try:
                         # Prepare research context
                         research_context = {
                             "scenario": request.scenario,
-                            "target_audience": getattr(
-                                request, "target_audience", "普通大众"
-                            ),
+                            "target_audience": getattr(request, "target_audience", "普通大众"),
                             "requirements": request.requirements,
                             "ppt_style": getattr(request, "ppt_style", "general"),
                             "description": getattr(request, "description", ""),
                         }
 
                         # Conduct enhanced research with context
-                        enhanced_report = await self.enhanced_research_service.conduct_enhanced_research(
-                            topic=request.topic,
-                            language=request.language,
-                            context=research_context,
+                        enhanced_report = (
+                            await self.enhanced_research_service.conduct_enhanced_research(
+                                topic=request.topic,
+                                language=request.language,
+                                context=research_context,
+                            )
                         )
 
                         # Save enhanced report first
                         report_path = None
                         if hasattr(self, "enhanced_report_generator"):
                             try:
-                                report_path = (
-                                    self.enhanced_report_generator.save_report_to_file(
-                                        enhanced_report
-                                    )
+                                report_path = self.enhanced_report_generator.save_report_to_file(
+                                    enhanced_report
                                 )
-                                logger.info(
-                                    f"Enhanced research report saved to: {report_path}"
-                                )
+                                logger.info(f"Enhanced research report saved to: {report_path}")
                             except Exception as save_error:
                                 logger.warning(
                                     f"Failed to save enhanced research report: {save_error}"
@@ -442,8 +429,7 @@ class EnhancedPPTService(PPTService):
                             )
                             try:
                                 # Create a file request object for the saved report
-                                from ..api.models import \
-                                    FileOutlineGenerationRequest
+                                from ..api.models import FileOutlineGenerationRequest
 
                                 file_request = FileOutlineGenerationRequest(
                                     file_path=report_path,
@@ -451,13 +437,9 @@ class EnhancedPPTService(PPTService):
                                     topic=request.topic,
                                     scenario=request.scenario,
                                     requirements=request.requirements,
-                                    target_audience=getattr(
-                                        request, "target_audience", "普通大众"
-                                    ),
+                                    target_audience=getattr(request, "target_audience", "普通大众"),
                                     ppt_style=getattr(request, "ppt_style", "general"),
-                                    custom_style_prompt=getattr(
-                                        request, "custom_style_prompt", ""
-                                    ),
+                                    custom_style_prompt=getattr(request, "custom_style_prompt", ""),
                                     page_count_mode=(
                                         page_count_settings.get("mode", "ai_decide")
                                         if page_count_settings
@@ -482,15 +464,12 @@ class EnhancedPPTService(PPTService):
                                 )
 
                                 # Generate outline from the research report file
-                                file_outline_result = (
-                                    await self.generate_outline_from_file(file_request)
+                                file_outline_result = await self.generate_outline_from_file(
+                                    file_request
                                 )
 
                                 # Convert the file-based outline result to PPTOutline format
-                                if (
-                                    file_outline_result.success
-                                    and file_outline_result.outline
-                                ):
+                                if file_outline_result.success and file_outline_result.outline:
                                     outline_data = file_outline_result.outline
                                     outline = PPTOutline(
                                         title=outline_data.get("title", request.topic),
@@ -534,15 +513,11 @@ class EnhancedPPTService(PPTService):
                         research_context = ""
 
                 else:
-                    logger.info(
-                        "Network mode enabled but no research services available"
-                    )
+                    logger.info("Network mode enabled but no research services available")
                     research_context = ""
 
             # Create AI prompt for outline generation (with or without research context and page count settings)
-            prompt = self._create_outline_prompt(
-                request, research_context, page_count_settings
-            )
+            prompt = self._create_outline_prompt(request, research_context, page_count_settings)
 
             # Generate outline using AI
             response = await self.ai_provider.text_completion(
@@ -572,9 +547,7 @@ class EnhancedPPTService(PPTService):
     ) -> str:
         """Generate slide content using AI"""
         try:
-            prompt = self._create_slide_content_prompt(
-                slide_title, scenario, topic, language
-            )
+            prompt = self._create_slide_content_prompt(slide_title, scenario, topic, language)
 
             response = await self.ai_provider.text_completion(
                 prompt=prompt,
@@ -639,7 +612,9 @@ class EnhancedPPTService(PPTService):
             if page_count_mode == "custom_range":
                 min_pages = page_count_settings.get("min_pages", 8)
                 max_pages = page_count_settings.get("max_pages", 15)
-                page_count_instruction = f"- 页数要求：必须严格生成{min_pages}-{max_pages}页的PPT，确保页数在此范围内"
+                page_count_instruction = (
+                    f"- 页数要求：必须严格生成{min_pages}-{max_pages}页的PPT，确保页数在此范围内"
+                )
                 expected_page_count = max_pages  # Use max for template
             elif page_count_mode == "fixed":
                 fixed_pages = page_count_settings.get("fixed_pages", 10)
@@ -715,26 +690,18 @@ class EnhancedPPTService(PPTService):
     ) -> str:
         """Create prompt for slide content generation"""
         if language == "zh":
-            return prompts_manager.get_slide_content_prompt_zh(
-                slide_title, scenario, topic
-            )
+            return prompts_manager.get_slide_content_prompt_zh(slide_title, scenario, topic)
         else:
-            return prompts_manager.get_slide_content_prompt_en(
-                slide_title, scenario, topic
-            )
+            return prompts_manager.get_slide_content_prompt_en(slide_title, scenario, topic)
 
-    def _create_enhancement_prompt(
-        self, content: str, scenario: str, language: str
-    ) -> str:
+    def _create_enhancement_prompt(self, content: str, scenario: str, language: str) -> str:
         """Create prompt for content enhancement"""
         if language == "zh":
             return prompts_manager.get_enhancement_prompt_zh(content, scenario)
         else:
             return prompts_manager.get_enhancement_prompt_en(content, scenario)
 
-    def _parse_ai_outline(
-        self, ai_response: str, request: PPTGenerationRequest
-    ) -> PPTOutline:
+    def _parse_ai_outline(self, ai_response: str, request: PPTGenerationRequest) -> PPTOutline:
         """Parse AI response to create structured outline"""
         try:
             import json
@@ -744,17 +711,13 @@ class EnhancedPPTService(PPTService):
             json_str = None
 
             # 方法1: 尝试提取```json```代码块中的内容
-            json_block_match = re.search(
-                r"```json\s*(\{.*?\})\s*```", ai_response, re.DOTALL
-            )
+            json_block_match = re.search(r"```json\s*(\{.*?\})\s*```", ai_response, re.DOTALL)
             if json_block_match:
                 json_str = json_block_match.group(1)
                 logger.info("从```json```代码块中提取大纲JSON")
             else:
                 # 方法2: 尝试提取```代码块中的内容（不带json标识）
-                code_block_match = re.search(
-                    r"```\s*(\{.*?\})\s*```", ai_response, re.DOTALL
-                )
+                code_block_match = re.search(r"```\s*(\{.*?\})\s*```", ai_response, re.DOTALL)
                 if code_block_match:
                     json_str = code_block_match.group(1)
                     logger.info("从```代码块中提取大纲JSON")
@@ -789,9 +752,7 @@ class EnhancedPPTService(PPTService):
                             {
                                 "scenario": request.scenario,
                                 "language": request.language,
-                                "total_slides": len(
-                                    standardized_data.get("slides", [])
-                                ),
+                                "total_slides": len(standardized_data.get("slides", [])),
                                 "generated_with_ai": True,
                                 "ai_provider": self.provider_name,
                             }
@@ -851,9 +812,7 @@ class EnhancedPPTService(PPTService):
                         {
                             "page_number": page_number,
                             "title": slide_title,
-                            "content_points": (
-                                [slide_desc] if slide_desc else ["内容要点"]
-                            ),
+                            "content_points": ([slide_desc] if slide_desc else ["内容要点"]),
                             "slide_type": slide_type,
                             "type": slide_type,  # 添加type字段以兼容不同的访问方式
                             "description": slide_desc,
@@ -893,9 +852,7 @@ class EnhancedPPTService(PPTService):
                 "type": "title",
                 "title": title,
                 "subtitle": (
-                    "专业演示"
-                    if request.language == "zh"
-                    else "Professional Presentation"
+                    "专业演示" if request.language == "zh" else "Professional Presentation"
                 ),
                 "content": "",
             },
@@ -918,9 +875,7 @@ class EnhancedPPTService(PPTService):
                 "type": "thankyou",
                 "title": "谢谢" if request.language == "zh" else "Thank You",
                 "subtitle": (
-                    "感谢聆听"
-                    if request.language == "zh"
-                    else "Thank you for your attention"
+                    "感谢聆听" if request.language == "zh" else "Thank you for your attention"
                 ),
                 "content": "",
             },
@@ -935,11 +890,7 @@ class EnhancedPPTService(PPTService):
                 "page_number": 1,
                 "title": title,
                 "content_points": [
-                    (
-                        "专业演示"
-                        if request.language == "zh"
-                        else "Professional Presentation"
-                    )
+                    "专业演示" if request.language == "zh" else "Professional Presentation"
                 ],
                 "slide_type": "title",
                 "type": "title",
@@ -969,11 +920,7 @@ class EnhancedPPTService(PPTService):
                 "page_number": 4,
                 "title": "谢谢" if request.language == "zh" else "Thank You",
                 "content_points": [
-                    (
-                        "感谢聆听"
-                        if request.language == "zh"
-                        else "Thank you for your attention"
-                    )
+                    "感谢聆听" if request.language == "zh" else "Thank you for your attention"
                 ],
                 "slide_type": "thankyou",
                 "type": "thankyou",
@@ -998,9 +945,7 @@ class EnhancedPPTService(PPTService):
         )
 
     # New project-based methods
-    async def create_project_with_workflow(
-        self, request: PPTGenerationRequest
-    ) -> PPTProject:
+    async def create_project_with_workflow(self, request: PPTGenerationRequest) -> PPTProject:
         """Create a new project with complete TODO workflow"""
         try:
             # Create project with TODO board
@@ -1015,9 +960,7 @@ class EnhancedPPTService(PPTService):
             logger.error(f"Error creating project with workflow: {str(e)}")
             raise
 
-    async def _execute_project_workflow(
-        self, project_id: str, request: PPTGenerationRequest
-    ):
+    async def _execute_project_workflow(self, project_id: str, request: PPTGenerationRequest):
         """Execute the complete project workflow with sequential subtask processing"""
         try:
             # Get project to check if requirements are confirmed
@@ -1027,9 +970,7 @@ class EnhancedPPTService(PPTService):
 
             # Only execute if requirements are confirmed
             if not project.confirmed_requirements:
-                logger.info(
-                    f"Project {project_id} workflow waiting for requirements confirmation"
-                )
+                logger.info(f"Project {project_id} workflow waiting for requirements confirmation")
                 return
 
             # Get TODO board to access stages and subtasks
@@ -1046,15 +987,11 @@ class EnhancedPPTService(PPTService):
                 logger.info(f"Starting stage {stage_index + 1}: {stage.name}")
 
                 # Mark stage as running
-                await self.project_manager.update_stage_status(
-                    project_id, stage.id, "running", 0.0
-                )
+                await self.project_manager.update_stage_status(project_id, stage.id, "running", 0.0)
 
                 # Execute the complete stage as a single task
                 try:
-                    stage_result = await self._execute_complete_stage(
-                        project_id, stage.id, request
-                    )
+                    stage_result = await self._execute_complete_stage(project_id, stage.id, request)
                 except Exception as e:
                     logger.error(f"Error executing stage '{stage.name}': {str(e)}")
                     # Mark stage as failed but continue with next stage
@@ -1064,9 +1001,7 @@ class EnhancedPPTService(PPTService):
                     continue
                 # Wrap string result in dictionary for proper serialization
                 result_dict = (
-                    {"message": stage_result}
-                    if isinstance(stage_result, str)
-                    else stage_result
+                    {"message": stage_result} if isinstance(stage_result, str) else stage_result
                 )
                 await self.project_manager.update_stage_status(
                     project_id, stage.id, "completed", 100.0, result_dict
@@ -1166,9 +1101,7 @@ class EnhancedPPTService(PPTService):
                 return {"outline": outline.dict()}
 
             elif stage_id == "theme_design":
-                theme_config = await self._design_theme(
-                    request.scenario, request.language
-                )
+                theme_config = await self._design_theme(request.scenario, request.language)
                 return {"theme_config": theme_config}
 
             elif stage_id == "content_generation":
@@ -1178,18 +1111,12 @@ class EnhancedPPTService(PPTService):
                     enhanced_slides = await self._generate_enhanced_content(
                         project.outline, request
                     )
-                    return {
-                        "enhanced_slides": [slide.dict() for slide in enhanced_slides]
-                    }
+                    return {"enhanced_slides": [slide.dict() for slide in enhanced_slides]}
                 else:
                     # Fallback: generate basic outline first
                     outline = await self.generate_outline(request)
-                    enhanced_slides = await self._generate_enhanced_content(
-                        outline, request
-                    )
-                    return {
-                        "enhanced_slides": [slide.dict() for slide in enhanced_slides]
-                    }
+                    enhanced_slides = await self._generate_enhanced_content(outline, request)
+                    return {"enhanced_slides": [slide.dict() for slide in enhanced_slides]}
 
             elif stage_id == "layout_verification":
                 # Get slides from previous stage
@@ -1198,22 +1125,14 @@ class EnhancedPPTService(PPTService):
                     for stage in todo_board.stages:
                         if stage.id == "content_generation" and stage.result:
                             slides_data = stage.result.get("enhanced_slides", [])
-                            slides = [
-                                SlideContent(**slide_data) for slide_data in slides_data
-                            ]
+                            slides = [SlideContent(**slide_data) for slide_data in slides_data]
                             theme_config = {}
                             for s in todo_board.stages:
                                 if s.id == "theme_design" and s.result:
                                     theme_config = s.result.get("theme_config", {})
                                     break
-                            verified_slides = await self._verify_layout(
-                                slides, theme_config
-                            )
-                            return {
-                                "verified_slides": [
-                                    slide.dict() for slide in verified_slides
-                                ]
-                            }
+                            verified_slides = await self._verify_layout(slides, theme_config)
+                            return {"verified_slides": [slide.dict() for slide in verified_slides]}
                 return {"verified_slides": []}
 
             elif stage_id == "export_output":
@@ -1230,12 +1149,8 @@ class EnhancedPPTService(PPTService):
                             theme_config = stage.result.get("theme_config", {})
 
                     if slides_data:
-                        slides = [
-                            SlideContent(**slide_data) for slide_data in slides_data
-                        ]
-                        html_content = await self._generate_html_output(
-                            slides, theme_config
-                        )
+                        slides = [SlideContent(**slide_data) for slide_data in slides_data]
+                        html_content = await self._generate_html_output(slides, theme_config)
 
                         # Update project with final results
                         project = await self.project_manager.get_project(project_id)
@@ -1274,18 +1189,12 @@ class EnhancedPPTService(PPTService):
             if project.confirmed_requirements and project.confirmed_requirements.get(
                 "file_generated_outline"
             ):
-                file_generated_outline = project.confirmed_requirements[
-                    "file_generated_outline"
-                ]
-                logger.info(
-                    f"Project {project_id} has file-generated outline, using it"
-                )
+                file_generated_outline = project.confirmed_requirements["file_generated_outline"]
+                logger.info(f"Project {project_id} has file-generated outline, using it")
             elif (
                 project.outline
                 and project.outline.get("slides")
-                and project.outline.get("metadata", {}).get(
-                    "generated_with_summeryfile"
-                )
+                and project.outline.get("metadata", {}).get("generated_with_summeryfile")
             ):
                 file_generated_outline = project.outline
                 logger.info(
@@ -1308,17 +1217,13 @@ class EnhancedPPTService(PPTService):
                 existing_outline["metadata"]["generated_with_summeryfile"] = True
                 existing_outline["metadata"]["generated_at"] = time.time()
 
-                formatted_json = json.dumps(
-                    existing_outline, ensure_ascii=False, indent=2
-                )
+                formatted_json = json.dumps(existing_outline, ensure_ascii=False, indent=2)
 
                 # Stream the existing outline
                 for i, char in enumerate(formatted_json):
                     yield f"data: {json.dumps({'content': char})}\n\n"
                     if i % 10 == 0:
-                        await asyncio.sleep(
-                            0.02
-                        )  # Faster streaming for existing content
+                        await asyncio.sleep(0.02)  # Faster streaming for existing content
 
                 # 保存大纲到项目中 - 直接保存结构化数据
                 project.outline = existing_outline  # 直接保存结构化数据，而不是包装格式
@@ -1353,9 +1258,7 @@ class EnhancedPPTService(PPTService):
                     traceback.print_exc()
 
                 # Update stage status
-                await self._update_outline_generation_stage(
-                    project_id, existing_outline
-                )
+                await self._update_outline_generation_stage(project_id, existing_outline)
                 # Send completion signal
                 yield f"data: {json.dumps({'done': True})}\n\n"
                 return
@@ -1382,11 +1285,7 @@ class EnhancedPPTService(PPTService):
             if project.project_metadata and isinstance(project.project_metadata, dict):
                 network_mode = project.project_metadata.get("network_mode", False)
 
-            if (
-                network_mode
-                and self.research_service
-                and self.research_service.is_available()
-            ):
+            if network_mode and self.research_service and self.research_service.is_available():
                 logger.info(
                     f"🔍 Project {project_id} has network mode enabled, starting DEEP research for topic: {project.topic}"
                 )
@@ -1411,21 +1310,15 @@ class EnhancedPPTService(PPTService):
 
                     # Generate structured Markdown research context
                     research_context = self._create_research_context(research_report)
-                    logger.info(
-                        f"✅ DEEP research completed successfully for project {project_id}"
-                    )
+                    logger.info(f"✅ DEEP research completed successfully for project {project_id}")
 
                     # Save research report if generator is available
                     if self.report_generator:
                         try:
-                            report_path = self.report_generator.save_report_to_file(
-                                research_report
-                            )
+                            report_path = self.report_generator.save_report_to_file(research_report)
                             logger.info(f"📄 Research report saved to: {report_path}")
                         except Exception as save_error:
-                            logger.warning(
-                                f"Failed to save research report: {save_error}"
-                            )
+                            logger.warning(f"Failed to save research report: {save_error}")
 
                     # 如果有研究内容，保存为临时文件并使用现有的文件处理流程
                     if research_context:
@@ -1447,18 +1340,13 @@ class EnhancedPPTService(PPTService):
 
                         try:
                             # 创建文件大纲生成请求，使用现有的generate_outline_from_file方法
-                            from ..api.models import \
-                                FileOutlineGenerationRequest
+                            from ..api.models import FileOutlineGenerationRequest
 
                             file_request = FileOutlineGenerationRequest(
                                 file_path=temp_research_file,
                                 filename=f"research_{project.topic}.md",
-                                topic=confirmed_requirements.get(
-                                    "topic", project.topic
-                                ),
-                                scenario=confirmed_requirements.get(
-                                    "type", project.scenario
-                                ),
+                                topic=confirmed_requirements.get("topic", project.topic),
+                                scenario=confirmed_requirements.get("type", project.scenario),
                                 requirements=confirmed_requirements.get(
                                     "requirements", project.requirements
                                 ),
@@ -1466,27 +1354,23 @@ class EnhancedPPTService(PPTService):
                                 page_count_mode=confirmed_requirements.get(
                                     "page_count_settings", {}
                                 ).get("mode", "ai_decide"),
-                                min_pages=confirmed_requirements.get(
-                                    "page_count_settings", {}
-                                ).get("min_pages", 8),
-                                max_pages=confirmed_requirements.get(
-                                    "page_count_settings", {}
-                                ).get("max_pages", 15),
+                                min_pages=confirmed_requirements.get("page_count_settings", {}).get(
+                                    "min_pages", 8
+                                ),
+                                max_pages=confirmed_requirements.get("page_count_settings", {}).get(
+                                    "max_pages", 15
+                                ),
                                 fixed_pages=confirmed_requirements.get(
                                     "page_count_settings", {}
                                 ).get("fixed_pages", 10),
-                                ppt_style=confirmed_requirements.get(
-                                    "ppt_style", "general"
-                                ),
+                                ppt_style=confirmed_requirements.get("ppt_style", "general"),
                                 custom_style_prompt=confirmed_requirements.get(
                                     "custom_style_prompt"
                                 ),
                                 target_audience=confirmed_requirements.get(
                                     "target_audience", "普通大众"
                                 ),
-                                custom_audience=confirmed_requirements.get(
-                                    "custom_audience"
-                                ),
+                                custom_audience=confirmed_requirements.get("custom_audience"),
                                 file_processing_mode="markitdown",  # 使用markitdown处理Markdown文件
                                 content_analysis_depth="fast",  # 使用快速分析策略，适合研究报告处理
                             )
@@ -1499,9 +1383,7 @@ class EnhancedPPTService(PPTService):
                                 f"📊 File processing config: mode={file_request.file_processing_mode}, depth={file_request.content_analysis_depth}"
                             )
 
-                            outline_response = await self.generate_outline_from_file(
-                                file_request
-                            )
+                            outline_response = await self.generate_outline_from_file(file_request)
 
                             if outline_response.success and outline_response.outline:
                                 structured_outline = outline_response.outline
@@ -1509,21 +1391,17 @@ class EnhancedPPTService(PPTService):
                                 # 添加研究增强标识
                                 if "metadata" not in structured_outline:
                                     structured_outline["metadata"] = {}
-                                structured_outline["metadata"][
-                                    "research_enhanced"
-                                ] = True
+                                structured_outline["metadata"]["research_enhanced"] = True
                                 structured_outline["metadata"][
                                     "research_duration"
                                 ] = research_report.total_duration
-                                structured_outline["metadata"]["research_sources"] = (
-                                    len(research_report.sources)
+                                structured_outline["metadata"]["research_sources"] = len(
+                                    research_report.sources
                                 )
                                 structured_outline["metadata"][
                                     "generated_from_research_file"
                                 ] = True
-                                structured_outline["metadata"][
-                                    "generated_at"
-                                ] = time.time()
+                                structured_outline["metadata"]["generated_at"] = time.time()
 
                                 # 流式输出研究增强的大纲
                                 formatted_json = json.dumps(
@@ -1540,22 +1418,17 @@ class EnhancedPPTService(PPTService):
 
                                 # 保存到数据库
                                 try:
-                                    from .db_project_manager import \
-                                        DatabaseProjectManager
+                                    from .db_project_manager import DatabaseProjectManager
 
                                     db_manager = DatabaseProjectManager()
-                                    save_success = (
-                                        await db_manager.save_project_outline(
-                                            project_id, project.outline
-                                        )
+                                    save_success = await db_manager.save_project_outline(
+                                        project_id, project.outline
                                     )
                                     if save_success:
                                         logger.info(
                                             f"✅ Successfully saved research-enhanced outline to database for project {project_id}"
                                         )
-                                        self.project_manager.projects[project_id] = (
-                                            project
-                                        )
+                                        self.project_manager.projects[project_id] = project
                                     else:
                                         logger.error(
                                             f"❌ Failed to save research-enhanced outline to database for project {project_id}"
@@ -1582,9 +1455,7 @@ class EnhancedPPTService(PPTService):
                             # 清理临时文件
                             try:
                                 # 在线程池中清理临时文件
-                                await run_blocking_io(
-                                    self._cleanup_temp_file, temp_research_file
-                                )
+                                await run_blocking_io(self._cleanup_temp_file, temp_research_file)
                                 logger.info(
                                     f"Cleaned up temporary research file: {temp_research_file}"
                                 )
@@ -1604,9 +1475,7 @@ class EnhancedPPTService(PPTService):
                         f"Project {project_id} has network mode enabled but research service is not available"
                     )
                 else:
-                    logger.info(
-                        f"Project {project_id} does not have network mode enabled"
-                    )
+                    logger.info(f"Project {project_id} does not have network mode enabled")
 
             # 处理页数设置
             page_count_settings = confirmed_requirements.get("page_count_settings", {})
@@ -1616,7 +1485,9 @@ class EnhancedPPTService(PPTService):
             if page_count_mode == "custom_range":
                 min_pages = page_count_settings.get("min_pages", 8)
                 max_pages = page_count_settings.get("max_pages", 15)
-                page_count_instruction = f"- 页数要求：必须严格生成{min_pages}-{max_pages}页的PPT，确保页数在此范围内"
+                page_count_instruction = (
+                    f"- 页数要求：必须严格生成{min_pages}-{max_pages}页的PPT，确保页数在此范围内"
+                )
             elif page_count_mode == "fixed":
                 fixed_pages = page_count_settings.get("fixed_pages", 10)
                 page_count_instruction = f"- 页数要求：必须生成恰好{fixed_pages}页的PPT"
@@ -1710,9 +1581,7 @@ class EnhancedPPTService(PPTService):
                 }
 
                 # Format the JSON for display
-                formatted_json = json.dumps(
-                    structured_outline, ensure_ascii=False, indent=2
-                )
+                formatted_json = json.dumps(structured_outline, ensure_ascii=False, indent=2)
 
                 # Stream the formatted JSON character by character
                 for i, char in enumerate(formatted_json):
@@ -1755,9 +1624,7 @@ class EnhancedPPTService(PPTService):
                     traceback.print_exc()
 
                 # 大纲生成完成后，立即生成母版模板（JSON解析成功的情况）
-                await self._update_outline_generation_stage(
-                    project_id, structured_outline
-                )
+                await self._update_outline_generation_stage(project_id, structured_outline)
 
             except Exception as parse_error:
                 logger.warning(f"Failed to parse AI response as JSON: {parse_error}")
@@ -1778,9 +1645,7 @@ class EnhancedPPTService(PPTService):
                     "generated_at": time.time(),
                 }
 
-                formatted_json = json.dumps(
-                    structured_outline, ensure_ascii=False, indent=2
-                )
+                formatted_json = json.dumps(structured_outline, ensure_ascii=False, indent=2)
 
                 # Stream the formatted JSON
                 for i, char in enumerate(formatted_json):
@@ -1823,14 +1688,12 @@ class EnhancedPPTService(PPTService):
 
                 # Update stage status - 确保structured_outline已定义
                 if structured_outline is not None:
-                    await self._update_outline_generation_stage(
-                        project_id, structured_outline
-                    )
+                    await self._update_outline_generation_stage(project_id, structured_outline)
 
                     # 检查是否已选择全局母版，如果没有则使用默认母版
                     logger.info(f"🎨 检查项目 {project_id} 的全局母版选择")
-                    selected_template = (
-                        await self._ensure_global_master_template_selected(project_id)
+                    selected_template = await self._ensure_global_master_template_selected(
+                        project_id
                     )
 
                     if selected_template:
@@ -1838,9 +1701,7 @@ class EnhancedPPTService(PPTService):
                             f"✅ 项目 {project_id} 已选择全局母版: {selected_template['template_name']}"
                         )
                     else:
-                        logger.warning(
-                            f"⚠️ 项目 {project_id} 未找到可用的全局母版，将使用备用模板"
-                        )
+                        logger.warning(f"⚠️ 项目 {project_id} 未找到可用的全局母版，将使用备用模板")
 
                 else:
                     # 如果structured_outline未定义，使用项目大纲数据
@@ -1849,9 +1710,7 @@ class EnhancedPPTService(PPTService):
                             "title": project.outline.get("title", project.topic),
                             "slides": project.outline.get("slides", []),
                         }
-                        await self._update_outline_generation_stage(
-                            project_id, outline_data
-                        )
+                        await self._update_outline_generation_stage(project_id, outline_data)
 
                     else:
                         # 创建默认的大纲数据
@@ -1866,9 +1725,7 @@ class EnhancedPPTService(PPTService):
                                 }
                             ],
                         }
-                        await self._update_outline_generation_stage(
-                            project_id, default_outline
-                        )
+                        await self._update_outline_generation_stage(project_id, default_outline)
                 # Send completion signal without message
                 yield f"data: {json.dumps({'done': True})}\n\n"
 
@@ -1892,9 +1749,7 @@ class EnhancedPPTService(PPTService):
                 logger.info("大纲JSON验证通过，无需修复")
                 return outline_data
 
-            logger.warning(
-                f"大纲JSON验证发现 {len(validation_errors)} 个错误，开始AI修复"
-            )
+            logger.warning(f"大纲JSON验证发现 {len(validation_errors)} 个错误，开始AI修复")
 
             # 第二步：调用AI修复，最多修复10次
             max_repair_attempts = 10
@@ -1924,9 +1779,7 @@ class EnhancedPPTService(PPTService):
                         outline_data = repaired_outline
 
                 except Exception as repair_error:
-                    logger.error(
-                        f"第 {current_attempt} 次AI修复失败: {str(repair_error)}"
-                    )
+                    logger.error(f"第 {current_attempt} 次AI修复失败: {str(repair_error)}")
 
                 current_attempt += 1
 
@@ -1977,19 +1830,13 @@ class EnhancedPPTService(PPTService):
                 min_pages = page_count_settings.get("min_pages", 8)
                 max_pages = page_count_settings.get("max_pages", 15)
                 if actual_page_count < min_pages:
-                    errors.append(
-                        f"页数不足：当前{actual_page_count}页，要求至少{min_pages}页"
-                    )
+                    errors.append(f"页数不足：当前{actual_page_count}页，要求至少{min_pages}页")
                 elif actual_page_count > max_pages:
-                    errors.append(
-                        f"页数过多：当前{actual_page_count}页，要求最多{max_pages}页"
-                    )
+                    errors.append(f"页数过多：当前{actual_page_count}页，要求最多{max_pages}页")
             elif page_count_mode == "fixed":
                 fixed_pages = page_count_settings.get("fixed_pages", 10)
                 if actual_page_count != fixed_pages:
-                    errors.append(
-                        f"页数不匹配：当前{actual_page_count}页，要求恰好{fixed_pages}页"
-                    )
+                    errors.append(f"页数不匹配：当前{actual_page_count}页，要求恰好{fixed_pages}页")
 
             # 4. 检查每个slide的结构
             for i, slide in enumerate(slides):
@@ -2010,9 +1857,7 @@ class EnhancedPPTService(PPTService):
             errors.append(f"验证过程出错: {str(e)}")
             return errors
 
-    def _validate_slide_structure(
-        self, slide: Dict[str, Any], slide_index: int
-    ) -> List[str]:
+    def _validate_slide_structure(self, slide: Dict[str, Any], slide_index: int) -> List[str]:
         """验证单个slide的结构"""
         errors = []
 
@@ -2049,9 +1894,7 @@ class EnhancedPPTService(PPTService):
                 else:
                     for j, point in enumerate(content_points):
                         if not isinstance(point, str) or not point.strip():
-                            errors.append(
-                                f"第{slide_index}页：content_points[{j}]必须是非空字符串"
-                            )
+                            errors.append(f"第{slide_index}页：content_points[{j}]必须是非空字符串")
 
             if "slide_type" in slide:
                 slide_type = slide["slide_type"]
@@ -2097,17 +1940,13 @@ class EnhancedPPTService(PPTService):
             json_str = None
 
             # 方法1: 尝试提取```json```代码块中的内容
-            json_block_match = re.search(
-                r"```json\s*(\{.*?\})\s*```", repaired_content, re.DOTALL
-            )
+            json_block_match = re.search(r"```json\s*(\{.*?\})\s*```", repaired_content, re.DOTALL)
             if json_block_match:
                 json_str = json_block_match.group(1)
                 logger.info("从```json```代码块中提取JSON")
             else:
                 # 方法2: 尝试提取```代码块中的内容（不带json标识）
-                code_block_match = re.search(
-                    r"```\s*(\{.*?\})\s*```", repaired_content, re.DOTALL
-                )
+                code_block_match = re.search(r"```\s*(\{.*?\})\s*```", repaired_content, re.DOTALL)
                 if code_block_match:
                     json_str = code_block_match.group(1)
                     logger.info("从```代码块中提取JSON")
@@ -2153,9 +1992,7 @@ class EnhancedPPTService(PPTService):
             outline_data, validation_errors, confirmed_requirements
         )
 
-    async def _update_outline_generation_stage(
-        self, project_id: str, outline_data: Dict[str, Any]
-    ):
+    async def _update_outline_generation_stage(self, project_id: str, outline_data: Dict[str, Any]):
         """Update outline generation stage status and save to database"""
         try:
             # 保存大纲到数据库
@@ -2170,42 +2007,30 @@ class EnhancedPPTService(PPTService):
 
             # 确保项目有outline数据，如果没有则使用传入的outline_data
             if not project.outline:
-                logger.info(
-                    f"Project outline is None, setting outline from outline_data"
-                )
+                logger.info(f"Project outline is None, setting outline from outline_data")
                 project.outline = outline_data
                 project.updated_at = time.time()
 
             # 保存大纲到数据库 - 使用outline_data而不是project.outline
-            save_success = await db_manager.save_project_outline(
-                project_id, outline_data
-            )
+            save_success = await db_manager.save_project_outline(project_id, outline_data)
 
             if save_success:
-                logger.info(
-                    f"✅ Successfully saved outline to database for project {project_id}"
-                )
+                logger.info(f"✅ Successfully saved outline to database for project {project_id}")
 
                 # 验证保存是否成功
                 saved_project = await db_manager.get_project(project_id)
                 if saved_project and saved_project.outline:
                     saved_slides_count = len(saved_project.outline.get("slides", []))
-                    logger.info(
-                        f"✅ Verified: outline saved with {saved_slides_count} slides"
-                    )
+                    logger.info(f"✅ Verified: outline saved with {saved_slides_count} slides")
 
                     # 确保内存中的项目数据也是最新的
                     project.outline = saved_project.outline
                     project.updated_at = saved_project.updated_at
                     logger.info(f"✅ Updated memory project with database outline")
                 else:
-                    logger.error(
-                        f"❌ Verification failed: outline not found in database"
-                    )
+                    logger.error(f"❌ Verification failed: outline not found in database")
             else:
-                logger.error(
-                    f"❌ Failed to save outline to database for project {project_id}"
-                )
+                logger.error(f"❌ Failed to save outline to database for project {project_id}")
 
             # Update project manager
             await self.project_manager.update_project_status(project_id, "in_progress")
@@ -2233,9 +2058,7 @@ class EnhancedPPTService(PPTService):
 
             traceback.print_exc()
 
-    def _parse_outline_content(
-        self, content: str, project: PPTProject
-    ) -> Dict[str, Any]:
+    def _parse_outline_content(self, content: str, project: PPTProject) -> Dict[str, Any]:
         """Parse outline content to extract structured data for PPT generation"""
         try:
             import json
@@ -2258,25 +2081,19 @@ class EnhancedPPTService(PPTService):
             json_str = None
 
             # 方法1: 尝试提取```json```代码块中的内容
-            json_block_match = re.search(
-                r"```json\s*(\{.*?\})\s*```", content, re.DOTALL
-            )
+            json_block_match = re.search(r"```json\s*(\{.*?\})\s*```", content, re.DOTALL)
             if json_block_match:
                 json_str = json_block_match.group(1)
                 logger.info("从```json```代码块中提取JSON")
             else:
                 # 方法2: 尝试提取```代码块中的内容（不带json标识）
-                code_block_match = re.search(
-                    r"```\s*(\{.*?\})\s*```", content, re.DOTALL
-                )
+                code_block_match = re.search(r"```\s*(\{.*?\})\s*```", content, re.DOTALL)
                 if code_block_match:
                     json_str = code_block_match.group(1)
                     logger.info("从```代码块中提取JSON")
                 else:
                     # 方法3: 尝试提取完整的JSON对象
-                    json_match = re.search(
-                        r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", content, re.DOTALL
-                    )
+                    json_match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", content, re.DOTALL)
                     if json_match:
                         json_str = json_match.group()
                         logger.info("使用正则表达式提取JSON")
@@ -2328,9 +2145,7 @@ class EnhancedPPTService(PPTService):
 
                     # Clean title
                     title = re.sub(r"^#+\s*", "", line)  # Remove markdown headers
-                    title = re.sub(
-                        r"^第\d+[页章]\s*[：:]\s*", "", title
-                    )  # Remove "第X页："
+                    title = re.sub(r"^第\d+[页章]\s*[：:]\s*", "", title)  # Remove "第X页："
                     title = re.sub(
                         r"^Page\s*\d+\s*[：:]\s*", "", title, flags=re.IGNORECASE
                     )  # Remove "Page X:"
@@ -2339,19 +2154,9 @@ class EnhancedPPTService(PPTService):
 
                     # Determine slide type
                     slide_type = "content"
-                    if (
-                        slide_number == 1
-                        or "标题" in title
-                        or "Title" in title
-                        or "封面" in title
-                    ):
+                    if slide_number == 1 or "标题" in title or "Title" in title or "封面" in title:
                         slide_type = "title"
-                    elif (
-                        "谢谢" in title
-                        or "Thank" in title
-                        or "结束" in title
-                        or "总结" in title
-                    ):
+                    elif "谢谢" in title or "Thank" in title or "结束" in title or "总结" in title:
                         slide_type = "thankyou"
                     elif "目录" in title or "Agenda" in title or "大纲" in title:
                         slide_type = "agenda"
@@ -2398,9 +2203,7 @@ class EnhancedPPTService(PPTService):
                 "slides": self._create_default_slides_from_content(content, project),
             }
 
-    def _standardize_outline_format(
-        self, outline_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _standardize_outline_format(self, outline_data: Dict[str, Any]) -> Dict[str, Any]:
         """标准化大纲格式，确保slides字段的兼容性"""
         try:
             import re
@@ -2457,23 +2260,11 @@ class EnhancedPPTService(PPTService):
                 title_lower = title_text.lower()
                 if page_number == 1 or "标题" in title_lower or "title" in title_lower:
                     slide_type = "title"
-                elif (
-                    "目录" in title_lower
-                    or "agenda" in title_lower
-                    or "大纲" in title_lower
-                ):
+                elif "目录" in title_lower or "agenda" in title_lower or "大纲" in title_lower:
                     slide_type = "agenda"
-                elif (
-                    "谢谢" in title_lower
-                    or "thank" in title_lower
-                    or "致谢" in title_lower
-                ):
+                elif "谢谢" in title_lower or "thank" in title_lower or "致谢" in title_lower:
                     slide_type = "thankyou"
-                elif (
-                    "总结" in title_lower
-                    or "结论" in title_lower
-                    or "conclusion" in title_lower
-                ):
+                elif "总结" in title_lower or "结论" in title_lower or "conclusion" in title_lower:
                     slide_type = "conclusion"
                 elif slide_type not in [
                     "title",
@@ -2548,9 +2339,7 @@ class EnhancedPPTService(PPTService):
                 "page_number": 2,
                 "title": "主要内容",
                 "content_points": (
-                    content.split("\n")[:5]
-                    if content
-                    else ["内容要点1", "内容要点2", "内容要点3"]
+                    content.split("\n")[:5] if content else ["内容要点1", "内容要点2", "内容要点3"]
                 ),
                 "slide_type": "content",
             },
@@ -2563,9 +2352,7 @@ class EnhancedPPTService(PPTService):
         ]
         return slides
 
-    async def update_project_outline(
-        self, project_id: str, outline_content: str
-    ) -> bool:
+    async def update_project_outline(self, project_id: str, outline_content: str) -> bool:
         """Update project outline content (expects JSON format)"""
         try:
             project = await self.project_manager.get_project(project_id)
@@ -2583,23 +2370,15 @@ class EnhancedPPTService(PPTService):
                     raise ValueError("Invalid JSON structure: missing 'slides'")
 
                 # 标准化大纲格式以确保兼容性
-                structured_outline = self._standardize_outline_format(
-                    structured_outline
-                )
+                structured_outline = self._standardize_outline_format(structured_outline)
 
                 # Format the JSON for consistent display
-                formatted_json = json.dumps(
-                    structured_outline, ensure_ascii=False, indent=2
-                )
+                formatted_json = json.dumps(structured_outline, ensure_ascii=False, indent=2)
 
             except json.JSONDecodeError:
                 # If not valid JSON, try to parse as text and convert to JSON
-                structured_outline = self._parse_outline_content(
-                    outline_content, project
-                )
-                formatted_json = json.dumps(
-                    structured_outline, ensure_ascii=False, indent=2
-                )
+                structured_outline = self._parse_outline_content(outline_content, project)
+                formatted_json = json.dumps(structured_outline, ensure_ascii=False, indent=2)
 
             # Update outline in the correct field
             if not project.outline:
@@ -2614,9 +2393,7 @@ class EnhancedPPTService(PPTService):
                 from .db_project_manager import DatabaseProjectManager
 
                 db_manager = DatabaseProjectManager()
-                save_success = await db_manager.save_project_outline(
-                    project_id, project.outline
-                )
+                save_success = await db_manager.save_project_outline(project_id, project.outline)
 
                 if save_success:
                     logger.info(
@@ -2667,14 +2444,10 @@ class EnhancedPPTService(PPTService):
                 if (
                     project.confirmed_requirements
                     and project.confirmed_requirements.get("file_generated_outline")
-                    and isinstance(
-                        project.confirmed_requirements["file_generated_outline"], dict
-                    )
+                    and isinstance(project.confirmed_requirements["file_generated_outline"], dict)
                 ):
 
-                    file_outline = project.confirmed_requirements[
-                        "file_generated_outline"
-                    ]
+                    file_outline = project.confirmed_requirements["file_generated_outline"]
                     if file_outline.get("slides"):
                         logger.info(
                             f"Restoring outline from file_generated_outline with {len(file_outline['slides'])} slides"
@@ -2684,9 +2457,7 @@ class EnhancedPPTService(PPTService):
                         project.outline["confirmed"] = True
                         project.outline["confirmed_at"] = time.time()
                     else:
-                        logger.error(
-                            f"file_generated_outline does not contain slides data"
-                        )
+                        logger.error(f"file_generated_outline does not contain slides data")
                         return False
                 else:
                     # 尝试从数据库重新加载大纲
@@ -2695,24 +2466,16 @@ class EnhancedPPTService(PPTService):
 
                         db_manager = DatabaseProjectManager()
                         db_project = await db_manager.get_project(project_id)
-                        if (
-                            db_project
-                            and db_project.outline
-                            and db_project.outline.get("slides")
-                        ):
+                        if db_project and db_project.outline and db_project.outline.get("slides"):
                             project.outline = db_project.outline
-                            logger.info(
-                                f"Reloaded outline from database for project {project_id}"
-                            )
+                            logger.info(f"Reloaded outline from database for project {project_id}")
                         else:
                             logger.error(
                                 f"No valid outline found in database for project {project_id}"
                             )
                             return False
                     except Exception as reload_error:
-                        logger.error(
-                            f"Failed to reload outline from database: {reload_error}"
-                        )
+                        logger.error(f"Failed to reload outline from database: {reload_error}")
                         return False
 
             # 保留原有的大纲数据，只添加确认状态
@@ -2724,9 +2487,7 @@ class EnhancedPPTService(PPTService):
                 from .db_project_manager import DatabaseProjectManager
 
                 db_manager = DatabaseProjectManager()
-                save_success = await db_manager.save_project_outline(
-                    project_id, project.outline
-                )
+                save_success = await db_manager.save_project_outline(project_id, project.outline)
 
                 if save_success:
                     logger.info(
@@ -2790,9 +2551,7 @@ class EnhancedPPTService(PPTService):
 
         return {"suggested_topic": suggested_topic, "type_options": type_options}
 
-    def _get_default_todo_structure(
-        self, confirmed_requirements: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _get_default_todo_structure(self, confirmed_requirements: Dict[str, Any]) -> Dict[str, Any]:
         """Get default TODO structure based on confirmed requirements"""
         return {
             "stages": [
@@ -2800,9 +2559,7 @@ class EnhancedPPTService(PPTService):
                     "id": "outline_generation",
                     "name": "生成PPT大纲",
                     "description": "设计PPT整体结构与框架，规划各章节内容与关键点，确定核心优势和创新点的展示方式",
-                    "subtasks": [
-                        "生成PPT大纲"
-                    ],  # Single task, description is explanatory
+                    "subtasks": ["生成PPT大纲"],  # Single task, description is explanatory
                 },
                 {
                     "id": "ppt_creation",
@@ -2897,9 +2654,7 @@ class EnhancedPPTService(PPTService):
             project.updated_at = time.time()
 
             # 如果有文件生成的大纲，直接设置到项目的outline字段中
-            file_generated_outline = confirmed_requirements.get(
-                "file_generated_outline"
-            )
+            file_generated_outline = confirmed_requirements.get("file_generated_outline")
             if file_generated_outline and isinstance(file_generated_outline, dict):
                 logger.info(f"Setting file-generated outline to project {project_id}")
                 project.outline = file_generated_outline
@@ -2918,9 +2673,7 @@ class EnhancedPPTService(PPTService):
                 )
 
                 # Save confirmed requirements to database
-                await db_manager.save_confirmed_requirements(
-                    project_id, confirmed_requirements
-                )
+                await db_manager.save_confirmed_requirements(project_id, confirmed_requirements)
                 logger.info(
                     f"Successfully saved confirmed requirements to database for project {project_id}"
                 )
@@ -3030,9 +2783,7 @@ class EnhancedPPTService(PPTService):
                     "max": max_pages,
                     "mode": "range",
                 }
-                logger.info(
-                    f"Custom page count range set: {min_pages}-{max_pages} pages"
-                )
+                logger.info(f"Custom page count range set: {min_pages}-{max_pages} pages")
             else:
                 # AI决定模式：不给出具体页数限制，让AI自行判断
                 page_count_instruction = "- 页数要求：请根据主题内容的复杂度、深度和逻辑结构，自主决定最合适的页数，确保内容充实且逻辑清晰"
@@ -3076,17 +2827,13 @@ class EnhancedPPTService(PPTService):
                 json_str = None
 
                 # 方法1: 尝试提取```json```代码块中的内容
-                json_block_match = re.search(
-                    r"```json\s*(\{.*?\})\s*```", content, re.DOTALL
-                )
+                json_block_match = re.search(r"```json\s*(\{.*?\})\s*```", content, re.DOTALL)
                 if json_block_match:
                     json_str = json_block_match.group(1)
                     logger.info("从```json```代码块中提取JSON")
                 else:
                     # 方法2: 尝试提取```代码块中的内容（不带json标识）
-                    code_block_match = re.search(
-                        r"```\s*(\{.*?\})\s*```", content, re.DOTALL
-                    )
+                    code_block_match = re.search(r"```\s*(\{.*?\})\s*```", content, re.DOTALL)
                     if code_block_match:
                         json_str = code_block_match.group(1)
                         logger.info("从```代码块中提取JSON")
@@ -3127,10 +2874,7 @@ class EnhancedPPTService(PPTService):
                         min_pages = expected_page_count["min"]
                         max_pages = expected_page_count["max"]
 
-                        if (
-                            actual_page_count < min_pages
-                            or actual_page_count > max_pages
-                        ):
+                        if actual_page_count < min_pages or actual_page_count > max_pages:
                             logger.warning(
                                 f"Generated outline has {actual_page_count} pages, but expected {min_pages}-{max_pages} pages. Adjusting..."
                             )
@@ -3144,14 +2888,9 @@ class EnhancedPPTService(PPTService):
 
                             # 验证调整后的页数
                             adjusted_page_count = len(outline_data.get("slides", []))
-                            logger.info(
-                                f"Adjusted outline to {adjusted_page_count} pages"
-                            )
+                            logger.info(f"Adjusted outline to {adjusted_page_count} pages")
 
-                            if (
-                                adjusted_page_count < min_pages
-                                or adjusted_page_count > max_pages
-                            ):
+                            if adjusted_page_count < min_pages or adjusted_page_count > max_pages:
                                 logger.error(
                                     f"Failed to adjust page count to required range {min_pages}-{max_pages}"
                                 )
@@ -3168,9 +2907,7 @@ class EnhancedPPTService(PPTService):
                     # 添加页数信息到大纲元数据
                     if "metadata" not in outline_data:
                         outline_data["metadata"] = {}
-                    outline_data["metadata"][
-                        "page_count_settings"
-                    ] = expected_page_count
+                    outline_data["metadata"]["page_count_settings"] = expected_page_count
                     outline_data["metadata"]["actual_page_count"] = len(
                         outline_data.get("slides", [])
                     )
@@ -3180,18 +2917,14 @@ class EnhancedPPTService(PPTService):
                 if project:
                     project.outline = outline_data
                     project.updated_at = time.time()
-                    logger.info(
-                        f"Successfully saved outline to memory for project {project_id}"
-                    )
+                    logger.info(f"Successfully saved outline to memory for project {project_id}")
 
                 # Save outline to database (数据库中) - 这是关键步骤
                 try:
                     from .db_project_manager import DatabaseProjectManager
 
                     db_manager = DatabaseProjectManager()
-                    save_success = await db_manager.save_project_outline(
-                        project_id, outline_data
-                    )
+                    save_success = await db_manager.save_project_outline(project_id, outline_data)
 
                     if save_success:
                         logger.info(
@@ -3201,16 +2934,12 @@ class EnhancedPPTService(PPTService):
                         # 验证保存是否成功
                         saved_project = await db_manager.get_project(project_id)
                         if saved_project and saved_project.outline:
-                            saved_slides_count = len(
-                                saved_project.outline.get("slides", [])
-                            )
+                            saved_slides_count = len(saved_project.outline.get("slides", []))
                             logger.info(
                                 f"✅ Verified: outline saved with {saved_slides_count} slides"
                             )
                         else:
-                            logger.error(
-                                f"❌ Verification failed: outline not found in database"
-                            )
+                            logger.error(f"❌ Verification failed: outline not found in database")
                             return f"❌ 大纲保存失败：数据库验证失败"
                     else:
                         logger.error(
@@ -3219,9 +2948,7 @@ class EnhancedPPTService(PPTService):
                         return f"❌ 大纲保存失败：数据库写入失败"
 
                 except Exception as save_error:
-                    logger.error(
-                        f"❌ Exception while saving outline to database: {save_error}"
-                    )
+                    logger.error(f"❌ Exception while saving outline to database: {save_error}")
                     import traceback
 
                     traceback.print_exc()
@@ -3249,9 +2976,7 @@ class EnhancedPPTService(PPTService):
                     )
 
                 except Exception as stage_error:
-                    logger.error(
-                        f"Failed to update outline generation stage status: {stage_error}"
-                    )
+                    logger.error(f"Failed to update outline generation stage status: {stage_error}")
 
                 final_page_count = len(outline_data.get("slides", []))
                 return f"✅ PPT大纲生成完成！\n\n标题：{outline_data.get('title', '未知')}\n页数：{final_page_count}页\n已保存到数据库\n\n{response.content}"
@@ -3444,27 +3169,21 @@ class EnhancedPPTService(PPTService):
                 return outline_data
 
             # Keep title and conclusion slides, condense content slides
-            title_slides = [
-                s for s in slides if s.get("slide_type") in ["title", "cover"]
-            ]
+            title_slides = [s for s in slides if s.get("slide_type") in ["title", "cover"]]
             conclusion_slides = [
                 s for s in slides if s.get("slide_type") in ["thankyou", "conclusion"]
             ]
             content_slides = [
                 s
                 for s in slides
-                if s.get("slide_type")
-                not in ["title", "cover", "thankyou", "conclusion"]
+                if s.get("slide_type") not in ["title", "cover", "thankyou", "conclusion"]
             ]
 
             # Calculate how many content slides we can keep
             reserved_slots = len(title_slides) + len(conclusion_slides)
             available_content_slots = target_pages - reserved_slots
 
-            if (
-                available_content_slots > 0
-                and len(content_slides) > available_content_slots
-            ):
+            if available_content_slots > 0 and len(content_slides) > available_content_slots:
                 # Keep the most important content slides
                 content_slides = content_slides[:available_content_slots]
 
@@ -3499,17 +3218,14 @@ class EnhancedPPTService(PPTService):
                 return outline_data
 
             # Keep title and conclusion slides
-            title_slides = [
-                s for s in slides if s.get("slide_type") in ["title", "cover"]
-            ]
+            title_slides = [s for s in slides if s.get("slide_type") in ["title", "cover"]]
             conclusion_slides = [
                 s for s in slides if s.get("slide_type") in ["thankyou", "conclusion"]
             ]
             content_slides = [
                 s
                 for s in slides
-                if s.get("slide_type")
-                not in ["title", "cover", "thankyou", "conclusion"]
+                if s.get("slide_type") not in ["title", "cover", "thankyou", "conclusion"]
             ]
 
             # Calculate content slots needed
@@ -3525,9 +3241,7 @@ class EnhancedPPTService(PPTService):
                     content_slides = content_slides[:content_slots_needed]
                 elif len(content_slides) < content_slots_needed:
                     # Add more content slides
-                    topic = confirmed_requirements.get(
-                        "topic", outline_data.get("title", "")
-                    )
+                    topic = confirmed_requirements.get("topic", outline_data.get("title", ""))
                     focus_content = confirmed_requirements.get("focus_content", [])
 
                     for i in range(content_slots_needed - len(content_slides)):
@@ -3589,9 +3303,7 @@ class EnhancedPPTService(PPTService):
 
             # 验证大纲页数与需求一致性
             if project.confirmed_requirements:
-                page_count_settings = project.confirmed_requirements.get(
-                    "page_count_settings", {}
-                )
+                page_count_settings = project.confirmed_requirements.get("page_count_settings", {})
                 if page_count_settings.get("mode") == "custom_range":
                     min_pages = page_count_settings.get("min_pages", 8)
                     max_pages = page_count_settings.get("max_pages", 15)
@@ -3615,9 +3327,7 @@ class EnhancedPPTService(PPTService):
             if not slides or len(slides) == 0:
                 return "❌ 错误：大纲中没有有效的幻灯片数据"
 
-            logger.info(
-                f"Starting PPT generation for {len(slides)} slides based on outline"
-            )
+            logger.info(f"Starting PPT generation for {len(slides)} slides based on outline")
 
             # 确保每个slide都有必要的字段
             for i, slide in enumerate(slides):
@@ -3665,10 +3375,7 @@ class EnhancedPPTService(PPTService):
                     logger.error(
                         f"Outline keys: {list(project.outline.keys()) if isinstance(project.outline, dict) else 'Not a dict'}"
                     )
-                    if (
-                        isinstance(project.outline, dict)
-                        and "slides" in project.outline
-                    ):
+                    if isinstance(project.outline, dict) and "slides" in project.outline:
                         logger.error(
                             f"Slides type: {type(project.outline['slides'])}, content: {project.outline['slides']}"
                         )
@@ -3683,16 +3390,12 @@ class EnhancedPPTService(PPTService):
                     if fresh_project and fresh_project.outline:
                         outline = fresh_project.outline
                         slides = outline.get("slides", [])
-                        logger.info(
-                            f"Reloaded outline from database with {len(slides)} slides"
-                        )
+                        logger.info(f"Reloaded outline from database with {len(slides)} slides")
 
                         # 更新内存中的项目数据
                         project.outline = outline
                     else:
-                        logger.error(
-                            f"Failed to reload project from database or outline is None"
-                        )
+                        logger.error(f"Failed to reload project from database or outline is None")
                         if fresh_project:
                             logger.error(
                                 f"Fresh project outline type: {type(fresh_project.outline)}"
@@ -3709,9 +3412,7 @@ class EnhancedPPTService(PPTService):
                 logger.info(f"Found outline content, attempting to parse slides")
                 try:
                     # 尝试解析大纲内容
-                    parsed_outline = self._parse_outline_content(
-                        outline["content"], project
-                    )
+                    parsed_outline = self._parse_outline_content(outline["content"], project)
                     slides = parsed_outline.get("slides", [])
                     logger.info(f"Parsed {len(slides)} slides from outline content")
 
@@ -3745,9 +3446,7 @@ class EnhancedPPTService(PPTService):
                     except json.JSONDecodeError as json_error:
                         logger.error(f"Failed to parse content as JSON: {json_error}")
                     except Exception as content_error:
-                        logger.error(
-                            f"Failed to extract slides from content: {content_error}"
-                        )
+                        logger.error(f"Failed to extract slides from content: {content_error}")
 
             # 最后尝试：如果outline本身就是完整的大纲数据（包含title和slides）
             if not slides and outline and isinstance(outline, dict):
@@ -3761,9 +3460,7 @@ class EnhancedPPTService(PPTService):
                     nested_slides = outline["outline"].get("slides", [])
                     if nested_slides and isinstance(nested_slides, list):
                         slides = nested_slides
-                        logger.info(
-                            f"Found {len(slides)} slides in nested outline structure"
-                        )
+                        logger.info(f"Found {len(slides)} slides in nested outline structure")
 
             # 额外调试：打印outline结构以便诊断
             if not slides:
@@ -3828,10 +3525,7 @@ class EnhancedPPTService(PPTService):
                     logger.error(
                         f"Outline keys: {list(project.outline.keys()) if isinstance(project.outline, dict) else 'Not a dict'}"
                     )
-                    if (
-                        isinstance(project.outline, dict)
-                        and "slides" in project.outline
-                    ):
+                    if isinstance(project.outline, dict) and "slides" in project.outline:
                         logger.error(
                             f"Slides type: {type(project.outline['slides'])}, length: {len(project.outline['slides']) if isinstance(project.outline['slides'], list) else 'Not a list'}"
                         )
@@ -3866,9 +3560,7 @@ class EnhancedPPTService(PPTService):
             # 最终检查：如果仍然没有slides，返回错误
             if not slides:
                 error_message = "❌ 错误：大纲中没有幻灯片信息，请检查大纲生成是否完成"
-                logger.error(
-                    f"No slides found after all attempts for project {project_id}"
-                )
+                logger.error(f"No slides found after all attempts for project {project_id}")
                 error_data = {"error": error_message}
                 yield f"data: {json.dumps(error_data)}\n\n"
                 return
@@ -3900,9 +3592,7 @@ class EnhancedPPTService(PPTService):
                             )
                             skip_message = f"第{i+1}页已被用户编辑，跳过重新生成"
                         else:
-                            logger.info(
-                                f"Skipping slide {i+1} generation - slide already exists"
-                            )
+                            logger.info(f"Skipping slide {i+1} generation - slide already exists")
                             skip_message = f"第{i+1}页已存在，跳过生成"
 
                         # Send skip message
@@ -3970,9 +3660,7 @@ class EnhancedPPTService(PPTService):
                             f"Successfully saved slide {i+1} to database for project {project_id}"
                         )
                     except Exception as save_error:
-                        logger.error(
-                            f"Failed to save slide {i+1} to database: {save_error}"
-                        )
+                        logger.error(f"Failed to save slide {i+1} to database: {save_error}")
                         # 继续生成，不因保存失败而中断
 
                     # Send slide data
@@ -4018,9 +3706,7 @@ class EnhancedPPTService(PPTService):
                         "updated_at": time.time(),
                     },
                 )
-                logger.info(
-                    f"Successfully updated project data for project {project_id}"
-                )
+                logger.info(f"Successfully updated project data for project {project_id}")
 
                 # Update PPT creation stage status to completed
                 await db_manager.update_stage_status(
@@ -4035,9 +3721,7 @@ class EnhancedPPTService(PPTService):
                 )
 
             except Exception as save_error:
-                logger.error(
-                    f"Failed to update project status in database: {save_error}"
-                )
+                logger.error(f"Failed to update project status in database: {save_error}")
                 # Continue anyway, as the data is still in memory
 
             # Send completion message
@@ -4098,9 +3782,7 @@ class EnhancedPPTService(PPTService):
             # 如果有项目ID，尝试获取选择的全局母版模板
             if project_id:
                 try:
-                    selected_template = await self.get_selected_global_template(
-                        project_id
-                    )
+                    selected_template = await self.get_selected_global_template(project_id)
                     if selected_template:
                         logger.info(
                             f"为第{page_number}页使用全局母版: {selected_template['template_name']}"
@@ -4183,9 +3865,7 @@ class EnhancedPPTService(PPTService):
         except Exception as e:
             logger.error(f"Error generating single slide HTML with prompts: {e}")
             # Return a fallback HTML
-            return self._generate_fallback_slide_html(
-                slide_data, page_number, total_pages
-            )
+            return self._generate_fallback_slide_html(slide_data, page_number, total_pages)
 
     async def _process_slide_image(
         self,
@@ -4268,9 +3948,7 @@ class EnhancedPPTService(PPTService):
         except Exception as e:
             logger.error(f"使用模板风格生成幻灯片失败: {e}")
             # 回退到原有生成方式
-            return await self._generate_fallback_slide_html(
-                slide_data, page_number, total_pages
-            )
+            return await self._generate_fallback_slide_html(slide_data, page_number, total_pages)
 
     async def _build_creative_template_context(
         self,
@@ -4288,9 +3966,7 @@ class EnhancedPPTService(PPTService):
         style_genes = None
 
         # 设计基因只在第一页提取一次，后续都使用第一页的
-        style_genes = await self._get_or_extract_style_genes(
-            project_id, template_html, page_number
-        )
+        style_genes = await self._get_or_extract_style_genes(project_id, template_html, page_number)
 
         # 检查是否启用图片生成服务并处理多图片
         images_collection = await self._process_slide_image(
@@ -4301,9 +3977,7 @@ class EnhancedPPTService(PPTService):
             slide_data["images_collection"] = images_collection
             slide_data["images_info"] = images_collection.to_dict()
             slide_data["images_summary"] = images_collection.get_summary_for_ai()
-            logger.info(
-                f"为模板生成的第{page_number}页添加{images_collection.total_count}张图片"
-            )
+            logger.info(f"为模板生成的第{page_number}页添加{images_collection.total_count}张图片")
 
         # 生成统一的创意设计指导（合并创意变化指导和内容驱动的设计建议）
         unified_design_guide = await self._generate_unified_design_guide(
@@ -4381,9 +4055,7 @@ class EnhancedPPTService(PPTService):
                 genes.append(f"- 核心色彩：{', '.join(unique_colors)}")
 
             # 提取字体系统
-            fonts = re.findall(
-                r"font-family[^:]*:\s*([^;]+)", template_html, re.IGNORECASE
-            )
+            fonts = re.findall(r"font-family[^:]*:\s*([^;]+)", template_html, re.IGNORECASE)
             if fonts:
                 genes.append(f"- 字体系统：{fonts[0]}")
 
@@ -4406,9 +4078,7 @@ class EnhancedPPTService(PPTService):
                 genes.append(f"- 设计元素：{', '.join(design_elements)}")
 
             # 提取间距模式
-            paddings = re.findall(
-                r"padding[^:]*:\s*([^;]+)", template_html, re.IGNORECASE
-            )
+            paddings = re.findall(r"padding[^:]*:\s*([^;]+)", template_html, re.IGNORECASE)
             if paddings:
                 genes.append(f"- 间距模式：{paddings[0]}")
 
@@ -4434,19 +4104,14 @@ class EnhancedPPTService(PPTService):
                 return "- 使用现代简洁的设计风格\n- 保持页面整体一致性\n- 采用清晰的视觉层次"
 
         # 检查内存缓存
-        if (
-            hasattr(self, "_cached_style_genes")
-            and project_id in self._cached_style_genes
-        ):
+        if hasattr(self, "_cached_style_genes") and project_id in self._cached_style_genes:
             logger.info(f"从内存缓存获取项目 {project_id} 的设计基因")
             return self._cached_style_genes[project_id]
 
         # 检查文件缓存（如果有缓存目录配置）
         style_genes = None
         if hasattr(self, "cache_dirs") and self.cache_dirs:
-            cache_file = (
-                self.cache_dirs["style_genes"] / f"{project_id}_style_genes.json"
-            )
+            cache_file = self.cache_dirs["style_genes"] / f"{project_id}_style_genes.json"
             if cache_file.exists():
                 try:
                     with open(cache_file, "r", encoding="utf-8") as f:
@@ -4468,17 +4133,12 @@ class EnhancedPPTService(PPTService):
             # 缓存到文件（如果有缓存目录配置）
             if hasattr(self, "cache_dirs") and self.cache_dirs:
                 try:
-                    cache_file = (
-                        self.cache_dirs["style_genes"]
-                        / f"{project_id}_style_genes.json"
-                    )
+                    cache_file = self.cache_dirs["style_genes"] / f"{project_id}_style_genes.json"
                     cache_data = {
                         "project_id": project_id,
                         "style_genes": style_genes,
                         "created_at": time.time(),
-                        "template_hash": hashlib.md5(
-                            template_html.encode()
-                        ).hexdigest()[:8],
+                        "template_hash": hashlib.md5(template_html.encode()).hexdigest()[:8],
                     }
                     with open(cache_file, "w", encoding="utf-8") as f:
                         json.dump(cache_data, f, ensure_ascii=False, indent=2)
@@ -4490,17 +4150,12 @@ class EnhancedPPTService(PPTService):
 
         elif not style_genes and page_number > 1:
             # 如果不是第一页且没有缓存的设计基因，使用默认设计基因
-            style_genes = (
-                "- 使用现代简洁的设计风格\n- 保持页面整体一致性\n- 采用清晰的视觉层次"
-            )
+            style_genes = "- 使用现代简洁的设计风格\n- 保持页面整体一致性\n- 采用清晰的视觉层次"
             logger.warning(
                 f"第{page_number}页未找到缓存的设计基因，使用默认设计基因（设计基因应在第一页提取）"
             )
 
-        return (
-            style_genes
-            or "- 使用现代简洁的设计风格\n- 保持页面整体一致性\n- 采用清晰的视觉层次"
-        )
+        return style_genes or "- 使用现代简洁的设计风格\n- 保持页面整体一致性\n- 采用清晰的视觉层次"
 
     async def _generate_unified_design_guide(
         self, slide_data: Dict[str, Any], page_number: int, total_pages: int
@@ -4523,18 +4178,14 @@ class EnhancedPPTService(PPTService):
 
             # 如果AI生成失败，回退到基础指导
             if not ai_guide or len(ai_guide) < 50:
-                return self._generate_fallback_unified_guide(
-                    slide_data, page_number, total_pages
-                )
+                return self._generate_fallback_unified_guide(slide_data, page_number, total_pages)
 
             return ai_guide
 
         except Exception as e:
             logger.warning(f"AI生成统一设计指导失败: {e}")
             # 回退到基础指导
-            return self._generate_fallback_unified_guide(
-                slide_data, page_number, total_pages
-            )
+            return self._generate_fallback_unified_guide(slide_data, page_number, total_pages)
 
     def _generate_fallback_unified_guide(
         self, slide_data: Dict[str, Any], page_number: int, total_pages: int
@@ -4611,8 +4262,7 @@ class EnhancedPPTService(PPTService):
 
         # 根据标题内容添加特定建议
         if any(
-            keyword in title.lower()
-            for keyword in ["数据", "统计", "分析", "data", "analysis"]
+            keyword in title.lower() for keyword in ["数据", "统计", "分析", "data", "analysis"]
         ):
             guides.append("- 数据可视化：推荐使用柱状图、饼图或折线图展示数据")
 
@@ -4622,9 +4272,7 @@ class EnhancedPPTService(PPTService):
         """Build context information for slide generation with style consistency and innovation balance"""
         return prompts_manager.get_slide_context_prompt(page_number, total_pages)
 
-    def _extract_style_template(
-        self, existing_slides: List[Dict[str, Any]]
-    ) -> List[str]:
+    def _extract_style_template(self, existing_slides: List[Dict[str, Any]]) -> List[str]:
         """Extract a comprehensive style template from existing slides"""
         if not existing_slides:
             return []
@@ -4706,9 +4354,7 @@ class EnhancedPPTService(PPTService):
                 style_info["colors"].extend([m.strip() for m in matches if m.strip()])
 
             # Extract fonts
-            font_matches = re.findall(
-                r"font-family[^:]*:\s*([^;]+)", html_content, re.IGNORECASE
-            )
+            font_matches = re.findall(r"font-family[^:]*:\s*([^;]+)", html_content, re.IGNORECASE)
             style_info["fonts"] = [
                 f.strip().replace('"', "").replace("'", "") for f in font_matches
             ]
@@ -4802,9 +4448,7 @@ class EnhancedPPTService(PPTService):
         if slide_type in content_innovations:
             guidelines.extend(content_innovations[slide_type])
         else:
-            guidelines.extend(
-                content_innovations["content"]
-            )  # Default to content guidelines
+            guidelines.extend(content_innovations["content"])  # Default to content guidelines
 
         # General innovation principles
         guidelines.extend(
@@ -4829,9 +4473,7 @@ class EnhancedPPTService(PPTService):
 
         try:
             # Extract background colors
-            bg_colors = re.findall(
-                r"background[^:]*:\s*([^;]+)", html_content, re.IGNORECASE
-            )
+            bg_colors = re.findall(r"background[^:]*:\s*([^;]+)", html_content, re.IGNORECASE)
             if bg_colors:
                 style_info.append(f"背景色调：{bg_colors[0][:50]}")
 
@@ -4842,16 +4484,12 @@ class EnhancedPPTService(PPTService):
                 style_info.append(f"主要颜色：{', '.join(unique_colors)}")
 
             # Extract font families
-            fonts = re.findall(
-                r"font-family[^:]*:\s*([^;]+)", html_content, re.IGNORECASE
-            )
+            fonts = re.findall(r"font-family[^:]*:\s*([^;]+)", html_content, re.IGNORECASE)
             if fonts:
                 style_info.append(f"字体：{fonts[0][:50]}")
 
             # Extract font sizes
-            font_sizes = re.findall(
-                r"font-size[^:]*:\s*([^;]+)", html_content, re.IGNORECASE
-            )
+            font_sizes = re.findall(r"font-size[^:]*:\s*([^;]+)", html_content, re.IGNORECASE)
             if font_sizes:
                 unique_sizes = list(set(font_sizes[:3]))  # Get first 3 unique sizes
                 style_info.append(f"字体大小：{', '.join(unique_sizes)}")
@@ -4864,9 +4502,7 @@ class EnhancedPPTService(PPTService):
                 style_info.append(f"圆角样式：{border_radius[0]}")
 
             # Extract box shadow for depth effect
-            box_shadow = re.findall(
-                r"box-shadow[^:]*:\s*([^;]+)", html_content, re.IGNORECASE
-            )
+            box_shadow = re.findall(r"box-shadow[^:]*:\s*([^;]+)", html_content, re.IGNORECASE)
             if box_shadow:
                 style_info.append(f"阴影效果：{box_shadow[0][:50]}")
 
@@ -4877,9 +4513,7 @@ class EnhancedPPTService(PPTService):
                 style_info.append("布局方式：Grid布局")
 
             # Extract padding/margin patterns
-            paddings = re.findall(
-                r"padding[^:]*:\s*([^;]+)", html_content, re.IGNORECASE
-            )
+            paddings = re.findall(r"padding[^:]*:\s*([^;]+)", html_content, re.IGNORECASE)
             if paddings:
                 style_info.append(f"内边距：{paddings[0]}")
 
@@ -4925,9 +4559,7 @@ class EnhancedPPTService(PPTService):
         try:
             # Suppress BeautifulSoup warnings about markup that looks like a file path
             with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore", category=MarkupResemblesLocatorWarning
-                )
+                warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
                 # Use 'html.parser' for better compatibility, fallback to 'lxml' if available
                 try:
                     soup = BeautifulSoup(html_content, "lxml")
@@ -4965,9 +4597,7 @@ class EnhancedPPTService(PPTService):
 
         except Exception as e:
             # Catch potential errors from BeautifulSoup itself
-            validation_result["errors"].append(
-                f"BeautifulSoup解析过程中发生意外错误: {e}"
-            )
+            validation_result["errors"].append(f"BeautifulSoup解析过程中发生意外错误: {e}")
 
         # Final determination of validity is based on the absence of critical errors
         # missing_elements are treated as warnings only, not errors
@@ -5041,9 +4671,7 @@ class EnhancedPPTService(PPTService):
             doctype_match = re.search(doctype_pattern, html_content, re.IGNORECASE)
 
             # 将修复后的树转换回字符串
-            fixed_html = etree.tostring(
-                tree, encoding="unicode", method="html", pretty_print=True
-            )
+            fixed_html = etree.tostring(tree, encoding="unicode", method="html", pretty_print=True)
 
             # 如果原始 HTML 有 DOCTYPE，添加回去
             if doctype_match:
@@ -5108,9 +4736,7 @@ class EnhancedPPTService(PPTService):
             for tag in open_tags
             if tag.lower() in critical_tags and tag.lower() not in self_closing_tags
         ]
-        close_tags_lower = [
-            tag.lower() for tag in close_tags if tag.lower() in critical_tags
-        ]
+        close_tags_lower = [tag.lower() for tag in close_tags if tag.lower() in critical_tags]
 
         # Count occurrences of each tag
         open_tag_counts = Counter(open_tags_filtered)
@@ -5121,9 +4747,7 @@ class EnhancedPPTService(PPTService):
         for tag, open_count in open_tag_counts.items():
             close_count = close_tag_counts.get(tag, 0)
             if open_count > close_count:
-                unclosed_critical_tags.append(
-                    f"{tag}({open_count - close_count}个未闭合)"
-                )
+                unclosed_critical_tags.append(f"{tag}({open_count - close_count}个未闭合)")
 
         if unclosed_critical_tags:
             validation_result["errors"].append(
@@ -5167,9 +4791,7 @@ class EnhancedPPTService(PPTService):
                     prompt=retry_context,
                     system_prompt=system_prompt,
                     max_tokens=ai_config.max_tokens,  # Increase token limit for retries
-                    temperature=max(
-                        0.1, ai_config.temperature
-                    ),  # Reduce temperature for retries
+                    temperature=max(0.1, ai_config.temperature),  # Reduce temperature for retries
                 )
 
                 # Clean and extract HTML
@@ -5181,9 +4803,7 @@ class EnhancedPPTService(PPTService):
                         )
                         continue
                 except Exception as e:
-                    logger.error(
-                        f"Error cleaning HTML response for slide {page_number}: {e}"
-                    )
+                    logger.error(f"Error cleaning HTML response for slide {page_number}: {e}")
                     continue
 
                 # Validate HTML completeness
@@ -5213,19 +4833,13 @@ class EnhancedPPTService(PPTService):
                             f"Missing elements (warnings only): {', '.join(validation_result['missing_elements'])}"
                         )
                     if validation_result["errors"]:
-                        logger.error(
-                            f"Validation errors: {'; '.join(validation_result['errors'])}"
-                        )
+                        logger.error(f"Validation errors: {'; '.join(validation_result['errors'])}")
 
                     # Only try to fix HTML with parser if there are actual errors (not just missing elements)
                     if validation_result["errors"]:
                         # Try automatic parser-based fix
-                        logger.info(
-                            f"🔧 Attempting automatic parser fix for slide {page_number}"
-                        )
-                        parser_fixed_html = self._auto_fix_html_with_parser(
-                            html_content
-                        )
+                        logger.info(f"🔧 Attempting automatic parser fix for slide {page_number}")
+                        parser_fixed_html = self._auto_fix_html_with_parser(html_content)
 
                         # If parser actually changed something, return the fixed HTML directly
                         if (
@@ -5236,9 +4850,7 @@ class EnhancedPPTService(PPTService):
                             )
                             return parser_fixed_html
                         else:
-                            logger.info(
-                                f"🔧 Parser did not change HTML for slide {page_number}"
-                            )
+                            logger.info(f"🔧 Parser did not change HTML for slide {page_number}")
 
                         # If parser fix didn't change anything, retry generation
                         if attempt < max_retries - 1:
@@ -5274,9 +4886,7 @@ class EnhancedPPTService(PPTService):
                     )
                     # 对于JSON错误，直接重试而不尝试修复
                     if attempt < max_retries - 1:
-                        logger.info(
-                            "Waiting 1 second before retry due to JSON parsing error..."
-                        )
+                        logger.info("Waiting 1 second before retry due to JSON parsing error...")
                         await asyncio.sleep(1)
                         continue
 
@@ -5285,9 +4895,7 @@ class EnhancedPPTService(PPTService):
                     logger.error(
                         f"All attempts failed with errors, using fallback for slide {page_number}"
                     )
-                    return self._generate_fallback_slide_html(
-                        slide_data, page_number, total_pages
-                    )
+                    return self._generate_fallback_slide_html(slide_data, page_number, total_pages)
                 continue
 
         # This should not be reached, but just in case
@@ -5307,9 +4915,7 @@ class EnhancedPPTService(PPTService):
 
         # If HTML is completely empty or too short, return fallback
         if len(html_content) < 50:
-            return self._generate_fallback_slide_html(
-                slide_data, page_number, total_pages
-            )
+            return self._generate_fallback_slide_html(slide_data, page_number, total_pages)
 
         # Check and add DOCTYPE if missing
         if not html_content.lower().startswith("<!doctype"):
@@ -5349,14 +4955,10 @@ class EnhancedPPTService(PPTService):
                 if head_match:
                     head_start = head_match.end()
                     # Check if charset is missing
-                    if not re.search(
-                        r"<meta[^>]*charset[^>]*>", html_content, re.IGNORECASE
-                    ):
+                    if not re.search(r"<meta[^>]*charset[^>]*>", html_content, re.IGNORECASE):
                         charset_meta = '\n    <meta charset="UTF-8">'
                         html_content = (
-                            html_content[:head_start]
-                            + charset_meta
-                            + html_content[head_start:]
+                            html_content[:head_start] + charset_meta + html_content[head_start:]
                         )
 
                     # Add closing head tag before body
@@ -5399,9 +5001,7 @@ class EnhancedPPTService(PPTService):
 
         if not re.search(r"</body>", html_content, re.IGNORECASE):
             # Insert </body> before </html>
-            html_content = re.sub(
-                r"(</html>)", r"</body>\n\1", html_content, flags=re.IGNORECASE
-            )
+            html_content = re.sub(r"(</html>)", r"</body>\n\1", html_content, flags=re.IGNORECASE)
 
         return html_content
 
@@ -5414,15 +5014,11 @@ class EnhancedPPTService(PPTService):
             return ""
 
         content = raw_content.strip()
-        logger.debug(
-            f"Raw AI response length: {len(content)}, preview: {content[:200]}..."
-        )
+        logger.debug(f"Raw AI response length: {len(content)}, preview: {content[:200]}...")
 
         # Check if response is suspiciously short or contains error indicators
         if len(content) < 100:
-            logger.warning(
-                f"AI response is very short ({len(content)} chars), might be incomplete"
-            )
+            logger.warning(f"AI response is very short ({len(content)} chars), might be incomplete")
 
         if any(
             error_indicator in content.lower()
@@ -5502,11 +5098,7 @@ class EnhancedPPTService(PPTService):
             line_lower = line_stripped.lower()
 
             # Skip empty lines and common non-HTML prefixes
-            if (
-                not line_stripped
-                or line_stripped.startswith("#")
-                or line_stripped.startswith("//")
-            ):
+            if not line_stripped or line_stripped.startswith("#") or line_stripped.startswith("//"):
                 continue
 
             # Start collecting when we see HTML start
@@ -5535,9 +5127,7 @@ class EnhancedPPTService(PPTService):
             )
             return content
         else:
-            logger.error(
-                "Content does not appear to contain HTML, returning empty string"
-            )
+            logger.error("Content does not appear to contain HTML, returning empty string")
             return ""
 
     def _generate_fallback_slide_html(
@@ -5925,7 +5515,9 @@ class EnhancedPPTService(PPTService):
             if content_points:
                 points_html = "<div style='max-height: 60vh; overflow-y: auto; padding-right: 10px;'><ul style='font-size: clamp(0.9rem, 2.5vw, 1.4rem); line-height: 1.5; margin: 0; padding-left: 1.5em;'>"
                 for point in content_points:
-                    points_html += f"<li style='margin-bottom: 0.8em; word-wrap: break-word;'>{point}</li>"
+                    points_html += (
+                        f"<li style='margin-bottom: 0.8em; word-wrap: break-word;'>{point}</li>"
+                    )
                 points_html += "</ul></div>"
 
             content_html = f"""
@@ -5967,9 +5559,7 @@ class EnhancedPPTService(PPTService):
 </html>
         """
 
-    def _combine_slides_to_full_html(
-        self, slides_data: List[Dict[str, Any]], title: str
-    ) -> str:
+    def _combine_slides_to_full_html(self, slides_data: List[Dict[str, Any]], title: str) -> str:
         """Combine individual slides into a full presentation HTML and save to temp files"""
         try:
             # 验证输入数据
@@ -5985,9 +5575,7 @@ class EnhancedPPTService(PPTService):
             temp_dir = Path(tempfile.gettempdir()) / "flowslide" / presentation_id
             temp_dir.mkdir(parents=True, exist_ok=True)
 
-            logger.info(
-                f"Combining {len(slides_data)} slides into full HTML presentation"
-            )
+            logger.info(f"Combining {len(slides_data)} slides into full HTML presentation")
 
             # Save individual slide HTML files
             slide_files = []
@@ -6313,9 +5901,7 @@ class EnhancedPPTService(PPTService):
                 enhanced_slides.append(slide_content)
 
             except Exception as e:
-                logger.error(
-                    f"Error generating content for slide {slide_data['title']}: {e}"
-                )
+                logger.error(f"Error generating content for slide {slide_data['title']}: {e}")
                 # Fallback to basic content
                 slide_content = SlideContent(
                     type=self._normalize_slide_type(slide_data.get("type", "content")),
@@ -6399,9 +5985,7 @@ class EnhancedPPTService(PPTService):
             )
 
             # Use parent class method to generate HTML
-            html_content = await self.generate_slides_from_outline(
-                temp_outline, "general"
-            )
+            html_content = await self.generate_slides_from_outline(temp_outline, "general")
             return html_content
 
         except Exception as e:
@@ -6448,21 +6032,20 @@ class EnhancedPPTService(PPTService):
                     page_number=page_number,
                     total_pages=total_pages,
                     language="zh",
-                    aspect_ratio=self._get_aspect_ratio_settings() and ("4:3" if self._get_aspect_ratio_settings()["ratio_css"]=="4/3" else "16:9"),
+                    aspect_ratio=self._get_aspect_ratio_settings()
+                    and (
+                        "4:3" if self._get_aspect_ratio_settings()["ratio_css"] == "4/3" else "16:9"
+                    ),
                 )
 
                 # 获取图片建议
-                suggested_images = (
-                    await self.image_service.suggest_images_for_ppt_slide(
-                        slide_context, max_suggestions=5
-                    )
+                suggested_images = await self.image_service.suggest_images_for_ppt_slide(
+                    slide_context, max_suggestions=5
                 )
 
                 # 如果找到了图片，返回图片路径
                 if suggested_images:
-                    return [
-                        img.local_path for img in suggested_images if img.local_path
-                    ]
+                    return [img.local_path for img in suggested_images if img.local_path]
 
             # 回退到基础建议
             image_suggestions = {
@@ -6539,7 +6122,8 @@ class EnhancedPPTService(PPTService):
                 page_number=page_number,
                 total_pages=total_pages,
                 language="zh",
-                aspect_ratio=self._get_aspect_ratio_settings() and ("4:3" if self._get_aspect_ratio_settings()["ratio_css"]=="4/3" else "16:9"),
+                aspect_ratio=self._get_aspect_ratio_settings()
+                and ("4:3" if self._get_aspect_ratio_settings()["ratio_css"] == "4/3" else "16:9"),
             )
 
             # 选择图片提供者
@@ -6592,7 +6176,8 @@ class EnhancedPPTService(PPTService):
                 page_number=page_number,
                 total_pages=total_pages,
                 language="zh",
-                aspect_ratio=self._get_aspect_ratio_settings() and ("4:3" if self._get_aspect_ratio_settings()["ratio_css"]=="4/3" else "16:9"),
+                aspect_ratio=self._get_aspect_ratio_settings()
+                and ("4:3" if self._get_aspect_ratio_settings()["ratio_css"] == "4/3" else "16:9"),
             )
 
             # 生成提示词
@@ -6601,13 +6186,9 @@ class EnhancedPPTService(PPTService):
 
         except Exception as e:
             logger.error(f"Error creating image prompt: {e}")
-            return (
-                f"Professional PPT slide background for {slide_title}, {scenario} style"
-            )
+            return f"Professional PPT slide background for {slide_title}, {scenario} style"
 
-    def _generate_basic_html(
-        self, slides: List[SlideContent], theme_config: Dict[str, Any]
-    ) -> str:
+    def _generate_basic_html(self, slides: List[SlideContent], theme_config: Dict[str, Any]) -> str:
         """Generate basic HTML as fallback"""
         html_parts = [
             "<!DOCTYPE html>",
@@ -6699,9 +6280,7 @@ class EnhancedPPTService(PPTService):
             project.todo_board.current_stage_index = stage_index
 
             # Recalculate overall progress
-            completed_stages = sum(
-                1 for s in project.todo_board.stages if s.status == "completed"
-            )
+            completed_stages = sum(1 for s in project.todo_board.stages if s.status == "completed")
             project.todo_board.overall_progress = (
                 completed_stages / len(project.todo_board.stages)
             ) * 100
@@ -6732,9 +6311,7 @@ class EnhancedPPTService(PPTService):
                 # 重置相关阶段状态到数据库
                 for i in range(stage_index, len(project.todo_board.stages)):
                     stage = project.todo_board.stages[i]
-                    await db_manager.update_stage_status(
-                        project_id, stage.id, "pending", 0.0, None
-                    )
+                    await db_manager.update_stage_status(project_id, stage.id, "pending", 0.0, None)
 
                 # 如果重置了大纲生成阶段，清除数据库中的大纲和幻灯片数据
                 if stage_id == "outline_generation":
@@ -6746,17 +6323,13 @@ class EnhancedPPTService(PPTService):
                     # 只清除幻灯片数据，保留大纲
                     await db_manager.save_project_slides(project_id, "", [])
 
-                logger.info(
-                    f"Successfully saved reset stages to database for project {project_id}"
-                )
+                logger.info(f"Successfully saved reset stages to database for project {project_id}")
 
             except Exception as save_error:
                 logger.error(f"Failed to save reset stages to database: {save_error}")
                 # 继续执行，因为内存中的数据已经重置
 
-            logger.info(
-                f"Reset stages from {stage_id} onwards for project {project_id}"
-            )
+            logger.info(f"Reset stages from {stage_id} onwards for project {project_id}")
             return True
 
         except Exception as e:
@@ -6771,25 +6344,16 @@ class EnhancedPPTService(PPTService):
                 return False
 
             # Check if requirements are confirmed (needed for all stages except requirements_confirmation)
-            if (
-                stage_id != "requirements_confirmation"
-                and not project.confirmed_requirements
-            ):
-                logger.error(
-                    f"Cannot start from stage {stage_id}: requirements not confirmed"
-                )
+            if stage_id != "requirements_confirmation" and not project.confirmed_requirements:
+                logger.error(f"Cannot start from stage {stage_id}: requirements not confirmed")
                 return False
 
             # Start the workflow from the specified stage
             # This will be handled by the existing workflow execution logic
             # For now, just mark the stage as ready to start
-            await self.project_manager.update_stage_status(
-                project_id, stage_id, "pending", 0.0
-            )
+            await self.project_manager.update_stage_status(project_id, stage_id, "pending", 0.0)
 
-            logger.info(
-                f"Workflow ready to start from stage {stage_id} for project {project_id}"
-            )
+            logger.info(f"Workflow ready to start from stage {stage_id} for project {project_id}")
             return True
 
         except Exception as e:
@@ -6822,9 +6386,7 @@ class EnhancedPPTService(PPTService):
                 subtitle=slide_data.get("subtitle", ""),
                 content=content,
                 bullet_points=self._extract_bullet_points(content),
-                image_suggestions=await self._suggest_images(
-                    slide_data["title"], request.scenario
-                ),
+                image_suggestions=await self._suggest_images(slide_data["title"], request.scenario),
                 layout="default",
             )
 
@@ -6904,23 +6466,11 @@ class EnhancedPPTService(PPTService):
                     "thankyou",
                     "conclusion",
                 ]:
-                    if (
-                        page_number == 1
-                        or "标题" in title_text
-                        or "title" in title_text
-                    ):
+                    if page_number == 1 or "标题" in title_text or "title" in title_text:
                         slide_type = "title"
-                    elif (
-                        "目录" in title_text
-                        or "agenda" in title_text
-                        or "大纲" in title_text
-                    ):
+                    elif "目录" in title_text or "agenda" in title_text or "大纲" in title_text:
                         slide_type = "agenda"
-                    elif (
-                        "谢谢" in title_text
-                        or "thank" in title_text
-                        or "致谢" in title_text
-                    ):
+                    elif "谢谢" in title_text or "thank" in title_text or "致谢" in title_text:
                         slide_type = "thankyou"
                     elif (
                         "总结" in title_text
@@ -6934,15 +6484,11 @@ class EnhancedPPTService(PPTService):
                 else:
                     # 即使已经有slide_type，也要检查特殊页面类型
                     if (
-                        "目录" in title_text
-                        or "agenda" in title_text
-                        or "大纲" in title_text
+                        "目录" in title_text or "agenda" in title_text or "大纲" in title_text
                     ) and slide_type == "content":
                         slide_type = "agenda"
                     elif (
-                        "谢谢" in title_text
-                        or "thank" in title_text
-                        or "致谢" in title_text
+                        "谢谢" in title_text or "thank" in title_text or "致谢" in title_text
                     ) and slide_type == "content":
                         slide_type = "thankyou"
                     elif (
@@ -6996,9 +6542,9 @@ class EnhancedPPTService(PPTService):
 
             # 如果原始metadata中有页数设置，尝试转换
             if "total_pages" in metadata:
-                standardized_metadata["page_count_settings"]["expected_pages"] = (
-                    metadata["total_pages"]
-                )
+                standardized_metadata["page_count_settings"]["expected_pages"] = metadata[
+                    "total_pages"
+                ]
 
             # 构建标准化的大纲
             standardized_outline = {
@@ -7047,10 +6593,8 @@ class EnhancedPPTService(PPTService):
 
             try:
                 # 导入summeryanyfile模块
-                from summeryanyfile.core.models import (ChunkStrategy,
-                                                        ProcessingConfig)
-                from summeryanyfile.generators.ppt_generator import \
-                    PPTOutlineGenerator
+                from summeryanyfile.core.models import ChunkStrategy, ProcessingConfig
+                from summeryanyfile.generators.ppt_generator import PPTOutlineGenerator
 
                 # 获取最新的AI配置
                 current_ai_config = self._get_current_ai_config()
@@ -7064,13 +6608,9 @@ class EnhancedPPTService(PPTService):
                 chunk_size = self._get_chunk_size_from_request(request)
 
                 # 记录分块策略信息
-                logger.info(
-                    f"分块配置: strategy={chunk_strategy}, chunk_size={chunk_size}"
-                )
+                logger.info(f"分块配置: strategy={chunk_strategy}, chunk_size={chunk_size}")
                 if self._is_enhanced_research_file(request):
-                    logger.info(
-                        "✅ 增强研究报告将使用快速分块策略 (FastChunker) 进行处理"
-                    )
+                    logger.info("✅ 增强研究报告将使用快速分块策略 (FastChunker) 进行处理")
 
                 config = ProcessingConfig(
                     min_slides=min_slides,
@@ -7121,15 +6661,11 @@ class EnhancedPPTService(PPTService):
                     fixed_pages=getattr(request, "fixed_pages", None),
                 )
 
-                logger.info(
-                    f"summeryanyfile生成成功: {outline.title}, 共{outline.total_pages}页"
-                )
+                logger.info(f"summeryanyfile生成成功: {outline.title}, 共{outline.total_pages}页")
 
                 # 转换为FlowSlide格式 - 使用新的标准化函数
                 summeryfile_dict = outline.to_dict()
-                flowslide_outline = self._standardize_summeryfile_outline(
-                    summeryfile_dict
-                )
+                flowslide_outline = self._standardize_summeryfile_outline(summeryfile_dict)
 
                 # 验证和修复文件生成的大纲
                 # 构建confirmed_requirements用于验证
@@ -7189,9 +6725,7 @@ class EnhancedPPTService(PPTService):
                 success=False, error=str(e), message=f"从文件生成大纲失败: {str(e)}"
             )
 
-    def _convert_summeryfile_outline_to_flowslide(
-        self, summery_outline, request
-    ) -> Dict[str, Any]:
+    def _convert_summeryfile_outline_to_flowslide(self, summery_outline, request) -> Dict[str, Any]:
         """将summeryanyfile的大纲格式转换为FlowSlide格式"""
         try:
             slides = []
@@ -7207,9 +6741,7 @@ class EnhancedPPTService(PPTService):
                     slide_type = "thankyou"
 
                 # 构建内容点
-                content_points = (
-                    slide.content_points if hasattr(slide, "content_points") else []
-                )
+                content_points = slide.content_points if hasattr(slide, "content_points") else []
                 if isinstance(content_points, list):
                     content = "\n".join([f"• {point}" for point in content_points])
                 else:
@@ -7441,9 +6973,7 @@ class EnhancedPPTService(PPTService):
             message=f"成功从文件 {request.filename} 生成PPT大纲（简化版本），共{slides_count}页",
         )
 
-    def _create_outline_from_file_content(
-        self, content: str, request
-    ) -> Dict[str, Any]:
+    def _create_outline_from_file_content(self, content: str, request) -> Dict[str, Any]:
         """从文件内容创建PPT大纲（简化版本）"""
         try:
             # 提取标题
@@ -7461,9 +6991,7 @@ class EnhancedPPTService(PPTService):
 
                 # 检测标题（数字开头或特殊字符）
                 if (
-                    line.startswith(
-                        ("1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9.")
-                    )
+                    line.startswith(("1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9."))
                     or line.startswith(("#", "##", "###"))
                     or len(line) < 50
                     and not line.endswith("。")
@@ -7514,9 +7042,7 @@ class EnhancedPPTService(PPTService):
             # 内容页
             for i, section in enumerate(sections[:10], start=len(slides) + 1):
                 content_points = (
-                    section["content"][:5]
-                    if section["content"]
-                    else ["内容要点1", "内容要点2"]
+                    section["content"][:5] if section["content"] else ["内容要点1", "内容要点2"]
                 )
                 slides.append(
                     {
@@ -7611,9 +7137,7 @@ class EnhancedPPTService(PPTService):
             # 检查项目元数据中是否已有选择的模板ID
             selected_template_id = None
             if hasattr(project, "project_metadata") and project.project_metadata:
-                selected_template_id = project.project_metadata.get(
-                    "selected_global_template_id"
-                )
+                selected_template_id = project.project_metadata.get("selected_global_template_id")
 
             # 如果已有选择的模板，获取模板信息
             if selected_template_id:
@@ -7630,28 +7154,20 @@ class EnhancedPPTService(PPTService):
             default_template = await self.global_template_service.get_default_template()
             if default_template:
                 # 将默认模板ID保存到项目元数据中
-                await self._save_selected_template_to_project(
-                    project_id, default_template["id"]
-                )
+                await self._save_selected_template_to_project(project_id, default_template["id"])
                 logger.info(
                     f"Project {project_id} using default template: {default_template['template_name']}"
                 )
                 return default_template
 
-            logger.warning(
-                f"No global master template available for project {project_id}"
-            )
+            logger.warning(f"No global master template available for project {project_id}")
             return None
 
         except Exception as e:
-            logger.error(
-                f"Error ensuring global master template for project {project_id}: {e}"
-            )
+            logger.error(f"Error ensuring global master template for project {project_id}: {e}")
             return None
 
-    async def _save_selected_template_to_project(
-        self, project_id: str, template_id: int
-    ):
+    async def _save_selected_template_to_project(self, project_id: str, template_id: int):
         """将选择的模板ID保存到项目元数据中"""
         try:
             project = await self.project_manager.get_project(project_id)
@@ -7661,12 +7177,8 @@ class EnhancedPPTService(PPTService):
                 project_metadata["selected_global_template_id"] = template_id
 
                 # 保存更新的元数据
-                await self.project_manager.update_project_metadata(
-                    project_id, project_metadata
-                )
-                logger.info(
-                    f"Saved selected template {template_id} to project {project_id}"
-                )
+                await self.project_manager.update_project_metadata(project_id, project_metadata)
+                logger.info(f"Saved selected template {template_id} to project {project_id}")
 
         except Exception as e:
             logger.error(f"Error saving selected template to project {project_id}: {e}")
@@ -7678,9 +7190,7 @@ class EnhancedPPTService(PPTService):
         try:
             if template_id:
                 # 验证模板是否存在且可用
-                template = await self.global_template_service.get_template_by_id(
-                    template_id
-                )
+                template = await self.global_template_service.get_template_by_id(template_id)
                 if not template:
                     raise ValueError(f"Template {template_id} not found")
                 if not template.get("is_active", True):
@@ -7705,14 +7215,10 @@ class EnhancedPPTService(PPTService):
             }
 
         except Exception as e:
-            logger.error(
-                f"Error selecting global template for project {project_id}: {e}"
-            )
+            logger.error(f"Error selecting global template for project {project_id}: {e}")
             return {"success": False, "message": str(e), "selected_template": None}
 
-    async def get_selected_global_template(
-        self, project_id: str
-    ) -> Optional[Dict[str, Any]]:
+    async def get_selected_global_template(self, project_id: str) -> Optional[Dict[str, Any]]:
         """获取项目选择的全局母版模板"""
         try:
             project = await self.project_manager.get_project(project_id)
@@ -7722,21 +7228,15 @@ class EnhancedPPTService(PPTService):
             # 从项目元数据中获取选择的模板ID
             selected_template_id = None
             if hasattr(project, "project_metadata") and project.project_metadata:
-                selected_template_id = project.project_metadata.get(
-                    "selected_global_template_id"
-                )
+                selected_template_id = project.project_metadata.get("selected_global_template_id")
 
             if selected_template_id:
-                return await self.global_template_service.get_template_by_id(
-                    selected_template_id
-                )
+                return await self.global_template_service.get_template_by_id(selected_template_id)
 
             return None
 
         except Exception as e:
-            logger.error(
-                f"Error getting selected global template for project {project_id}: {e}"
-            )
+            logger.error(f"Error getting selected global template for project {project_id}: {e}")
             return None
 
     def clear_cached_style_genes(self, project_id: Optional[str] = None):

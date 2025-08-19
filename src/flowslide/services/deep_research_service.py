@@ -84,9 +84,7 @@ class DEEPResearchService:
         self.tavily_client = None
         # Reinitialize with new config
         self._initialize_tavily_client()
-        logger.info(
-            f"Research service reload completed. Available: {self.is_available()}"
-        )
+        logger.info(f"Research service reload completed. Available: {self.is_available()}")
 
     @property
     def ai_provider(self):
@@ -112,9 +110,7 @@ class DEEPResearchService:
 
         try:
             # Step 1: Define research objectives and generate research plan with context
-            research_plan = await self._define_research_objectives(
-                topic, language, context
-            )
+            research_plan = await self._define_research_objectives(topic, language, context)
 
             # Step 2: Execute research steps
             research_steps = []
@@ -131,9 +127,7 @@ class DEEPResearchService:
                 topic, language, research_steps, time.time() - start_time
             )
 
-            logger.info(
-                f"DEEP research completed in {report.total_duration:.2f} seconds"
-            )
+            logger.info(f"DEEP research completed in {report.total_duration:.2f} seconds")
             return report
 
         except Exception as e:
@@ -147,9 +141,7 @@ class DEEPResearchService:
 
         # Extract context information
         scenario = context.get("scenario", "通用") if context else "通用"
-        target_audience = (
-            context.get("target_audience", "普通大众") if context else "普通大众"
-        )
+        target_audience = context.get("target_audience", "普通大众") if context else "普通大众"
         requirements = context.get("requirements", "") if context else ""
         ppt_style = context.get("ppt_style", "general") if context else "general"
         description = context.get("description", "") if context else ""
@@ -228,18 +220,14 @@ class DEEPResearchService:
                         ):
                             raise ValueError("Invalid research plan structure")
 
-                    logger.info(
-                        f"Generated research plan with {len(research_plan)} steps"
-                    )
+                    logger.info(f"Generated research plan with {len(research_plan)} steps")
                     return research_plan
 
             raise ValueError("Failed to parse research plan JSON")
 
         except Exception as e:
             logger.error(f"Failed to generate AI research plan: {e}")
-            raise Exception(
-                f"Unable to generate research plan for topic '{topic}': {e}"
-            )
+            raise Exception(f"Unable to generate research plan for topic '{topic}': {e}")
 
         else:
             return [
@@ -325,13 +313,9 @@ class DEEPResearchService:
 
             # Add domain filters if configured
             if ai_config.tavily_include_domains:
-                search_params["include_domains"] = (
-                    ai_config.tavily_include_domains.split(",")
-                )
+                search_params["include_domains"] = ai_config.tavily_include_domains.split(",")
             if ai_config.tavily_exclude_domains:
-                search_params["exclude_domains"] = (
-                    ai_config.tavily_exclude_domains.split(",")
-                )
+                search_params["exclude_domains"] = ai_config.tavily_exclude_domains.split(",")
 
             # Execute search
             response = self.tavily_client.search(**search_params)
@@ -348,9 +332,7 @@ class DEEPResearchService:
                 }
                 results.append(processed_result)
 
-            logger.info(
-                f"Tavily search returned {len(results)} results for query: {query}"
-            )
+            logger.info(f"Tavily search returned {len(results)} results for query: {query}")
             return results
 
         except Exception as e:
@@ -367,11 +349,7 @@ class DEEPResearchService:
     ) -> str:
         """Analyze search results using AI"""
         if not results:
-            return (
-                "未找到相关搜索结果"
-                if language == "zh"
-                else "No relevant search results found"
-            )
+            return "未找到相关搜索结果" if language == "zh" else "No relevant search results found"
 
         # Prepare results summary for AI analysis
         results_summary = ""
@@ -410,11 +388,7 @@ class DEEPResearchService:
 
         except Exception as e:
             logger.error(f"Failed to analyze search results: {e}")
-            return (
-                f"分析失败: {str(e)}"
-                if language == "zh"
-                else f"Analysis failed: {str(e)}"
-            )
+            return f"分析失败: {str(e)}" if language == "zh" else f"Analysis failed: {str(e)}"
 
     async def _generate_comprehensive_report(
         self,
@@ -440,17 +414,11 @@ class DEEPResearchService:
                         all_sources.add(result["url"])
 
             # Generate executive summary and recommendations
-            summary_analysis = await self._generate_executive_summary(
-                topic, language, all_findings
-            )
+            summary_analysis = await self._generate_executive_summary(topic, language, all_findings)
 
             # Extract key findings and recommendations
-            key_findings = await self._extract_key_findings(
-                topic, language, all_findings
-            )
-            recommendations = await self._generate_recommendations(
-                topic, language, all_findings
-            )
+            key_findings = await self._extract_key_findings(topic, language, all_findings)
+            recommendations = await self._generate_recommendations(topic, language, all_findings)
 
             report = ResearchReport(
                 topic=topic,
@@ -505,11 +473,7 @@ class DEEPResearchService:
             return response.content.strip()
         except Exception as e:
             logger.error(f"Failed to generate executive summary: {e}")
-            return (
-                "执行摘要生成失败"
-                if language == "zh"
-                else "Executive summary generation failed"
-            )
+            return "执行摘要生成失败" if language == "zh" else "Executive summary generation failed"
 
     async def _extract_key_findings(
         self, topic: str, language: str, findings: List[str]
@@ -551,9 +515,7 @@ class DEEPResearchService:
             findings_list = []
             for line in content.split("\n"):
                 line = line.strip()
-                if line and (
-                    line[0].isdigit() or line.startswith("-") or line.startswith("•")
-                ):
+                if line and (line[0].isdigit() or line.startswith("-") or line.startswith("•")):
                     # Remove numbering and clean up
                     clean_finding = line.split(".", 1)[-1].strip()
                     if clean_finding:
@@ -563,11 +525,7 @@ class DEEPResearchService:
 
         except Exception as e:
             logger.error(f"Failed to extract key findings: {e}")
-            return (
-                ["关键发现提取失败"]
-                if language == "zh"
-                else ["Key findings extraction failed"]
-            )
+            return ["关键发现提取失败"] if language == "zh" else ["Key findings extraction failed"]
 
     async def _generate_recommendations(
         self, topic: str, language: str, findings: List[str]
@@ -610,9 +568,7 @@ class DEEPResearchService:
             recommendations_list = []
             for line in content.split("\n"):
                 line = line.strip()
-                if line and (
-                    line[0].isdigit() or line.startswith("-") or line.startswith("•")
-                ):
+                if line and (line[0].isdigit() or line.startswith("-") or line.startswith("•")):
                     # Remove numbering and clean up
                     clean_rec = line.split(".", 1)[-1].strip()
                     if clean_rec:
@@ -622,11 +578,7 @@ class DEEPResearchService:
 
         except Exception as e:
             logger.error(f"Failed to generate recommendations: {e}")
-            return (
-                ["建议生成失败"]
-                if language == "zh"
-                else ["Recommendations generation failed"]
-            )
+            return ["建议生成失败"] if language == "zh" else ["Recommendations generation failed"]
 
     def is_available(self) -> bool:
         """Check if research service is available"""

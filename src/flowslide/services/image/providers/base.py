@@ -8,9 +8,16 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
-from ..models import (ImageGenerationRequest, ImageInfo, ImageOperationResult,
-                      ImageProvider, ImageSearchRequest, ImageSearchResult,
-                      ImageSourceType, ImageUploadRequest)
+from ..models import (
+    ImageGenerationRequest,
+    ImageInfo,
+    ImageOperationResult,
+    ImageProvider,
+    ImageSearchRequest,
+    ImageSearchResult,
+    ImageSourceType,
+    ImageUploadRequest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,15 +113,11 @@ class ImageSearchProvider(BaseImageProvider):
         pass
 
     @abstractmethod
-    async def download_image(
-        self, image_info: ImageInfo, save_path: Path
-    ) -> ImageOperationResult:
+    async def download_image(self, image_info: ImageInfo, save_path: Path) -> ImageOperationResult:
         """下载图片到本地"""
         pass
 
-    async def batch_search(
-        self, requests: List[ImageSearchRequest]
-    ) -> List[ImageSearchResult]:
+    async def batch_search(self, requests: List[ImageSearchRequest]) -> List[ImageSearchResult]:
         """批量搜索图片"""
         results = []
         for request in requests:
@@ -181,9 +184,7 @@ class ImageGenerationProvider(BaseImageProvider):
                 # AI生成通常需要更长时间，添加更长延迟
                 await asyncio.sleep(1.0)
             except Exception as e:
-                logger.error(
-                    f"Batch generation failed for prompt {request.prompt}: {e}"
-                )
+                logger.error(f"Batch generation failed for prompt {request.prompt}: {e}")
                 results.append(
                     ImageOperationResult(
                         success=False,
@@ -206,9 +207,7 @@ class LocalStorageProvider(BaseImageProvider):
         return ["upload", "list", "get", "delete", "update"]
 
     @abstractmethod
-    async def upload(
-        self, request: ImageUploadRequest, file_data: bytes
-    ) -> ImageOperationResult:
+    async def upload(self, request: ImageUploadRequest, file_data: bytes) -> ImageOperationResult:
         """上传图片"""
         pass
 
@@ -234,9 +233,7 @@ class LocalStorageProvider(BaseImageProvider):
         pass
 
     @abstractmethod
-    async def update_image(
-        self, image_id: str, updates: Dict[str, Any]
-    ) -> ImageOperationResult:
+    async def update_image(self, image_id: str, updates: Dict[str, Any]) -> ImageOperationResult:
         """更新图片信息"""
         pass
 
@@ -272,23 +269,17 @@ class ProviderRegistry:
 
         if isinstance(provider, ImageSearchProvider):
             # 检查是否已经存在相同类型的搜索提供者
-            existing = [
-                p for p in self._search_providers if p.provider == provider.provider
-            ]
+            existing = [p for p in self._search_providers if p.provider == provider.provider]
             if not existing:
                 self._search_providers.append(provider)
         elif isinstance(provider, ImageGenerationProvider):
             # 检查是否已经存在相同类型的生成提供者
-            existing = [
-                p for p in self._generation_providers if p.provider == provider.provider
-            ]
+            existing = [p for p in self._generation_providers if p.provider == provider.provider]
             if not existing:
                 self._generation_providers.append(provider)
         elif isinstance(provider, LocalStorageProvider):
             # 检查是否已经存在相同类型的存储提供者
-            existing = [
-                p for p in self._storage_providers if p.provider == provider.provider
-            ]
+            existing = [p for p in self._storage_providers if p.provider == provider.provider]
             if not existing:
                 self._storage_providers.append(provider)
 
@@ -296,25 +287,19 @@ class ProviderRegistry:
         """获取指定提供者"""
         return self._providers.get(provider)
 
-    def get_search_providers(
-        self, enabled_only: bool = True
-    ) -> List[ImageSearchProvider]:
+    def get_search_providers(self, enabled_only: bool = True) -> List[ImageSearchProvider]:
         """获取搜索提供者"""
         if enabled_only:
             return [p for p in self._search_providers if p.enabled]
         return self._search_providers
 
-    def get_generation_providers(
-        self, enabled_only: bool = True
-    ) -> List[ImageGenerationProvider]:
+    def get_generation_providers(self, enabled_only: bool = True) -> List[ImageGenerationProvider]:
         """获取生成提供者"""
         if enabled_only:
             return [p for p in self._generation_providers if p.enabled]
         return self._generation_providers
 
-    def get_storage_providers(
-        self, enabled_only: bool = True
-    ) -> List[LocalStorageProvider]:
+    def get_storage_providers(self, enabled_only: bool = True) -> List[LocalStorageProvider]:
         """获取存储提供者"""
         if enabled_only:
             return [p for p in self._storage_providers if p.enabled]

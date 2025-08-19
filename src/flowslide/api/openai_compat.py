@@ -61,6 +61,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
         last_message = request.messages[-1].content if request.messages else ""
 
         if getattr(request, "stream", False):
+
             async def chat_stream() -> AsyncGenerator[bytes, None]:
                 if ai_service.is_ppt_request(last_message):
                     content = await ai_service.handle_ppt_chat_request(request)
@@ -69,12 +70,11 @@ async def create_chat_completion(request: ChatCompletionRequest):
                 chunk = {
                     "id": "chatcmpl-stream",
                     "object": "chat.completion.chunk",
-                    "choices": [
-                        {"index": 0, "delta": {"content": content}, "finish_reason": None}
-                    ],
+                    "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}],
                 }
                 yield (f"data: {chunk}\n\n").encode("utf-8")
                 yield b"data: [DONE]\n\n"
+
             return StreamingResponse(chat_stream(), media_type="text/event-stream")
 
         if ai_service.is_ppt_request(last_message):
@@ -105,6 +105,7 @@ async def create_completion(request: CompletionRequest):
         prompt = request.prompt if isinstance(request.prompt, str) else request.prompt[0]
 
         if getattr(request, "stream", False):
+
             async def text_stream() -> AsyncGenerator[bytes, None]:
                 if ai_service.is_ppt_request(prompt):
                     content = await ai_service.handle_ppt_completion_request(request)
@@ -113,12 +114,11 @@ async def create_completion(request: CompletionRequest):
                 chunk = {
                     "id": "cmpl-stream",
                     "object": "text_completion.chunk",
-                    "choices": [
-                        {"index": 0, "text": content, "finish_reason": None}
-                    ],
+                    "choices": [{"index": 0, "text": content, "finish_reason": None}],
                 }
                 yield (f"data: {chunk}\n\n").encode("utf-8")
                 yield b"data: [DONE]\n\n"
+
             return StreamingResponse(text_stream(), media_type="text/event-stream")
 
         if ai_service.is_ppt_request(prompt):
@@ -126,7 +126,9 @@ async def create_completion(request: CompletionRequest):
         else:
             response_content = await ai_service.handle_general_completion_request(request)
 
-        prompt_tokens = len(prompt.split()) if isinstance(prompt, str) else sum(len(p.split()) for p in prompt)
+        prompt_tokens = (
+            len(prompt.split()) if isinstance(prompt, str) else sum(len(p.split()) for p in prompt)
+        )
         completion_tokens = len(response_content.split())
         usage = Usage(
             prompt_tokens=prompt_tokens,

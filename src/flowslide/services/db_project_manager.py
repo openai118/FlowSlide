@@ -10,9 +10,15 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..api.models import (EnhancedPPTOutline, PPTGenerationRequest, PPTOutline,
-                          PPTProject, ProjectListResponse, TodoBoard,
-                          TodoStage)
+from ..api.models import (
+    EnhancedPPTOutline,
+    PPTGenerationRequest,
+    PPTOutline,
+    PPTProject,
+    ProjectListResponse,
+    TodoBoard,
+    TodoStage,
+)
 from ..database.database import get_async_db
 from ..database.service import DatabaseService
 
@@ -33,7 +39,9 @@ class DatabaseProjectManager:
         session = AsyncSessionLocal()
         return DatabaseService(session)
 
-    async def create_project(self, request: PPTGenerationRequest, owner_id: Optional[int] = None) -> PPTProject:
+    async def create_project(
+        self, request: PPTGenerationRequest, owner_id: Optional[int] = None
+    ) -> PPTProject:
         """Create a new PPT project with TODO board"""
         db_service = await self._get_db_service()
         try:
@@ -83,9 +91,7 @@ class DatabaseProjectManager:
         self, project_id: str, confirmed_requirements: Dict[str, Any]
     ) -> bool:
         """Compatibility method for EnhancedPPTService"""
-        return await self.update_todo_board_after_requirements(
-            project_id, confirmed_requirements
-        )
+        return await self.update_todo_board_after_requirements(project_id, confirmed_requirements)
 
     async def get_project(self, project_id: str) -> Optional[PPTProject]:
         """Get project by ID"""
@@ -96,7 +102,11 @@ class DatabaseProjectManager:
             await db_service.session.close()
 
     async def list_projects(
-        self, page: int = 1, page_size: int = 10, status: Optional[str] = None, owner_id: Optional[int] = None
+        self,
+        page: int = 1,
+        page_size: int = 10,
+        status: Optional[str] = None,
+        owner_id: Optional[int] = None,
     ) -> ProjectListResponse:
         """List projects with pagination"""
         db_service = await self._get_db_service()
@@ -139,17 +149,13 @@ class DatabaseProjectManager:
             )
 
             if success:
-                logger.info(
-                    f"Updated stage {stage_id} to {status}, progress: {progress}%"
-                )
+                logger.info(f"Updated stage {stage_id} to {status}, progress: {progress}%")
 
             return success
         finally:
             await db_service.session.close()
 
-    async def save_project_outline(
-        self, project_id: str, outline: Dict[str, Any]
-    ) -> bool:
+    async def save_project_outline(self, project_id: str, outline: Dict[str, Any]) -> bool:
         """Save project outline"""
         db_service = await self._get_db_service()
         try:
@@ -171,9 +177,7 @@ class DatabaseProjectManager:
         """Save project slides using optimized batch update"""
         db_service = await self._get_db_service()
         try:
-            success = await db_service.save_project_slides(
-                project_id, slides_html, slides_data
-            )
+            success = await db_service.save_project_slides(project_id, slides_html, slides_data)
 
             if success:
                 logger.info(f"Saved slides for project {project_id}")
@@ -182,9 +186,7 @@ class DatabaseProjectManager:
         finally:
             await db_service.session.close()
 
-    async def batch_save_slides(
-        self, project_id: str, slides_data: List[Dict[str, Any]]
-    ) -> bool:
+    async def batch_save_slides(self, project_id: str, slides_data: List[Dict[str, Any]]) -> bool:
         """批量保存幻灯片 - 高效版本"""
         db_service = await self._get_db_service()
         try:
@@ -204,14 +206,10 @@ class DatabaseProjectManager:
                 slides_records.append(slide_record)
 
             # 使用批量upsert
-            success = await db_service.slide_repo.batch_upsert_slides(
-                project_id, slides_records
-            )
+            success = await db_service.slide_repo.batch_upsert_slides(project_id, slides_records)
 
             if success:
-                logger.info(
-                    f"Batch saved {len(slides_data)} slides for project {project_id}"
-                )
+                logger.info(f"Batch saved {len(slides_data)} slides for project {project_id}")
 
             return success
         finally:
@@ -237,18 +235,12 @@ class DatabaseProjectManager:
         finally:
             await db_service.session.close()
 
-    async def cleanup_excess_slides(
-        self, project_id: str, current_slide_count: int
-    ) -> int:
+    async def cleanup_excess_slides(self, project_id: str, current_slide_count: int) -> int:
         """清理多余的幻灯片"""
         db_service = await self._get_db_service()
         try:
-            deleted_count = await db_service.cleanup_excess_slides(
-                project_id, current_slide_count
-            )
-            logger.info(
-                f"Cleaned up {deleted_count} excess slides for project {project_id}"
-            )
+            deleted_count = await db_service.cleanup_excess_slides(project_id, current_slide_count)
+            logger.info(f"Cleaned up {deleted_count} excess slides for project {project_id}")
             return deleted_count
         finally:
             await db_service.session.close()
@@ -259,9 +251,7 @@ class DatabaseProjectManager:
         """Save a single slide to database immediately"""
         db_service = await self._get_db_service()
         try:
-            success = await db_service.save_single_slide(
-                project_id, slide_index, slide_data
-            )
+            success = await db_service.save_single_slide(project_id, slide_index, slide_data)
 
             if success:
                 logger.info(f"Saved slide {slide_index + 1} for project {project_id}")
@@ -270,9 +260,7 @@ class DatabaseProjectManager:
         finally:
             await db_service.session.close()
 
-    async def update_project_data(
-        self, project_id: str, update_data: Dict[str, Any]
-    ) -> bool:
+    async def update_project_data(self, project_id: str, update_data: Dict[str, Any]) -> bool:
         """Update project data without affecting individual slides"""
         db_service = await self._get_db_service()
         try:
@@ -285,15 +273,11 @@ class DatabaseProjectManager:
         finally:
             await db_service.session.close()
 
-    async def update_project(
-        self, project_id: str, update_data: Dict[str, Any]
-    ) -> bool:
+    async def update_project(self, project_id: str, update_data: Dict[str, Any]) -> bool:
         """Alias for update_project_data for backward compatibility"""
         return await self.update_project_data(project_id, update_data)
 
-    async def save_project_version(
-        self, project_id: str, version_data: Dict[str, Any]
-    ) -> bool:
+    async def save_project_version(self, project_id: str, version_data: Dict[str, Any]) -> bool:
         """Save a version of the project"""
         db_service = await self._get_db_service()
         try:
@@ -336,9 +320,7 @@ class DatabaseProjectManager:
         finally:
             await db_service.session.close()
 
-    async def get_confirmed_requirements(
-        self, project_id: str
-    ) -> Optional[Dict[str, Any]]:
+    async def get_confirmed_requirements(self, project_id: str) -> Optional[Dict[str, Any]]:
         """Get confirmed requirements for a project"""
         project = await self.get_project(project_id)
         return project.confirmed_requirements if project else None
@@ -356,9 +338,7 @@ class DatabaseProjectManager:
         finally:
             await db_service.session.close()
 
-    async def update_project_metadata(
-        self, project_id: str, metadata: Dict[str, Any]
-    ) -> bool:
+    async def update_project_metadata(self, project_id: str, metadata: Dict[str, Any]) -> bool:
         """Update project metadata"""
         db_service = await self._get_db_service()
         try:
@@ -389,18 +369,12 @@ class DatabaseProjectManager:
         self, project_id: str, stage_id: str, result: Dict[str, Any] = None
     ) -> bool:
         """Complete a specific stage"""
-        return await self.update_stage_status(
-            project_id, stage_id, "completed", 100.0, result
-        )
+        return await self.update_stage_status(project_id, stage_id, "completed", 100.0, result)
 
-    async def fail_stage(
-        self, project_id: str, stage_id: str, error_message: str
-    ) -> bool:
+    async def fail_stage(self, project_id: str, stage_id: str, error_message: str) -> bool:
         """Mark a stage as failed"""
         result = {"error": error_message, "timestamp": time.time()}
-        return await self.update_stage_status(
-            project_id, stage_id, "failed", 0.0, result
-        )
+        return await self.update_stage_status(project_id, stage_id, "failed", 0.0, result)
 
     async def close(self):
         """Close database connections - no longer needed as we use per-request sessions"""

@@ -54,14 +54,10 @@ class AuthService:
 
         return user
 
-    def authenticate_user(
-        self, db: Session, username: str, password: str
-    ) -> Optional[User]:
+    def authenticate_user(self, db: Session, username: str, password: str) -> Optional[User]:
         """Authenticate user with username and password"""
         user = (
-            db.query(User)
-            .filter(and_(User.username == username, User.is_active == True))
-            .first()
+            db.query(User).filter(and_(User.username == username, User.is_active == True)).first()
         )
 
         if user and user.check_password(password):
@@ -84,16 +80,12 @@ class AuthService:
         # If session_expire_minutes is 0, set to a very far future date (never expire)
         if current_expire_minutes == 0:
             # Set expiration to year 2099 (effectively never expires)
-            expires_at = time.mktime(
-                time.strptime("2099-12-31 23:59:59", "%Y-%m-%d %H:%M:%S")
-            )
+            expires_at = time.mktime(time.strptime("2099-12-31 23:59:59", "%Y-%m-%d %H:%M:%S"))
         else:
             expires_at = time.time() + (current_expire_minutes * 60)
 
         # Create session record
-        session = UserSession(
-            session_id=session_id, user_id=user.id, expires_at=expires_at
-        )
+        session = UserSession(session_id=session_id, user_id=user.id, expires_at=expires_at)
 
         db.add(session)
         db.commit()
@@ -104,11 +96,7 @@ class AuthService:
         """Get user by session ID"""
         session = (
             db.query(UserSession)
-            .filter(
-                and_(
-                    UserSession.session_id == session_id, UserSession.is_active == True
-                )
-            )
+            .filter(and_(UserSession.session_id == session_id, UserSession.is_active == True))
             .first()
         )
 
@@ -123,9 +111,7 @@ class AuthService:
 
     def logout_user(self, db: Session, session_id: str) -> bool:
         """Logout user by deactivating session"""
-        session = (
-            db.query(UserSession).filter(UserSession.session_id == session_id).first()
-        )
+        session = db.query(UserSession).filter(UserSession.session_id == session_id).first()
 
         if session:
             session.is_active = False
@@ -138,17 +124,14 @@ class AuthService:
         """Clean up expired sessions"""
         current_time = time.time()
         # Don't clean up sessions that are set to never expire (year 2099 or later)
-        year_2099_timestamp = time.mktime(
-            time.strptime("2099-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")
-        )
+        year_2099_timestamp = time.mktime(time.strptime("2099-01-01 00:00:00", "%Y-%m-%d %H:%M:%S"))
 
         expired_sessions = (
             db.query(UserSession)
             .filter(
                 and_(
                     UserSession.expires_at < current_time,
-                    UserSession.expires_at
-                    < year_2099_timestamp,  # Exclude never-expire sessions
+                    UserSession.expires_at < year_2099_timestamp,  # Exclude never-expire sessions
                 )
             )
             .all()
@@ -163,18 +146,12 @@ class AuthService:
 
     def get_user_by_id(self, db: Session, user_id: int) -> Optional[User]:
         """Get user by ID"""
-        return (
-            db.query(User)
-            .filter(and_(User.id == user_id, User.is_active == True))
-            .first()
-        )
+        return db.query(User).filter(and_(User.id == user_id, User.is_active == True)).first()
 
     def get_user_by_username(self, db: Session, username: str) -> Optional[User]:
         """Get user by username"""
         return (
-            db.query(User)
-            .filter(and_(User.username == username, User.is_active == True))
-            .first()
+            db.query(User).filter(and_(User.username == username, User.is_active == True)).first()
         )
 
     def update_user_password(self, db: Session, user: User, new_password: str) -> bool:
@@ -192,9 +169,7 @@ class AuthService:
         try:
             user.is_active = False
             # Deactivate all user sessions
-            sessions = (
-                db.query(UserSession).filter(UserSession.user_id == user.id).all()
-            )
+            sessions = db.query(UserSession).filter(UserSession.user_id == user.id).all()
             for session in sessions:
                 session.is_active = False
             db.commit()
@@ -215,7 +190,9 @@ class AuthService:
             .all()
         )
 
-    def update_user_info(self, db: Session, user: User, username: Optional[str] = None, email: Optional[str] = None) -> bool:
+    def update_user_info(
+        self, db: Session, user: User, username: Optional[str] = None, email: Optional[str] = None
+    ) -> bool:
         """Update user's basic info (username/email) with uniqueness checks"""
         try:
             if username and username != user.username:
@@ -288,6 +265,7 @@ def init_default_admin(db: Session) -> None:
 def hash_password(password: str) -> str:
     """Hash password using bcrypt"""
     from passlib.context import CryptContext
+
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
     return pwd_context.hash(password)
 
@@ -296,6 +274,7 @@ def verify_password(password: str, hashed: str) -> bool:
     """Verify password against hash"""
     try:
         from passlib.context import CryptContext
+
         pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
         return pwd_context.verify(password, hashed)
     except Exception as e:

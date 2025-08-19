@@ -8,12 +8,14 @@ from typing import Optional
 # 数据库配置 - 本地开发使用相对路径
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/flowslide.db")
 
+
 # 异步数据库URL配置
 def get_async_database_url(sync_url: str) -> str:
     """将同步数据库URL转换为异步版本，并清理不兼容的参数"""
     url = sync_url
     if "sslmode=" in url:
         import urllib.parse
+
         parsed = urllib.parse.urlparse(url)
         q = urllib.parse.parse_qs(parsed.query)
         q.pop("sslmode", None)
@@ -29,7 +31,9 @@ def get_async_database_url(sync_url: str) -> str:
         return url.replace("mysql://", "mysql+aiomysql://")
     return url
 
+
 ASYNC_DATABASE_URL = get_async_database_url(DATABASE_URL)
+
 
 class SimpleConfig:
     def __init__(self) -> None:
@@ -45,9 +49,10 @@ class SimpleConfig:
         # Warn if using default secret key
         if self.secret_key == "your-secret-key-here":
             import warnings
+
             warnings.warn(
                 "Using default SECRET_KEY! Please set a secure SECRET_KEY environment variable in production.",
-                UserWarning
+                UserWarning,
             )
         self.access_token_expire_minutes = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
@@ -58,7 +63,9 @@ class SimpleConfig:
         else:
             mb_val = os.getenv("MAX_UPLOAD_SIZE") or os.getenv("MAX_FILE_SIZE_MB")
             try:
-                self.max_file_size = int(mb_val) * 1024 * 1024 if mb_val is not None else 10 * 1024 * 1024
+                self.max_file_size = (
+                    int(mb_val) * 1024 * 1024 if mb_val is not None else 10 * 1024 * 1024
+                )
             except ValueError:
                 self.max_file_size = 10 * 1024 * 1024
         self.upload_dir = os.getenv("UPLOAD_DIR", "uploads")
@@ -79,6 +86,7 @@ class SimpleConfig:
         self.hcaptcha_secret_key: Optional[str] = os.getenv("HCAPTCHA_SECRET_KEY")
         self.enable_login_captcha = os.getenv("ENABLE_LOGIN_CAPTCHA", "false").lower() == "true"
 
+
 class SimpleAIConfig:
     def __init__(self) -> None:
         # OpenAI
@@ -93,7 +101,9 @@ class SimpleAIConfig:
 
         # Google
         self.google_api_key = os.getenv("GOOGLE_API_KEY")
-        self.google_base_url = os.getenv("GOOGLE_BASE_URL", "https://generativelanguage.googleapis.com")
+        self.google_base_url = os.getenv(
+            "GOOGLE_BASE_URL", "https://generativelanguage.googleapis.com"
+        )
         self.google_model = os.getenv("GOOGLE_MODEL", "gemini-1.5-flash")
 
         # Azure OpenAI
@@ -116,18 +126,13 @@ class SimpleAIConfig:
         self.tavily_include_domains = os.getenv("TAVILY_INCLUDE_DOMAINS")
         self.tavily_exclude_domains = os.getenv("TAVILY_EXCLUDE_DOMAINS")
 
-
         # Research advanced settings
         self.research_provider = os.getenv("RESEARCH_PROVIDER", "tavily")
-        self.research_enable_content_extraction = os.getenv(
-            "RESEARCH_ENABLE_CONTENT_EXTRACTION", "true"
-        ).lower() == "true"
-        self.research_max_content_length = int(
-            os.getenv("RESEARCH_MAX_CONTENT_LENGTH", "50000")
+        self.research_enable_content_extraction = (
+            os.getenv("RESEARCH_ENABLE_CONTENT_EXTRACTION", "true").lower() == "true"
         )
-        self.research_extraction_timeout = int(
-            os.getenv("RESEARCH_EXTRACTION_TIMEOUT", "30")
-        )
+        self.research_max_content_length = int(os.getenv("RESEARCH_MAX_CONTENT_LENGTH", "50000"))
+        self.research_extraction_timeout = int(os.getenv("RESEARCH_EXTRACTION_TIMEOUT", "30"))
 
         # SearXNG
         self.searxng_host = os.getenv("SEARXNG_HOST")
@@ -161,6 +166,7 @@ class SimpleAIConfig:
 
     def is_provider_available(self, provider: str) -> bool:
         return provider in self.get_available_providers()
+
 
 # Global instances
 app_config = SimpleConfig()

@@ -116,9 +116,7 @@ class ImageMatcher:
             logger.error(f"Failed to rank images: {e}")
             return images
 
-    async def _calculate_match_score(
-        self, query_keywords: List[str], image: ImageInfo
-    ) -> float:
+    async def _calculate_match_score(self, query_keywords: List[str], image: ImageInfo) -> float:
         """计算图片匹配分数"""
         total_score = 0.0
 
@@ -142,9 +140,7 @@ class ImageMatcher:
             return total_score
 
         except Exception as e:
-            logger.error(
-                f"Failed to calculate match score for image {image.image_id}: {e}"
-            )
+            logger.error(f"Failed to calculate match score for image {image.image_id}: {e}")
             return 0.0
 
     def _extract_keywords(self, text: str) -> List[str]:
@@ -159,15 +155,11 @@ class ImageMatcher:
         words = re.findall(r"\b\w+\b", text)
 
         # 过滤停用词和短词
-        keywords = [
-            word for word in words if word not in self.stop_words and len(word) > 1
-        ]
+        keywords = [word for word in words if word not in self.stop_words and len(word) > 1]
 
         return keywords
 
-    def _calculate_keyword_score(
-        self, query_keywords: List[str], image: ImageInfo
-    ) -> float:
+    def _calculate_keyword_score(self, query_keywords: List[str], image: ImageInfo) -> float:
         """计算关键词匹配分数"""
         if not query_keywords:
             return 0.0
@@ -188,9 +180,7 @@ class ImageMatcher:
 
         return match_ratio
 
-    def _calculate_tag_score(
-        self, query_keywords: List[str], image: ImageInfo
-    ) -> float:
+    def _calculate_tag_score(self, query_keywords: List[str], image: ImageInfo) -> float:
         """计算标签匹配分数"""
         if not query_keywords or not image.tags:
             return 0.0
@@ -217,9 +207,7 @@ class ImageMatcher:
 
         return total_score / total_weight if total_weight > 0 else 0.0
 
-    def _calculate_description_score(
-        self, query_keywords: List[str], image: ImageInfo
-    ) -> float:
+    def _calculate_description_score(self, query_keywords: List[str], image: ImageInfo) -> float:
         """计算描述匹配分数"""
         if not query_keywords:
             return 0.0
@@ -347,18 +335,13 @@ class ImageMatcher:
         ):
             return "data"
         elif any(
-            word in content_lower
-            for word in ["技术", "科技", "创新", "technology", "innovation"]
+            word in content_lower for word in ["技术", "科技", "创新", "technology", "innovation"]
         ):
             return "technology"
-        elif any(
-            word in content_lower
-            for word in ["商业", "业务", "市场", "business", "market"]
-        ):
+        elif any(word in content_lower for word in ["商业", "业务", "市场", "business", "market"]):
             return "business"
         elif any(
-            word in content_lower
-            for word in ["教育", "学习", "培训", "education", "learning"]
+            word in content_lower for word in ["教育", "学习", "培训", "education", "learning"]
         ):
             return "education"
         else:
@@ -440,9 +423,7 @@ class ImageMatcher:
         total_checks = len(type_words)
 
         for word in type_words:
-            if any(word in tag for tag in image_tags) or any(
-                word in kw for kw in image_keywords
-            ):
+            if any(word in tag for tag in image_tags) or any(word in kw for kw in image_keywords):
                 matches += 1
 
         return matches / total_checks if total_checks > 0 else 0.0
@@ -473,9 +454,7 @@ class ImageMatcher:
 
         return min(matches / len(theme_words), 1.0) if theme_words else 0.0
 
-    def _calculate_description_score(
-        self, query_keywords: List[str], image: ImageInfo
-    ) -> float:
+    def _calculate_description_score(self, query_keywords: List[str], image: ImageInfo) -> float:
         """计算描述匹配分数"""
         if not query_keywords:
             return 0.0
@@ -606,18 +585,13 @@ class ImageMatcher:
         ):
             return "data"
         elif any(
-            word in content_lower
-            for word in ["技术", "科技", "创新", "technology", "innovation"]
+            word in content_lower for word in ["技术", "科技", "创新", "technology", "innovation"]
         ):
             return "technology"
-        elif any(
-            word in content_lower
-            for word in ["商业", "业务", "市场", "business", "market"]
-        ):
+        elif any(word in content_lower for word in ["商业", "业务", "市场", "business", "market"]):
             return "business"
         elif any(
-            word in content_lower
-            for word in ["教育", "学习", "培训", "education", "learning"]
+            word in content_lower for word in ["教育", "学习", "培训", "education", "learning"]
         ):
             return "education"
         else:
@@ -699,9 +673,7 @@ class ImageMatcher:
         total_checks = len(type_words)
 
         for word in type_words:
-            if any(word in tag for tag in image_tags) or any(
-                word in kw for kw in image_keywords
-            ):
+            if any(word in tag for tag in image_tags) or any(word in kw for kw in image_keywords):
                 matches += 1
 
         return matches / total_checks if total_checks > 0 else 0.0

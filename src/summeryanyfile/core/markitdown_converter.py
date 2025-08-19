@@ -94,8 +94,7 @@ class MarkItDownConverter:
                     from .magic_pdf_converter import MagicPDFConverter
                 except ImportError:
                     # 如果相对导入失败，尝试绝对导入
-                    from summeryanyfile.core.magic_pdf_converter import \
-                        MagicPDFConverter
+                    from summeryanyfile.core.magic_pdf_converter import MagicPDFConverter
 
                 self._magic_pdf_converter = MagicPDFConverter()
                 if self._magic_pdf_converter.is_available():
@@ -137,9 +136,7 @@ class MarkItDownConverter:
             is_cached, md5_hash = self._cache_manager.is_cached(file_path)
             if is_cached and md5_hash:
                 logger.info(f"使用缓存的转换结果: {md5_hash}")
-                cached_content, cached_metadata = (
-                    self._cache_manager.get_cached_content(md5_hash)
-                )
+                cached_content, cached_metadata = self._cache_manager.get_cached_content(md5_hash)
 
                 if cached_content:
                     # 从缓存元数据中获取编码信息
@@ -157,13 +154,9 @@ class MarkItDownConverter:
                 if magic_pdf_converter:
                     try:
                         logger.info(f"使用Magic-PDF转换PDF文件: {file_path}")
-                        content, encoding = magic_pdf_converter.convert_pdf_file(
-                            file_path
-                        )
+                        content, encoding = magic_pdf_converter.convert_pdf_file(file_path)
                         if content.strip():
-                            logger.info(
-                                f"Magic-PDF转换成功，内容长度: {len(content)} 字符"
-                            )
+                            logger.info(f"Magic-PDF转换成功，内容长度: {len(content)} 字符")
 
                             # 保存到缓存
                             if self.enable_cache and self._cache_manager:

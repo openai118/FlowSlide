@@ -305,9 +305,7 @@ class SemanticChunker(BaseChunker):
 
         return chunks
 
-    def _fallback_chunking(
-        self, text: str, metadata: Dict[str, Any]
-    ) -> List[DocumentChunk]:
+    def _fallback_chunking(self, text: str, metadata: Dict[str, Any]) -> List[DocumentChunk]:
         """
         当Markdown解析失败时的回退分块方法
 
@@ -332,9 +330,7 @@ class SemanticChunker(BaseChunker):
                 continue
 
             # 检查添加此段落是否会超过块大小
-            potential_chunk = (
-                current_chunk + "\n\n" + paragraph if current_chunk else paragraph
-            )
+            potential_chunk = current_chunk + "\n\n" + paragraph if current_chunk else paragraph
 
             if len(potential_chunk) <= self.chunk_size:
                 current_chunk = potential_chunk

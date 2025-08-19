@@ -14,12 +14,21 @@ from ..services.deep_research_service import DEEPResearchService
 from ..services.file_processor import FileProcessor
 from ..services.research_report_generator import ResearchReportGenerator
 from ..services.service_instances import ppt_service
-from .models import (FileOutlineGenerationRequest,
-                     FileOutlineGenerationResponse, FileUploadResponse,
-                     PPTGenerationRequest, PPTGenerationResponse, PPTOutline,
-                     PPTProject, PPTScenario, ProjectListResponse,
-                     SlideContent, TemplateSelectionRequest,
-                     TemplateSelectionResponse, TodoBoard)
+from .models import (
+    FileOutlineGenerationRequest,
+    FileOutlineGenerationResponse,
+    FileUploadResponse,
+    PPTGenerationRequest,
+    PPTGenerationResponse,
+    PPTOutline,
+    PPTProject,
+    PPTScenario,
+    ProjectListResponse,
+    SlideContent,
+    TemplateSelectionRequest,
+    TemplateSelectionResponse,
+    TodoBoard,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -67,9 +76,7 @@ def reload_research_service():
             _research_service = None
     else:
         # If service doesn't exist, force recreation on next access
-        logger.info(
-            "Research service will be recreated on next access with new configuration"
-        )
+        logger.info("Research service will be recreated on next access with new configuration")
 
 
 def get_report_generator():
@@ -89,8 +96,7 @@ def get_enhanced_research_service():
     global _enhanced_research_service
     if _enhanced_research_service is None:
         try:
-            from ..services.research.enhanced_research_service import \
-                EnhancedResearchService
+            from ..services.research.enhanced_research_service import EnhancedResearchService
 
             _enhanced_research_service = EnhancedResearchService()
             logger.info("Enhanced research service initialized successfully")
@@ -104,8 +110,7 @@ def get_enhanced_report_generator():
     global _enhanced_report_generator
     if _enhanced_report_generator is None:
         try:
-            from ..services.research.enhanced_report_generator import \
-                EnhancedReportGenerator
+            from ..services.research.enhanced_report_generator import EnhancedReportGenerator
 
             _enhanced_report_generator = EnhancedReportGenerator()
             logger.info("Enhanced report generator initialized successfully")
@@ -136,8 +141,7 @@ async def get_ai_providers():
         "default_provider": ai_config.default_ai_provider,
         "available_providers": all_providers,
         "provider_status": {
-            provider: ai_config.is_provider_available(provider)
-            for provider in all_providers
+            provider: ai_config.is_provider_available(provider) for provider in all_providers
         },
     }
 
@@ -200,9 +204,7 @@ async def test_ai_provider(provider_name: str, request: Request):
                                 "provider": provider_name,
                                 "status": "success",
                                 "model": model,
-                                "response_preview": data["choices"][0]["message"][
-                                    "content"
-                                ],
+                                "response_preview": data["choices"][0]["message"]["content"],
                                 "usage": data.get("usage", {}),
                             }
                         else:
@@ -236,9 +238,7 @@ async def test_ai_provider(provider_name: str, request: Request):
             "status": "success",
             "model": response.model,
             "response_preview": (
-                response.content[:100] + "..."
-                if len(response.content) > 100
-                else response.content
+                response.content[:100] + "..." if len(response.content) > 100 else response.content
             ),
             "usage": response.usage,
         }
@@ -384,9 +384,7 @@ async def generate_outline(request: PPTGenerationRequest):
         return {"outline": outline, "status": "success"}
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error generating outline: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error generating outline: {str(e)}")
 
 
 # New Project Management Endpoints
@@ -404,9 +402,7 @@ async def create_project(request: PPTGenerationRequest):
 
 
 @router.get("/projects", response_model=ProjectListResponse)
-async def list_projects(
-    page: int = 1, page_size: int = 10, status: Optional[str] = None
-):
+async def list_projects(page: int = 1, page_size: int = 10, status: Optional[str] = None):
     """List projects with pagination"""
     try:
         return await ppt_service.project_manager.list_projects(page, page_size, status)
@@ -442,9 +438,7 @@ async def get_project_todo_board(project_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error getting TODO board: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error getting TODO board: {str(e)}")
 
 
 @router.put("/projects/{project_id}/stages/{stage_id}")
@@ -459,9 +453,7 @@ async def update_project_stage(project_id: str, stage_id: str, request: Request)
         if not status:
             raise HTTPException(status_code=422, detail="Status is required")
 
-        success = await ppt_service.update_project_stage(
-            project_id, stage_id, status, progress
-        )
+        success = await ppt_service.update_project_stage(project_id, stage_id, status, progress)
         if not success:
             raise HTTPException(status_code=404, detail="Project or stage not found")
         return {"status": "success", "message": "Stage updated successfully"}
@@ -506,9 +498,7 @@ async def continue_from_stage(project_id: str, request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error continuing from stage: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error continuing from stage: {str(e)}")
 
 
 @router.post("/projects/{project_id}/slides/{slide_index}/lock")
@@ -549,18 +539,14 @@ async def get_project_versions(project_id: str):
         return {"versions": versions, "status": "success"}
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error getting project versions: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error getting project versions: {str(e)}")
 
 
 @router.post("/projects/{project_id}/versions/{version}/restore")
 async def restore_project_version(project_id: str, version: int):
     """Restore project to a specific version"""
     try:
-        success = await ppt_service.project_manager.restore_project_version(
-            project_id, version
-        )
+        success = await ppt_service.project_manager.restore_project_version(project_id, version)
         if not success:
             raise HTTPException(status_code=404, detail="Project or version not found")
         return {"status": "success", "message": "Project restored successfully"}
@@ -568,9 +554,7 @@ async def restore_project_version(project_id: str, version: int):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error restoring project version: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error restoring project version: {str(e)}")
 
 
 @router.delete("/projects/{project_id}")
@@ -600,9 +584,7 @@ async def archive_project(project_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error archiving project: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error archiving project: {str(e)}")
 
 
 # File Upload Endpoints
@@ -687,9 +669,7 @@ async def create_project_from_upload(
 
         try:
             # Process file
-            file_result = await file_processor.process_file(
-                temp_file_path, file.filename
-            )
+            file_result = await file_processor.process_file(temp_file_path, file.filename)
 
             # Create PPT request from content
             ppt_data = await file_processor.create_ppt_from_content(
@@ -720,9 +700,7 @@ async def create_project_from_upload(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error creating project from upload: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error creating project from upload: {str(e)}")
 
 
 @router.post("/upload/analyze")
@@ -747,9 +725,7 @@ async def analyze_uploaded_content(file: UploadFile = File(...)):
 
         try:
             # Process file
-            file_result = await file_processor.process_file(
-                temp_file_path, file.filename
-            )
+            file_result = await file_processor.process_file(temp_file_path, file.filename)
 
             # Create suggested PPT structure
             ppt_suggestion = await file_processor.create_ppt_from_content(
@@ -781,9 +757,7 @@ async def generate_slides(outline: PPTOutline, scenario: str = "general"):
         return {"slides_html": slides_html, "status": "success"}
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error generating slides: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error generating slides: {str(e)}")
 
 
 @router.post("/files/generate-outline", response_model=FileOutlineGenerationResponse)
@@ -877,12 +851,8 @@ async def upload_file_and_generate_outline(
         )
 
 
-@router.post(
-    "/projects/{project_id}/select-template", response_model=TemplateSelectionResponse
-)
-async def select_global_template_for_project(
-    project_id: str, request: TemplateSelectionRequest
-):
+@router.post("/projects/{project_id}/select-template", response_model=TemplateSelectionResponse)
+async def select_global_template_for_project(project_id: str, request: TemplateSelectionRequest):
     """为项目选择全局母版模板"""
     try:
         # 验证项目ID匹配
@@ -902,9 +872,7 @@ async def select_global_template_for_project(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to select template: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to select template: {str(e)}")
 
 
 @router.get("/projects/{project_id}/selected-template")
@@ -919,9 +887,7 @@ async def get_selected_global_template(project_id: str):
         return {"selected_template": template}
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get selected template: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get selected template: {str(e)}")
 
 
 # 文件缓存管理端点
@@ -970,9 +936,7 @@ async def get_research_status():
         }
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error getting research status: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error getting research status: {str(e)}")
 
 
 @router.post("/research/conduct")
@@ -1027,9 +991,7 @@ async def list_research_reports():
     try:
         report_generator = get_report_generator()
         if not report_generator:
-            raise HTTPException(
-                status_code=503, detail="Report generator not available"
-            )
+            raise HTTPException(status_code=503, detail="Report generator not available")
 
         reports = report_generator.list_saved_reports()
         return {
@@ -1051,9 +1013,7 @@ async def delete_research_report(filename: str):
     try:
         report_generator = get_report_generator()
         if not report_generator:
-            raise HTTPException(
-                status_code=503, detail="Report generator not available"
-            )
+            raise HTTPException(status_code=503, detail="Report generator not available")
 
         success = report_generator.delete_report(filename)
         if not success:
@@ -1073,9 +1033,7 @@ async def get_reports_directory():
     try:
         report_generator = get_report_generator()
         if not report_generator:
-            raise HTTPException(
-                status_code=503, detail="Report generator not available"
-            )
+            raise HTTPException(status_code=503, detail="Report generator not available")
 
         directory = report_generator.get_reports_directory()
         return {
@@ -1087,9 +1045,7 @@ async def get_reports_directory():
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error getting directory: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error getting directory: {str(e)}")
 
 
 # Enhanced Research API Endpoints
@@ -1107,9 +1063,7 @@ async def conduct_enhanced_research(topic: str, language: str = "zh"):
             )
 
         # Conduct enhanced research
-        enhanced_report = await enhanced_service.conduct_enhanced_research(
-            topic, language
-        )
+        enhanced_report = await enhanced_service.conduct_enhanced_research(topic, language)
 
         # Save enhanced report
         report_path = None
@@ -1143,9 +1097,7 @@ async def conduct_enhanced_research(topic: str, language: str = "zh"):
         raise
     except Exception as e:
         logger.error(f"Enhanced research failed: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Enhanced research failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Enhanced research failed: {str(e)}")
 
 
 @router.get("/research/enhanced/status")
@@ -1185,9 +1137,7 @@ async def get_available_research_providers():
             # Check content extraction
             from ...core.config import ai_config
 
-            providers["content_extraction"] = (
-                ai_config.research_enable_content_extraction
-            )
+            providers["content_extraction"] = ai_config.research_enable_content_extraction
 
         return {
             "success": True,
@@ -1198,6 +1148,4 @@ async def get_available_research_providers():
 
     except Exception as e:
         logger.error(f"Error getting research providers: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Error getting research providers: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error getting research providers: {str(e)}")

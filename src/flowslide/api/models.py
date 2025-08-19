@@ -16,9 +16,7 @@ class ChatMessage(BaseModel):
         ..., description="The role of the message author"
     )
     content: str = Field(..., description="The content of the message")
-    name: Optional[str] = Field(
-        None, description="The name of the author of this message"
-    )
+    name: Optional[str] = Field(None, description="The name of the author of this message")
 
 
 class ChatCompletionRequest(BaseModel):
@@ -26,21 +24,15 @@ class ChatCompletionRequest(BaseModel):
     messages: List[ChatMessage] = Field(
         ..., description="A list of messages comprising the conversation so far"
     )
-    temperature: Optional[float] = Field(
-        1.0, ge=0, le=2, description="Sampling temperature"
-    )
+    temperature: Optional[float] = Field(1.0, ge=0, le=2, description="Sampling temperature")
     max_tokens: Optional[int] = Field(
         None, gt=0, description="Maximum number of tokens to generate"
     )
-    top_p: Optional[float] = Field(
-        1.0, ge=0, le=1, description="Nucleus sampling parameter"
-    )
+    top_p: Optional[float] = Field(1.0, ge=0, le=1, description="Nucleus sampling parameter")
     n: Optional[int] = Field(
         1, ge=1, le=128, description="Number of chat completion choices to generate"
     )
-    stream: Optional[bool] = Field(
-        False, description="Whether to stream back partial progress"
-    )
+    stream: Optional[bool] = Field(False, description="Whether to stream back partial progress")
     stop: Optional[Union[str, List[str]]] = Field(
         None, description="Up to 4 sequences where the API will stop generating"
     )
@@ -50,9 +42,7 @@ class ChatCompletionRequest(BaseModel):
     frequency_penalty: Optional[float] = Field(
         0, ge=-2, le=2, description="Frequency penalty parameter"
     )
-    user: Optional[str] = Field(
-        None, description="A unique identifier representing your end-user"
-    )
+    user: Optional[str] = Field(None, description="A unique identifier representing your end-user")
 
 
 class CompletionRequest(BaseModel):
@@ -60,21 +50,11 @@ class CompletionRequest(BaseModel):
     prompt: Union[str, List[str]] = Field(
         ..., description="The prompt(s) to generate completions for"
     )
-    temperature: Optional[float] = Field(
-        1.0, ge=0, le=2, description="Sampling temperature"
-    )
-    max_tokens: Optional[int] = Field(
-        16, gt=0, description="Maximum number of tokens to generate"
-    )
-    top_p: Optional[float] = Field(
-        1.0, ge=0, le=1, description="Nucleus sampling parameter"
-    )
-    n: Optional[int] = Field(
-        1, ge=1, le=128, description="Number of completions to generate"
-    )
-    stream: Optional[bool] = Field(
-        False, description="Whether to stream back partial progress"
-    )
+    temperature: Optional[float] = Field(1.0, ge=0, le=2, description="Sampling temperature")
+    max_tokens: Optional[int] = Field(16, gt=0, description="Maximum number of tokens to generate")
+    top_p: Optional[float] = Field(1.0, ge=0, le=1, description="Nucleus sampling parameter")
+    n: Optional[int] = Field(1, ge=1, le=128, description="Number of completions to generate")
+    stream: Optional[bool] = Field(False, description="Whether to stream back partial progress")
     stop: Optional[Union[str, List[str]]] = Field(
         None, description="Up to 4 sequences where the API will stop generating"
     )
@@ -84,9 +64,7 @@ class CompletionRequest(BaseModel):
     frequency_penalty: Optional[float] = Field(
         0, ge=-2, le=2, description="Frequency penalty parameter"
     )
-    user: Optional[str] = Field(
-        None, description="A unique identifier representing your end-user"
-    )
+    user: Optional[str] = Field(None, description="A unique identifier representing your end-user")
 
 
 class Usage(BaseModel):
@@ -144,20 +122,12 @@ class PPTGenerationRequest(BaseModel):
         False, description="Whether to use network mode for enhanced generation"
     )
     language: str = Field("zh", description="Language for the PPT content")
-    uploaded_content: Optional[str] = Field(
-        None, description="Content from uploaded files"
-    )
+    uploaded_content: Optional[str] = Field(None, description="Content from uploaded files")
     # 目标受众和风格相关参数
-    target_audience: Optional[str] = Field(
-        None, description="Target audience for the PPT"
-    )
-    ppt_style: str = Field(
-        "general", description="PPT style: 'general', 'conference', 'custom'"
-    )
+    target_audience: Optional[str] = Field(None, description="Target audience for the PPT")
+    ppt_style: str = Field("general", description="PPT style: 'general', 'conference', 'custom'")
     custom_style_prompt: Optional[str] = Field(None, description="Custom style prompt")
-    description: Optional[str] = Field(
-        None, description="Additional description or requirements"
-    )
+    description: Optional[str] = Field(None, description="Additional description or requirements")
     # 文件生成相关参数
     use_file_content: bool = Field(
         False, description="Whether to use uploaded file content for generation"
@@ -219,9 +189,7 @@ class PPTProject(BaseModel):
     outline: Optional[Dict[str, Any]] = None  # Changed to Dict for flexibility
     slides_html: Optional[str] = None
     slides_data: Optional[List[Dict[str, Any]]] = None  # Individual slide data
-    confirmed_requirements: Optional[Dict[str, Any]] = (
-        None  # Confirmed requirements from step 1
-    )
+    confirmed_requirements: Optional[Dict[str, Any]] = None  # Confirmed requirements from step 1
     project_metadata: Optional[Dict[str, Any]] = None  # 项目元数据，包括选择的模板ID等
     todo_board: Optional[TodoBoard] = None
     version: int = 1
@@ -285,12 +253,8 @@ class FileOutlineGenerationRequest(BaseModel):
     filename: str = Field(..., description="Original filename")
     topic: Optional[str] = Field(None, description="Custom topic override")
     scenario: str = Field("general", description="PPT scenario type")
-    requirements: Optional[str] = Field(
-        None, description="Specific requirements from user"
-    )
-    target_audience: Optional[str] = Field(
-        None, description="Target audience for the PPT"
-    )
+    requirements: Optional[str] = Field(None, description="Specific requirements from user")
+    target_audience: Optional[str] = Field(None, description="Target audience for the PPT")
     language: str = Field(
         "zh",
         description="Language for the PPT content: 'zh' for Chinese, 'en' for English",
@@ -298,21 +262,13 @@ class FileOutlineGenerationRequest(BaseModel):
     page_count_mode: str = Field(
         "ai_decide", description="Page count mode: 'ai_decide', 'custom_range', 'fixed'"
     )
-    min_pages: Optional[int] = Field(
-        8, description="Minimum pages for custom_range mode"
-    )
-    max_pages: Optional[int] = Field(
-        15, description="Maximum pages for custom_range mode"
-    )
+    min_pages: Optional[int] = Field(8, description="Minimum pages for custom_range mode")
+    max_pages: Optional[int] = Field(15, description="Maximum pages for custom_range mode")
     fixed_pages: Optional[int] = Field(10, description="Fixed page count")
-    ppt_style: str = Field(
-        "general", description="PPT style: 'general', 'conference', 'custom'"
-    )
+    ppt_style: str = Field("general", description="PPT style: 'general', 'conference', 'custom'")
     custom_style_prompt: Optional[str] = Field(None, description="Custom style prompt")
     file_processing_mode: str = Field("markitdown", description="File processing mode")
-    content_analysis_depth: str = Field(
-        "standard", description="Content analysis depth"
-    )
+    content_analysis_depth: str = Field("standard", description="Content analysis depth")
 
 
 class FileOutlineGenerationResponse(BaseModel):
@@ -336,32 +292,20 @@ class GlobalMasterTemplateCreate(BaseModel):
     template_name: str = Field(..., description="Template name (must be unique)")
     description: Optional[str] = Field("", description="Template description")
     html_template: str = Field(..., description="HTML template content")
-    tags: Optional[List[str]] = Field(
-        [], description="Template tags for categorization"
-    )
-    is_default: Optional[bool] = Field(
-        False, description="Whether this is the default template"
-    )
+    tags: Optional[List[str]] = Field([], description="Template tags for categorization")
+    is_default: Optional[bool] = Field(False, description="Whether this is the default template")
     created_by: Optional[str] = Field("user", description="Creator identifier")
 
 
 class GlobalMasterTemplateUpdate(BaseModel):
     """Request model for updating a global master template"""
 
-    template_name: Optional[str] = Field(
-        None, description="Template name (must be unique)"
-    )
+    template_name: Optional[str] = Field(None, description="Template name (must be unique)")
     description: Optional[str] = Field(None, description="Template description")
     html_template: Optional[str] = Field(None, description="HTML template content")
-    tags: Optional[List[str]] = Field(
-        None, description="Template tags for categorization"
-    )
-    is_default: Optional[bool] = Field(
-        None, description="Whether this is the default template"
-    )
-    is_active: Optional[bool] = Field(
-        None, description="Whether the template is active"
-    )
+    tags: Optional[List[str]] = Field(None, description="Template tags for categorization")
+    is_default: Optional[bool] = Field(None, description="Whether this is the default template")
+    is_active: Optional[bool] = Field(None, description="Whether the template is active")
 
 
 class GlobalMasterTemplateResponse(BaseModel):

@@ -12,9 +12,17 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 
-from ..models import (ImageFormat, ImageGenerationRequest, ImageInfo,
-                      ImageLicense, ImageMetadata, ImageOperationResult,
-                      ImageProvider, ImageSourceType, ImageTag)
+from ..models import (
+    ImageFormat,
+    ImageGenerationRequest,
+    ImageInfo,
+    ImageLicense,
+    ImageMetadata,
+    ImageOperationResult,
+    ImageProvider,
+    ImageSourceType,
+    ImageTag,
+)
 from .base import ImageGenerationProvider
 
 logger = logging.getLogger(__name__)
@@ -94,17 +102,13 @@ class PollinationsProvider(ImageGenerationProvider):
 
                         # 创建标签
                         tags = [
-                            ImageTag(
-                                name="ai-generated", category="type", source="system"
-                            ),
+                            ImageTag(name="ai-generated", category="type", source="system"),
                             ImageTag(
                                 name="pollinations",
                                 category="provider",
                                 source="system",
                             ),
-                            ImageTag(
-                                name=self.model, category="model", source="system"
-                            ),
+                            ImageTag(name=self.model, category="model", source="system"),
                         ]
 
                         # 保存图片到临时文件
@@ -136,9 +140,7 @@ class PollinationsProvider(ImageGenerationProvider):
                         )
                     else:
                         error_text = await response.text()
-                        logger.error(
-                            f"Pollinations API error {response.status}: {error_text}"
-                        )
+                        logger.error(f"Pollinations API error {response.status}: {error_text}")
                         return ImageOperationResult(
                             success=False,
                             message=f"API request failed with status {response.status}: {error_text}",
@@ -146,14 +148,10 @@ class PollinationsProvider(ImageGenerationProvider):
 
         except asyncio.TimeoutError:
             logger.error("Pollinations API request timeout")
-            return ImageOperationResult(
-                success=False, message="Request timeout. Please try again."
-            )
+            return ImageOperationResult(success=False, message="Request timeout. Please try again.")
         except Exception as e:
             logger.error(f"Pollinations generation error: {str(e)}")
-            return ImageOperationResult(
-                success=False, message=f"Generation failed: {str(e)}"
-            )
+            return ImageOperationResult(success=False, message=f"Generation failed: {str(e)}")
 
     def _build_api_url(self, request: ImageGenerationRequest) -> str:
         """构建API请求URL"""
@@ -271,9 +269,7 @@ class PollinationsProvider(ImageGenerationProvider):
                 headers["Authorization"] = f"Bearer {self.api_token}"
 
             # 简单的健康检查 - 尝试访问API基础URL
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=10)
-            ) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
                 # 使用一个简单的测试提示词
                 test_url = f"{self.api_base}/prompt/test?width=64&height=64"
                 async with session.head(test_url, headers=headers) as response:

@@ -37,13 +37,13 @@ class GraphNodes(LoggerMixin):
         elif page_count_mode == "custom_range" and min_pages and max_pages:
             result = f"【强制要求】必须严格控制在{min_pages}-{max_pages}页范围内，最少{min_pages}页，最多{max_pages}页，不能超出此范围"
         else:  # ai_decide
-            result = "根据内容的复杂度、深度和逻辑结构，自主决定最合适的页数，确保内容充实且逻辑清晰"
+            result = (
+                "根据内容的复杂度、深度和逻辑结构，自主决定最合适的页数，确保内容充实且逻辑清晰"
+            )
 
         return result
 
-    async def analyze_structure(
-        self, state: PPTState, config: RunnableConfig
-    ) -> Dict[str, Any]:
+    async def analyze_structure(self, state: PPTState, config: RunnableConfig) -> Dict[str, Any]:
         """
         分析文档结构节点
 
@@ -58,9 +58,7 @@ class GraphNodes(LoggerMixin):
 
         try:
             # 获取第一个文档块
-            first_chunk = (
-                state["document_chunks"][0] if state["document_chunks"] else ""
-            )
+            first_chunk = state["document_chunks"][0] if state["document_chunks"] else ""
 
             if not first_chunk.strip():
                 self.logger.warning("第一个文档块为空，使用默认结构")
@@ -90,9 +88,7 @@ class GraphNodes(LoggerMixin):
                 )
 
                 # 解析JSON响应
-                structure = self.json_parser.extract_json_from_response(
-                    structure_response
-                )
+                structure = self.json_parser.extract_json_from_response(structure_response)
 
                 # 验证结构
                 if not isinstance(structure, dict):
@@ -117,9 +113,7 @@ class GraphNodes(LoggerMixin):
                     "language": "中文",
                     "complexity": "中等",
                 },
-                "accumulated_context": (
-                    first_chunk[:500] if state["document_chunks"] else ""
-                ),
+                "accumulated_context": (first_chunk[:500] if state["document_chunks"] else ""),
             }
 
     async def generate_initial_outline(
@@ -140,9 +134,7 @@ class GraphNodes(LoggerMixin):
         try:
             # 准备输入
             structure_json = json.dumps(state["document_structure"], ensure_ascii=False)
-            first_chunk = (
-                state["document_chunks"][0] if state["document_chunks"] else ""
-            )
+            first_chunk = state["document_chunks"][0] if state["document_chunks"] else ""
 
             # 准备输入参数，包含页数范围、目标语言和项目信息
             chain_inputs = {
@@ -182,9 +174,7 @@ class GraphNodes(LoggerMixin):
                 **state,  # 保留所有原始状态
                 "ppt_title": outline.get("title", "学术演示"),
                 "total_pages": outline.get("total_pages", 15),
-                "page_count_mode": state.get(
-                    "page_count_mode", "estimated"
-                ),  # 保持原始页数模式
+                "page_count_mode": state.get("page_count_mode", "estimated"),  # 保持原始页数模式
                 "slides": outline.get("slides", []),
                 "current_index": 1,
             }
@@ -208,9 +198,7 @@ class GraphNodes(LoggerMixin):
                 "current_index": 1,
             }
 
-    async def refine_outline(
-        self, state: PPTState, config: RunnableConfig
-    ) -> Dict[str, Any]:
+    async def refine_outline(self, state: PPTState, config: RunnableConfig) -> Dict[str, Any]:
         """
         细化PPT大纲节点
 
@@ -271,9 +259,7 @@ class GraphNodes(LoggerMixin):
             )
 
             # 解析JSON响应
-            refined_outline = self.json_parser.extract_json_from_response(
-                refined_response
-            )
+            refined_outline = self.json_parser.extract_json_from_response(refined_response)
 
             # 验证和修复结构
             refined_outline = self.json_parser.validate_ppt_structure(refined_outline)
@@ -297,9 +283,7 @@ class GraphNodes(LoggerMixin):
             # 继续处理下一个块
             return {**state, "current_index": current_index + 1}
 
-    async def finalize_outline(
-        self, state: PPTState, config: RunnableConfig
-    ) -> Dict[str, Any]:
+    async def finalize_outline(self, state: PPTState, config: RunnableConfig) -> Dict[str, Any]:
         """
         最终优化PPT大纲节点
 

@@ -68,9 +68,7 @@ class ImageCacheManager:
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
 
-    def _get_cache_path(
-        self, source_type: ImageSourceType, provider: ImageProvider
-    ) -> Path:
+    def _get_cache_path(self, source_type: ImageSourceType, provider: ImageProvider) -> Path:
         """获取缓存路径"""
         if source_type == ImageSourceType.AI_GENERATED:
             if provider == ImageProvider.DALLE:
@@ -100,17 +98,13 @@ class ImageCacheManager:
         """生成图片内容哈希值"""
         return hashlib.sha256(image_data).hexdigest()
 
-    def _generate_cache_key(
-        self, image_info: ImageInfo, image_data: bytes = None
-    ) -> str:
+    def _generate_cache_key(self, image_info: ImageInfo, image_data: bytes = None) -> str:
         """生成缓存键 - 始终基于内容哈希"""
         if image_data:
             return self._generate_content_hash(image_data)
 
         # 如果没有图片数据，使用图片ID作为临时键（这种情况应该避免）
-        logger.warning(
-            f"Generating cache key without image data for {image_info.image_id}"
-        )
+        logger.warning(f"Generating cache key without image data for {image_info.image_id}")
         return hashlib.md5(f"temp_{image_info.image_id}".encode()).hexdigest()
 
     async def cache_image(self, image_info: ImageInfo, image_data: bytes) -> str:
@@ -145,9 +139,7 @@ class ImageCacheManager:
 
             # 选择存储路径 - 优先使用AI生成或网络搜索的路径
             if image_info.source_type.value in ["ai_generated", "web_search"]:
-                cache_path = self._get_cache_path(
-                    image_info.source_type, image_info.provider
-                )
+                cache_path = self._get_cache_path(image_info.source_type, image_info.provider)
             else:
                 # 对于本地上传，使用通用路径
                 cache_path = self.local_storage_dir / "user_uploads"
@@ -199,9 +191,7 @@ class ImageCacheManager:
         with open(file_path, "wb") as f:
             f.write(image_data)
 
-    async def get_cached_image(
-        self, cache_key: str
-    ) -> Optional[Tuple[ImageInfo, Path]]:
+    async def get_cached_image(self, cache_key: str) -> Optional[Tuple[ImageInfo, Path]]:
         """获取缓存的图片"""
         try:
             cache_info = self._cache_index.get(cache_key)
@@ -219,11 +209,14 @@ class ImageCacheManager:
             if not image_info:
                 # 如果没有元数据文件，创建一个基础的ImageInfo对象
                 # 这在PDF转换等场景下是正常的，只需要图片文件本身
-                logger.debug(
-                    f"No metadata found for {cache_key}, creating basic ImageInfo"
+                logger.debug(f"No metadata found for {cache_key}, creating basic ImageInfo")
+                from ..models import (
+                    ImageFormat,
+                    ImageInfo,
+                    ImageMetadata,
+                    ImageProvider,
+                    ImageSourceType,
                 )
-                from ..models import (ImageFormat, ImageInfo, ImageMetadata,
-                                      ImageProvider, ImageSourceType)
 
                 # 从文件路径推断基本信息
                 file_extension = file_path.suffix.lower()
@@ -266,9 +259,7 @@ class ImageCacheManager:
             logger.error(f"Failed to get cached image {cache_key}: {e}")
             return None
 
-    async def is_cached(
-        self, image_info: ImageInfo, image_data: bytes = None
-    ) -> Optional[str]:
+    async def is_cached(self, image_info: ImageInfo, image_data: bytes = None) -> Optional[str]:
         """检查图片是否已缓存"""
         # 如果有图片数据，使用内容哈希检查
         if image_data:
@@ -305,16 +296,12 @@ class ImageCacheManager:
             # 删除缩略图
             thumbnail_path = self.thumbnails_dir / f"{cache_key}.jpg"
             if thumbnail_path.exists():
-                await asyncio.get_event_loop().run_in_executor(
-                    None, thumbnail_path.unlink
-                )
+                await asyncio.get_event_loop().run_in_executor(None, thumbnail_path.unlink)
 
             # 删除元数据
             metadata_path = self.metadata_dir / f"{cache_key}.json"
             if metadata_path.exists():
-                await asyncio.get_event_loop().run_in_executor(
-                    None, metadata_path.unlink
-                )
+                await asyncio.get_event_loop().run_in_executor(None, metadata_path.unlink)
 
             # 从索引中移除
             del self._cache_index[cache_key]
@@ -340,9 +327,7 @@ class ImageCacheManager:
 
         await asyncio.get_event_loop().run_in_executor(None, _save)
 
-    async def _save_image_metadata_reference(
-        self, content_hash: str, image_info: ImageInfo
-    ):
+    async def _save_image_metadata_reference(self, content_hash: str, image_info: ImageInfo):
         """保存图片元数据引用 - 为同一内容的图片保存多个引用"""
         # 创建引用文件名：content_hash_image_id.json
         reference_filename = f"{content_hash}_{image_info.image_id}.json"
@@ -427,9 +412,7 @@ class ImageCacheManager:
                                 total_files += 1
 
                             except Exception as e:
-                                logger.warning(
-                                    f"Failed to process cache file {file_path}: {e}"
-                                )
+                                logger.warning(f"Failed to process cache file {file_path}: {e}")
 
             logger.debug(f"Loaded {total_files} cached images from filesystem")
 
@@ -464,8 +447,7 @@ class ImageCacheManager:
             file_path = Path(cache_info.file_path)
             source_type = (
                 file_path.parent.parent.name
-                if file_path.parent.parent.name
-                in ["ai_generated", "web_search", "local_storage"]
+                if file_path.parent.parent.name in ["ai_generated", "web_search", "local_storage"]
                 else "unknown"
             )
 
@@ -575,9 +557,7 @@ class ImageCacheManager:
                     content_hash_to_keys[content_hash].append((cache_key, cache_info))
 
                 except Exception as e:
-                    logger.warning(
-                        f"Failed to read file for deduplication {file_path}: {e}"
-                    )
+                    logger.warning(f"Failed to read file for deduplication {file_path}: {e}")
                     keys_to_remove.append(cache_key)
 
             # 对于每个内容哈希，保留最新的一个，删除其他的
@@ -589,17 +569,13 @@ class ImageCacheManager:
                     # 删除除了第一个（最新的）之外的所有条目
                     for cache_key, cache_info in key_info_list[1:]:
                         keys_to_remove.append(cache_key)
-                        logger.info(
-                            f"Marking duplicate cache entry for removal: {cache_key}"
-                        )
+                        logger.info(f"Marking duplicate cache entry for removal: {cache_key}")
 
             # 删除重复和无效的条目
             for cache_key in keys_to_remove:
                 await self.remove_from_cache(cache_key)
 
-            logger.info(
-                f"Removed {len(keys_to_remove)} duplicate/invalid cache entries"
-            )
+            logger.info(f"Removed {len(keys_to_remove)} duplicate/invalid cache entries")
             return len(keys_to_remove)
 
         except Exception as e:

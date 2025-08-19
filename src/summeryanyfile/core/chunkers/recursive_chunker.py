@@ -139,9 +139,7 @@ class RecursiveChunker(BaseChunker):
 
         for part in parts:
             # 检查添加这部分是否会超过限制
-            potential_chunk = (
-                current_chunk + separator + part if current_chunk else part
-            )
+            potential_chunk = current_chunk + separator + part if current_chunk else part
 
             if len(potential_chunk) <= self.chunk_size:
                 current_chunk = potential_chunk
@@ -164,9 +162,7 @@ class RecursiveChunker(BaseChunker):
 
         return chunks
 
-    def _add_overlap_to_chunks(
-        self, chunks: List[DocumentChunk]
-    ) -> List[DocumentChunk]:
+    def _add_overlap_to_chunks(self, chunks: List[DocumentChunk]) -> List[DocumentChunk]:
         """
         为块添加重叠
 

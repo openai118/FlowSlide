@@ -10,9 +10,15 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from ..api.models import (EnhancedPPTOutline, PPTGenerationRequest, PPTOutline,
-                          PPTProject, ProjectListResponse, TodoBoard,
-                          TodoStage)
+from ..api.models import (
+    EnhancedPPTOutline,
+    PPTGenerationRequest,
+    PPTOutline,
+    PPTProject,
+    ProjectListResponse,
+    TodoBoard,
+    TodoStage,
+)
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -47,9 +53,7 @@ class ProjectManager:
 
         return project
 
-    def _create_todo_board(
-        self, project_id: str, request: PPTGenerationRequest
-    ) -> TodoBoard:
+    def _create_todo_board(self, project_id: str, request: PPTGenerationRequest) -> TodoBoard:
         """Create initial TODO board with placeholder stages (will be updated after requirements confirmation)"""
         stages = [
             TodoStage(
@@ -189,17 +193,11 @@ class ProjectManager:
 
                 # Update current stage index if this stage is completed
                 if status == "completed" and i == todo_board.current_stage_index:
-                    todo_board.current_stage_index = min(
-                        i + 1, len(todo_board.stages) - 1
-                    )
+                    todo_board.current_stage_index = min(i + 1, len(todo_board.stages) - 1)
 
                 # Update overall progress
-                completed_stages = sum(
-                    1 for s in todo_board.stages if s.status == "completed"
-                )
-                todo_board.overall_progress = (
-                    completed_stages / len(todo_board.stages)
-                ) * 100
+                completed_stages = sum(1 for s in todo_board.stages if s.status == "completed")
+                todo_board.overall_progress = (completed_stages / len(todo_board.stages)) * 100
                 todo_board.updated_at = time.time()
 
                 # Also update the project's TODO board reference
@@ -229,9 +227,7 @@ class ProjectManager:
 
         return False
 
-    async def save_project_version(
-        self, project_id: str, version_data: Dict[str, Any]
-    ) -> bool:
+    async def save_project_version(self, project_id: str, version_data: Dict[str, Any]) -> bool:
         """Save a version of the project"""
         project = self.projects.get(project_id)
         if not project:

@@ -12,7 +12,11 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from ..auth.middleware import get_current_admin_user, get_current_user_optional, get_current_user_required
+from ..auth.middleware import (
+    get_current_admin_user,
+    get_current_user_optional,
+    get_current_user_required,
+)
 from ..database.models import User
 from ..services.config_service import ConfigService, get_config_service
 
@@ -86,7 +90,11 @@ async def get_config_by_category(
         schema = config_service.get_config_schema()
         # Build a sub-schema for the category
         sub_schema = {k: v for k, v in schema.items() if v.get("category") == category}
-        return {"success": True, "config": _redact_with_schema(config, sub_schema), "category": category}
+        return {
+            "success": True,
+            "config": _redact_with_schema(config, sub_schema),
+            "category": category,
+        }
     except Exception as e:
         logger.error(f"Failed to get configuration for category {category}: {e}")
         raise HTTPException(
@@ -114,9 +122,7 @@ async def update_all_config(
         if success:
             return {"success": True, "message": "Configuration updated successfully"}
         else:
-            raise HTTPException(
-                status_code=500, detail="Failed to update configuration"
-            )
+            raise HTTPException(status_code=500, detail="Failed to update configuration")
 
     except Exception as e:
         logger.error(f"Failed to update configuration: {e}")
@@ -132,9 +138,7 @@ async def set_default_provider(
 ):
     """Set default AI provider"""
     try:
-        success = config_service.update_config(
-            {"default_ai_provider": request.provider}
-        )
+        success = config_service.update_config({"default_ai_provider": request.provider})
 
         if success:
             # Verify the configuration was applied
@@ -149,9 +153,7 @@ async def set_default_provider(
                 "config_applied": current_provider == request.provider,
             }
         else:
-            raise HTTPException(
-                status_code=500, detail="Failed to set default provider"
-            )
+            raise HTTPException(status_code=500, detail="Failed to set default provider")
 
     except Exception as e:
         logger.error(f"Failed to set default provider: {e}")
@@ -175,8 +177,12 @@ async def get_current_provider(
             logger.warning("Provider is None or empty, using default 'openai'")
             provider = "openai"
 
-        provider_config_raw = ai_config.get_provider_config() if hasattr(ai_config, "get_provider_config") else {}
-        provider_config = _heuristic_redact(provider_config_raw if isinstance(provider_config_raw, dict) else {})
+        provider_config_raw = (
+            ai_config.get_provider_config() if hasattr(ai_config, "get_provider_config") else {}
+        )
+        provider_config = _heuristic_redact(
+            provider_config_raw if isinstance(provider_config_raw, dict) else {}
+        )
 
         result = {
             "success": True,
@@ -201,9 +207,7 @@ async def get_config_schema(
         return {"success": True, "schema": schema}
     except Exception as e:
         logger.error(f"Failed to get configuration schema: {e}")
-        raise HTTPException(
-            status_code=500, detail="Failed to get configuration schema"
-        )
+        raise HTTPException(status_code=500, detail="Failed to get configuration schema")
 
 
 @router.post("/api/config/validate")
@@ -243,9 +247,7 @@ async def reset_config_category(
 
     except Exception as e:
         logger.error(f"Failed to reset configuration for category {category}: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to reset configuration for {category}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to reset configuration for {category}")
 
 
 @router.post("/api/config/reset")

@@ -158,9 +158,7 @@ class FileProcessor:
     async def _process_docx(self, file_path: str) -> str:
         """Process DOCX file"""
         if not DOCX_AVAILABLE:
-            raise ValueError(
-                "DOCX processing not available. Please install python-docx."
-            )
+            raise ValueError("DOCX processing not available. Please install python-docx.")
 
         def _process_docx_sync(file_path: str) -> str:
             """同步处理DOCX文件（在线程池中运行）"""
@@ -385,9 +383,7 @@ class FileProcessor:
                 scenario_scores[scenario] = score
 
         # Sort by score and return top scenarios
-        sorted_scenarios = sorted(
-            scenario_scores.items(), key=lambda x: x[1], reverse=True
-        )
+        sorted_scenarios = sorted(scenario_scores.items(), key=lambda x: x[1], reverse=True)
 
         # Return top 3 scenarios, or 'general' if no matches
         if sorted_scenarios:
@@ -465,36 +461,24 @@ class FileProcessor:
         paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
 
         # Create title slide
-        sections.append(
-            {"type": "title", "title": "文档内容展示", "subtitle": "基于上传文档生成"}
-        )
+        sections.append({"type": "title", "title": "文档内容展示", "subtitle": "基于上传文档生成"})
 
         # Create content slides (max 10)
         for i, paragraph in enumerate(paragraphs[:9]):
             if len(paragraph) > 50:  # Only use substantial paragraphs
                 # Try to extract a title from the first sentence
                 sentences = paragraph.split("。")
-                title = (
-                    sentences[0][:30] + "..."
-                    if len(sentences[0]) > 30
-                    else sentences[0]
-                )
+                title = sentences[0][:30] + "..." if len(sentences[0]) > 30 else sentences[0]
 
                 sections.append(
                     {
                         "type": "content",
                         "title": title or f"内容 {i+1}",
-                        "content": (
-                            paragraph[:300] + "..."
-                            if len(paragraph) > 300
-                            else paragraph
-                        ),
+                        "content": (paragraph[:300] + "..." if len(paragraph) > 300 else paragraph),
                     }
                 )
 
         # Add thank you slide
-        sections.append(
-            {"type": "thankyou", "title": "谢谢观看", "subtitle": "基于文档内容生成"}
-        )
+        sections.append({"type": "thankyou", "title": "谢谢观看", "subtitle": "基于文档内容生成"})
 
         return sections

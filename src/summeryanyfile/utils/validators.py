@@ -237,9 +237,7 @@ def validate_ppt_outline(outline_data: Dict[str, Any]) -> List[str]:
     # 验证基本字段
     if "title" not in outline_data:
         errors.append("缺少PPT标题")
-    elif (
-        not isinstance(outline_data["title"], str) or not outline_data["title"].strip()
-    ):
+    elif not isinstance(outline_data["title"], str) or not outline_data["title"].strip():
         errors.append("PPT标题必须是非空字符串")
 
     if "slides" not in outline_data:

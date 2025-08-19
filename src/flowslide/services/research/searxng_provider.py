@@ -53,9 +53,7 @@ class SearXNGSearchResponse:
     def __init__(self, data: Dict[str, Any]):
         self.query = data.get("query", "")
         self.number_of_results = data.get("number_of_results", 0)
-        self.results = [
-            SearXNGSearchResult(result) for result in data.get("results", [])
-        ]
+        self.results = [SearXNGSearchResult(result) for result in data.get("results", [])]
         self.answers = data.get("answers", [])
         self.corrections = data.get("corrections", [])
         self.infoboxes = data.get("infoboxes", [])
@@ -155,9 +153,7 @@ class SearXNGContentProvider:
             ) as session:
                 async with session.get(search_url, params=params) as response:
                     if response.status != 200:
-                        logger.error(
-                            f"SearXNG search failed with status {response.status}"
-                        )
+                        logger.error(f"SearXNG search failed with status {response.status}")
                         return None
 
                     data = await response.json()
@@ -172,9 +168,7 @@ class SearXNGContentProvider:
                     search_response.number_of_results, search_max_results
                 )
 
-            logger.info(
-                f"SearXNG search completed: {len(search_response.results)} results"
-            )
+            logger.info(f"SearXNG search completed: {len(search_response.results)} results")
             return search_response
 
         except asyncio.TimeoutError:

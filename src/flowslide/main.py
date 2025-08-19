@@ -9,25 +9,25 @@ import os
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import __version__ as FS_VERSION
 from .api.config_api import router as config_router
 from .api.database_api import router as database_router
+from .api.flowslide_api import router as flowslide_router
 from .api.global_master_template_api import router as template_api_router
 from .api.image_api import router as image_router
-from .api.flowslide_api import router as flowslide_router
 from .api.openai_compat import router as openai_router
 from .auth import auth_router, create_auth_middleware
-from .database.create_default_template import \
-    ensure_default_templates_exist_first_time
+from .database.create_default_template import ensure_default_templates_exist_first_time
 from .database.database import init_db
 from .web import router as web_router
-from . import __version__ as FS_VERSION
 
 # 条件导入监控模块
 try:
-    from .monitoring import metrics_endpoint, metrics_collector
+    from .monitoring import metrics_collector, metrics_endpoint
+
     MONITORING_ENABLED = True
 except ImportError as e:
     logger.warning(f"Monitoring disabled due to missing dependencies: {e}")
@@ -63,6 +63,7 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+
 # 安全响应头中间件（添加 X-Content-Type-Options 等）
 @app.middleware("http")
 async def add_security_headers(request, call_next):
@@ -84,11 +85,8 @@ async def add_security_headers(request, call_next):
         response.headers["Cross-Origin-Embedder-Policy"] = "unsafe-none"
     # 权限策略，按需最小化
     if "Permissions-Policy" not in response.headers:
-        response.headers[
-            "Permissions-Policy"
-        ] = "geolocation=(), microphone=(), camera=()"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     return response
-
 
 
 @app.on_event("startup")
@@ -96,8 +94,9 @@ async def startup_event():
     """Initialize database on startup"""
     try:
         # Get database path from config
-        from .core.simple_config import DATABASE_URL
         import urllib.parse
+
+        from .core.simple_config import DATABASE_URL
 
         # Extract database file path from URL
         parsed = urllib.parse.urlparse(DATABASE_URL)
@@ -117,9 +116,7 @@ async def startup_event():
 
         # Only import templates if database file didn't exist before (first time setup)
         if not db_exists:
-            logger.info(
-                "First time setup detected - importing templates from examples..."
-            )
+            logger.info("First time setup detected - importing templates from examples...")
             template_ids = await ensure_default_templates_exist_first_time()
             logger.info(
                 f"Template initialization completed. {len(template_ids)} templates available."
@@ -144,7 +141,10 @@ async def shutdown_event():
 
 # Add CORS middleware
 import os
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000,http://127.0.0.1:8000").split(",")
+
+allowed_origins = os.getenv(
+    "ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000,http://127.0.0.1:8000"
+).split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,  # Restrict origins in production
@@ -177,6 +177,7 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 # Add favicon route
 from fastapi.responses import FileResponse
 
+
 @app.get("/favicon.ico")
 async def favicon():
     """Serve favicon"""
@@ -186,7 +187,9 @@ async def favicon():
     else:
         # Return a simple 1x1 transparent PNG if favicon doesn't exist
         from fastapi import HTTPException
+
         raise HTTPException(status_code=404, detail="Favicon not found")
+
 
 # Mount temp directory for image cache with caching headers
 temp_dir = os.path.join(os.getcwd(), "temp")
@@ -198,9 +201,11 @@ else:
 
 # Add request monitoring middleware (if monitoring is enabled)
 if MONITORING_ENABLED:
+
     @app.middleware("http")
     async def monitor_requests(request, call_next):
         import time
+
         start_time = time.time()
 
         response = await call_next(request)
@@ -211,10 +216,11 @@ if MONITORING_ENABLED:
             method=request.method,
             endpoint=request.url.path,
             status_code=response.status_code,
-            duration=duration
+            duration=duration,
         )
 
         return response
+
 
 # Add caching middleware for static files
 @app.middleware("http")

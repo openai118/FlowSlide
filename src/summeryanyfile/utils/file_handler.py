@@ -22,13 +22,9 @@ class FileHandler:
         self.timeout = timeout
         self.max_size = max_size
         self.session = requests.Session()
-        self.session.headers.update(
-            {"User-Agent": "SummeryAnyFile/1.0 (Document Processing Tool)"}
-        )
+        self.session.headers.update({"User-Agent": "SummeryAnyFile/1.0 (Document Processing Tool)"})
 
-    def handle_input(
-        self, input_path: str, temp_dir: Optional[str] = None
-    ) -> Tuple[str, bool]:
+    def handle_input(self, input_path: str, temp_dir: Optional[str] = None) -> Tuple[str, bool]:
         """
         处理输入路径，支持本地文件和URL
 
@@ -74,17 +70,13 @@ class FileHandler:
 
         try:
             # 发送HEAD请求检查文件信息
-            head_response = self.session.head(
-                url, timeout=self.timeout, allow_redirects=True
-            )
+            head_response = self.session.head(url, timeout=self.timeout, allow_redirects=True)
             head_response.raise_for_status()
 
             # 检查文件大小
             content_length = head_response.headers.get("content-length")
             if content_length and int(content_length) > self.max_size:
-                raise ValueError(
-                    f"文件太大: {content_length} bytes (最大: {self.max_size} bytes)"
-                )
+                raise ValueError(f"文件太大: {content_length} bytes (最大: {self.max_size} bytes)")
 
             # 获取文件名
             filename = self._extract_filename_from_url(url, head_response.headers)
@@ -179,9 +171,7 @@ class FileHandler:
 
             # 提取主要内容
             main_content = (
-                soup.find("main")
-                or soup.find("article")
-                or soup.find("div", class_="content")
+                soup.find("main") or soup.find("article") or soup.find("div", class_="content")
             )
             if main_content:
                 text = main_content.get_text()

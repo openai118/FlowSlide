@@ -154,9 +154,7 @@ class ImageServiceConfig:
             self._config["stable_diffusion"]["api_key"] = os.getenv("STABILITY_API_KEY")
 
         if os.getenv("STABILITY_API_BASE"):
-            self._config["stable_diffusion"]["api_base"] = os.getenv(
-                "STABILITY_API_BASE"
-            )
+            self._config["stable_diffusion"]["api_base"] = os.getenv("STABILITY_API_BASE")
 
         # SiliconFlow配置
         if os.getenv("SILICONFLOW_API_KEY"):
@@ -188,9 +186,7 @@ class ImageServiceConfig:
 
             siliconflow_guidance = all_config.get("siliconflow_guidance_scale")
             if siliconflow_guidance:
-                self._config["siliconflow"]["default_guidance_scale"] = float(
-                    siliconflow_guidance
-                )
+                self._config["siliconflow"]["default_guidance_scale"] = float(siliconflow_guidance)
 
             # 加载Unsplash配置
             unsplash_access_key = all_config.get("unsplash_access_key")
@@ -219,17 +215,11 @@ class ImageServiceConfig:
 
         # Pollinations配置（环境变量）
         if os.getenv("POLLINATIONS_API_BASE"):
-            self._config["pollinations"]["api_base"] = os.getenv(
-                "POLLINATIONS_API_BASE"
-            )
+            self._config["pollinations"]["api_base"] = os.getenv("POLLINATIONS_API_BASE")
         if os.getenv("POLLINATIONS_API_TOKEN"):
-            self._config["pollinations"]["api_token"] = os.getenv(
-                "POLLINATIONS_API_TOKEN"
-            )
+            self._config["pollinations"]["api_token"] = os.getenv("POLLINATIONS_API_TOKEN")
         if os.getenv("POLLINATIONS_REFERRER"):
-            self._config["pollinations"]["referrer"] = os.getenv(
-                "POLLINATIONS_REFERRER"
-            )
+            self._config["pollinations"]["referrer"] = os.getenv("POLLINATIONS_REFERRER")
         if os.getenv("POLLINATIONS_MODEL"):
             self._config["pollinations"]["model"] = os.getenv("POLLINATIONS_MODEL")
 
@@ -256,9 +246,7 @@ class ImageServiceConfig:
             if pollinations_enhance is not None:
                 # 处理布尔值或字符串
                 if isinstance(pollinations_enhance, bool):
-                    self._config["pollinations"][
-                        "default_enhance"
-                    ] = pollinations_enhance
+                    self._config["pollinations"]["default_enhance"] = pollinations_enhance
                 else:
                     self._config["pollinations"]["default_enhance"] = (
                         str(pollinations_enhance).lower() == "true"
@@ -285,9 +273,7 @@ class ImageServiceConfig:
             pollinations_private = all_config.get("pollinations_private")
             if pollinations_private is not None:
                 if isinstance(pollinations_private, bool):
-                    self._config["pollinations"][
-                        "default_private"
-                    ] = pollinations_private
+                    self._config["pollinations"]["default_private"] = pollinations_private
                 else:
                     self._config["pollinations"]["default_private"] = (
                         str(pollinations_private).lower() == "true"
@@ -296,9 +282,7 @@ class ImageServiceConfig:
             pollinations_transparent = all_config.get("pollinations_transparent")
             if pollinations_transparent is not None:
                 if isinstance(pollinations_transparent, bool):
-                    self._config["pollinations"][
-                        "default_transparent"
-                    ] = pollinations_transparent
+                    self._config["pollinations"]["default_transparent"] = pollinations_transparent
                 else:
                     self._config["pollinations"]["default_transparent"] = (
                         str(pollinations_transparent).lower() == "true"
@@ -364,9 +348,7 @@ class ImageServiceConfig:
 
             config_service = get_config_service()
             all_config = config_service.get_all_config()
-            default_provider = all_config.get(
-                "default_network_search_provider", "unsplash"
-            )
+            default_provider = all_config.get("default_network_search_provider", "unsplash")
 
             # 如果是默认提供商，则启用
             return provider.lower() == default_provider.lower()

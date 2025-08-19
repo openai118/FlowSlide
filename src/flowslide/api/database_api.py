@@ -75,9 +75,7 @@ async def get_quick_health_check():
             "connection": result["checks"]["connection"]["status"],
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Quick health check failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Quick health check failed: {str(e)}")
 
 
 @router.get("/stats", response_model=DatabaseStatsResponse)
@@ -89,9 +87,7 @@ async def get_database_stats():
         result = await health_checker.get_database_stats()
         return DatabaseStatsResponse(**result)
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get database stats: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get database stats: {str(e)}")
 
 
 @router.get("/migrations/status", response_model=MigrationStatusResponse)
@@ -105,9 +101,7 @@ async def get_migration_status():
             raise HTTPException(status_code=500, detail=result["error"])
         return MigrationStatusResponse(**result)
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get migration status: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get migration status: {str(e)}")
 
 
 @router.post("/migrations/run")
@@ -121,9 +115,7 @@ async def run_migrations(target_version: Optional[str] = None, rollback: bool = 
     try:
         if rollback:
             if not target_version:
-                raise HTTPException(
-                    status_code=400, detail="Target version required for rollback"
-                )
+                raise HTTPException(status_code=400, detail="Target version required for rollback")
             success = await migration_manager.migrate_down(target_version)
             action = "rollback"
         else:
@@ -140,9 +132,7 @@ async def run_migrations(target_version: Optional[str] = None, rollback: bool = 
             raise HTTPException(status_code=500, detail=f"Database {action} failed")
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Migration operation failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Migration operation failed: {str(e)}")
 
 
 @router.get("/projects/summary")
@@ -176,15 +166,11 @@ async def get_projects_summary():
             "total_projects": total_projects,
             "status_distribution": status_counts,
             "scenario_distribution": scenario_counts,
-            "recent_projects": len(
-                [p for p in project_list.projects[:10]]
-            ),  # Last 10 projects
+            "recent_projects": len([p for p in project_list.projects[:10]]),  # Last 10 projects
         }
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get projects summary: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get projects summary: {str(e)}")
 
 
 @router.delete("/projects/{project_id}")
@@ -215,9 +201,7 @@ async def delete_project(project_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to delete project: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to delete project: {str(e)}")
 
 
 @router.post("/cleanup/orphaned")
@@ -337,6 +321,4 @@ async def get_backup_info():
             }
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get backup info: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get backup info: {str(e)}")

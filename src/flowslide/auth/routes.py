@@ -9,22 +9,23 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from ..core.simple_config import app_config
 from ..database.database import get_db
 from ..database.models import User
 from .auth_service import AuthService, get_auth_service
-from ..core.simple_config import app_config
 from .middleware import (
+    get_current_admin_user,
     get_current_user_optional,
     get_current_user_required,
-    get_current_admin_user,
 )
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Templates directory - use absolute path for better reliability  
+# Templates directory - use absolute path for better reliability
 import os
+
 template_dir = os.path.join(os.path.dirname(__file__), "..", "web", "templates")
 templates = Jinja2Templates(directory=template_dir)
 
@@ -85,6 +86,7 @@ async def login(
             if app_config.turnstile_secret_key and cf_turnstile_response:
                 try:
                     import httpx
+
                     resp = httpx.post(
                         "https://challenges.cloudflare.com/turnstile/v0/siteverify",
                         data={
@@ -102,6 +104,7 @@ async def login(
             if not verified and app_config.hcaptcha_secret_key and hcaptcha_response:
                 try:
                     import httpx
+
                     resp = httpx.post(
                         "https://hcaptcha.com/siteverify",
                         data={
@@ -153,9 +156,7 @@ async def login(
         # Set cookie max_age based on session expiration
         # If session_expire_minutes is 0, set cookie to never expire (None means session cookie)
         current_expire_minutes = auth_service._get_current_expire_minutes()
-        cookie_max_age = (
-            None if current_expire_minutes == 0 else current_expire_minutes * 60
-        )
+        cookie_max_age = None if current_expire_minutes == 0 else current_expire_minutes * 60
 
         response.set_cookie(
             key="session_id",
@@ -273,22 +274,16 @@ async def logout(
     if session_id:
         auth_service.logout_user(db, session_id)
 
-    response = RedirectResponse(
-        url="/auth/login?success=已成功退出登录", status_code=302
-    )
+    response = RedirectResponse(url="/auth/login?success=已成功退出登录", status_code=302)
     response.delete_cookie("session_id")
 
     return response
 
 
 @router.get("/auth/profile", response_class=HTMLResponse)
-async def profile_page(
-    request: Request, user: User = Depends(get_current_user_required)
-):
+async def profile_page(request: Request, user: User = Depends(get_current_user_required)):
     """User profile page"""
-    return templates.TemplateResponse(
-        "profile.html", {"request": request, "user": user.to_dict()}
-    )
+    return templates.TemplateResponse("profile.html", {"request": request, "user": user.to_dict()})
 
 
 @router.post("/auth/change-password")
@@ -420,7 +415,9 @@ async def api_create_user(
     auth_service: AuthService = Depends(get_auth_service),
 ):
     try:
-        user = auth_service.create_user(db, username=username, password=password, email=email, is_admin=is_admin)
+        user = auth_service.create_user(
+            db, username=username, password=password, email=email, is_admin=is_admin
+        )
         return {"success": True, "user": user.to_dict()}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

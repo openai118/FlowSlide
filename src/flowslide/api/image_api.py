@@ -11,8 +11,7 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
-                     UploadFile)
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -103,9 +102,7 @@ async def get_image_service_status(user: User = Depends(get_current_user_require
 
     except Exception as e:
         logger.error(f"Failed to get image service status: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get image service status: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get image service status: {str(e)}")
 
 
 @router.post("/api/image/test")
@@ -210,9 +207,7 @@ async def test_image_service(user: User = Depends(get_current_user_required)):
 
     except Exception as e:
         logger.error(f"Image service test failed: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Image service test failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Image service test failed: {str(e)}")
 
 
 @router.post("/api/image/cache/clear")
@@ -244,9 +239,7 @@ async def clear_image_cache(user: User = Depends(get_current_user_required)):
 
     except Exception as e:
         logger.error(f"Failed to clear image cache: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to clear image cache: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to clear image cache: {str(e)}")
 
 
 def _clear_cache_sync(cache_dir: Path) -> Dict[str, Any]:
@@ -287,8 +280,7 @@ async def generate_image(
         image_service = get_image_service()
 
         # 创建图片生成请求对象
-        from ..services.image.models import \
-            ImageGenerationRequest as ServiceImageGenerationRequest
+        from ..services.image.models import ImageGenerationRequest as ServiceImageGenerationRequest
         from ..services.image.models import ImageProvider
 
         # 解析尺寸
@@ -343,9 +335,7 @@ async def generate_image(
 
     except Exception as e:
         logger.error(f"Image generation failed: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Image generation failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Image generation failed: {str(e)}")
 
 
 @router.post("/api/image/suggest")
@@ -372,9 +362,7 @@ async def suggest_images(
 
     except Exception as e:
         logger.error(f"Image suggestion failed: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Image suggestion failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Image suggestion failed: {str(e)}")
 
 
 # 图库管理API
@@ -405,9 +393,7 @@ async def get_gallery_stats(user: User = Depends(get_current_user_required)):
 
     except Exception as e:
         logger.error(f"Failed to get gallery stats: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get gallery stats: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get gallery stats: {str(e)}")
 
 
 @router.get("/api/image/gallery/list")
@@ -450,15 +436,11 @@ async def list_gallery_images(
 
     except Exception as e:
         logger.error(f"Failed to list gallery images: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to list gallery images: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to list gallery images: {str(e)}")
 
 
 @router.get("/api/image/detail/{image_id}")
-async def get_image_detail(
-    image_id: str, user: User = Depends(get_current_user_required)
-):
+async def get_image_detail(image_id: str, user: User = Depends(get_current_user_required)):
     """获取图片详细信息"""
     try:
         image_service = get_image_service()
@@ -474,9 +456,7 @@ async def get_image_detail(
                 "title": image_info.title,
                 "description": image_info.description,
                 "tags": (
-                    ",".join([tag.name for tag in image_info.tags])
-                    if image_info.tags
-                    else ""
+                    ",".join([tag.name for tag in image_info.tags]) if image_info.tags else ""
                 ),
                 "category": image_info.source_type.value,
                 "filename": image_info.filename,
@@ -495,9 +475,7 @@ async def get_image_detail(
         raise
     except Exception as e:
         logger.error(f"Failed to get image detail: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get image detail: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get image detail: {str(e)}")
 
 
 @router.get("/api/image/{image_id}/info")
@@ -538,9 +516,7 @@ async def get_image_info(
         raise
     except Exception as e:
         logger.error(f"Failed to get image info: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get image info: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get image info: {str(e)}")
 
 
 @router.get("/api/image/view/{image_id}")
@@ -584,11 +560,7 @@ async def get_image_thumbnail(image_id: str):
 
         # 如果没有缩略图，返回原图
         image_info = await image_service.get_image(image_id)
-        if (
-            image_info
-            and image_info.local_path
-            and Path(image_info.local_path).exists()
-        ):
+        if image_info and image_info.local_path and Path(image_info.local_path).exists():
             return FileResponse(
                 path=str(image_info.local_path),
                 media_type=f"image/{image_info.metadata.format.value}",
@@ -600,15 +572,11 @@ async def get_image_thumbnail(image_id: str):
         raise
     except Exception as e:
         logger.error(f"Failed to get thumbnail: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get thumbnail: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get thumbnail: {str(e)}")
 
 
 @router.get("/api/image/download/{image_id}")
-async def download_image(
-    image_id: str, user: User = Depends(get_current_user_required)
-):
+async def download_image(image_id: str, user: User = Depends(get_current_user_required)):
     """下载单张图片"""
     try:
         image_service = get_image_service()
@@ -625,18 +593,14 @@ async def download_image(
             path=str(image_path),
             media_type=f"image/{image_info.metadata.format.value}",
             filename=image_info.filename,
-            headers={
-                "Content-Disposition": f'attachment; filename="{image_info.filename}"'
-            },
+            headers={"Content-Disposition": f'attachment; filename="{image_info.filename}"'},
         )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to download image: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to download image: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to download image: {str(e)}")
 
 
 class BatchDeleteRequest(BaseModel):
@@ -648,9 +612,7 @@ class BatchDownloadRequest(BaseModel):
 
 
 @router.delete("/api/image/delete/{image_id}")
-async def delete_single_image(
-    image_id: str, user: User = Depends(get_current_user_required)
-):
+async def delete_single_image(image_id: str, user: User = Depends(get_current_user_required)):
     """删除单张图片"""
     try:
         image_service = get_image_service()
@@ -789,9 +751,7 @@ async def upload_image(
             title=title if title else file.filename.split(".")[0],
             description=description,
             category=category,
-            tags=(
-                [tag.strip() for tag in tags.split(",") if tag.strip()] if tags else []
-            ),
+            tags=([tag.strip() for tag in tags.split(",") if tag.strip()] if tags else []),
             content_type=file.content_type,
         )
 
@@ -850,9 +810,7 @@ async def update_image_info(
             image_info.tags = []
             # 添加新标签
             if request.tags.strip():
-                tag_names = [
-                    tag.strip() for tag in request.tags.split(",") if tag.strip()
-                ]
+                tag_names = [tag.strip() for tag in request.tags.split(",") if tag.strip()]
                 for tag_name in tag_names:
                     image_info.add_tag(tag_name)
 
@@ -884,9 +842,7 @@ async def update_image_info(
                 "title": image_info.title,
                 "description": image_info.description,
                 "tags": (
-                    ",".join([tag.name for tag in image_info.tags])
-                    if image_info.tags
-                    else ""
+                    ",".join([tag.name for tag in image_info.tags]) if image_info.tags else ""
                 ),
                 "category": image_info.source_type.value,
             },
@@ -896,9 +852,7 @@ async def update_image_info(
         raise
     except Exception as e:
         logger.error(f"Failed to update image info: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to update image info: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to update image info: {str(e)}")
 
 
 @router.post("/api/image/gallery/deduplicate")
@@ -918,9 +872,7 @@ async def deduplicate_gallery(user: User = Depends(get_current_user_required)):
 
     except Exception as e:
         logger.error(f"Failed to deduplicate gallery: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to deduplicate gallery: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to deduplicate gallery: {str(e)}")
 
 
 @router.post("/api/image/gallery/clear-all")
@@ -947,6 +899,4 @@ async def clear_all_images(user: User = Depends(get_current_user_required)):
 
     except Exception as e:
         logger.error(f"Failed to clear all images: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to clear all images: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to clear all images: {str(e)}")

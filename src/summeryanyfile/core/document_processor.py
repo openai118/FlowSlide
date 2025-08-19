@@ -13,8 +13,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .chunkers import (DocumentChunk, FastChunker, HybridChunker,
-                       ParagraphChunker, RecursiveChunker, SemanticChunker)
+from .chunkers import (
+    DocumentChunk,
+    FastChunker,
+    HybridChunker,
+    ParagraphChunker,
+    RecursiveChunker,
+    SemanticChunker,
+)
 from .file_cache_manager import FileCacheManager
 from .markitdown_converter import MarkItDownConverter
 from .models import ChunkStrategy, DocumentInfo
@@ -78,9 +84,7 @@ class DocumentProcessor:
 
         # Markdown保存配置
         self.save_markdown = save_markdown
-        self.temp_dir = temp_dir or os.path.join(
-            tempfile.gettempdir(), "summeryanyfile_markdown"
-        )
+        self.temp_dir = temp_dir or os.path.join(tempfile.gettempdir(), "summeryanyfile_markdown")
 
         # 文件缓存配置
         self.enable_cache = enable_cache
@@ -103,9 +107,7 @@ class DocumentProcessor:
         if enable_cache:
             logger.info("文件缓存功能已启用")
 
-    def load_document(
-        self, file_path: str, encoding: Optional[str] = None
-    ) -> DocumentInfo:
+    def load_document(self, file_path: str, encoding: Optional[str] = None) -> DocumentInfo:
         """
         加载文档
 
@@ -139,9 +141,7 @@ class DocumentProcessor:
             is_cached, md5_hash = self._cache_manager.is_cached(file_path)
             if is_cached and md5_hash:
                 logger.info(f"使用缓存的文件处理结果: {md5_hash}")
-                cached_content, cached_metadata = (
-                    self._cache_manager.get_cached_content(md5_hash)
-                )
+                cached_content, cached_metadata = self._cache_manager.get_cached_content(md5_hash)
 
                 if cached_content:
                     # 从缓存元数据中恢复信息
@@ -149,12 +149,10 @@ class DocumentProcessor:
                         cached_metadata.get("processing_metadata", {}).get("file_type")
                         or self.SUPPORTED_EXTENSIONS[file_extension]
                     )
-                    detected_encoding = cached_metadata.get(
-                        "processing_metadata", {}
-                    ).get("detected_encoding", "utf-8")
-                    file_size = cached_metadata.get(
-                        "original_file_size", path.stat().st_size
+                    detected_encoding = cached_metadata.get("processing_metadata", {}).get(
+                        "detected_encoding", "utf-8"
                     )
+                    file_size = cached_metadata.get("original_file_size", path.stat().st_size)
 
                     # 如果启用了Markdown保存，也保存到temp目录
                     if self.save_markdown and cached_content.strip():
@@ -186,9 +184,7 @@ class DocumentProcessor:
                     "file_type": file_type,
                     "detected_encoding": detected_encoding,
                     "processing_method": (
-                        "markitdown"
-                        if file_extension in [".pdf", ".docx", ".pptx"]
-                        else "direct"
+                        "markitdown" if file_extension in [".pdf", ".docx", ".pptx"] else "direct"
                     ),
                 }
                 md5_hash = self._cache_manager.save_to_cache(
@@ -290,9 +286,7 @@ class DocumentProcessor:
         else:
             raise ValueError(f"不支持的文件类型: {file_type}")
 
-    def _extract_text_file(
-        self, file_path: str, encoding: Optional[str]
-    ) -> Tuple[str, str]:
+    def _extract_text_file(self, file_path: str, encoding: Optional[str]) -> Tuple[str, str]:
         """提取纯文本文件内容"""
         if encoding:
             try:
@@ -458,9 +452,7 @@ class DocumentProcessor:
         except ImportError:
             raise ImportError("请安装beautifulsoup4: pip install beautifulsoup4")
 
-    def _save_markdown_file(
-        self, original_file_path: str, markdown_content: str
-    ) -> str:
+    def _save_markdown_file(self, original_file_path: str, markdown_content: str) -> str:
         """保存Markdown文件到temp目录"""
         try:
             # 获取原文件名（不含扩展名）
@@ -479,9 +471,7 @@ class DocumentProcessor:
                 # 添加文件头信息
                 f.write(f"# {base_name}\n\n")
                 f.write(f"**原文件**: {original_file_path}\n")
-                f.write(
-                    f"**转换时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                )
+                f.write(f"**转换时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write(f"**转换工具**: MarkItDown\n\n")
                 f.write("---\n\n")
                 f.write(markdown_content)
@@ -699,9 +689,7 @@ class DocumentProcessor:
         else:
             return chunker.get_chunk_statistics(chunks)
 
-    def _chunk_by_paragraph(
-        self, text: str, chunk_size: int, chunk_overlap: int
-    ) -> List[str]:
+    def _chunk_by_paragraph(self, text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
         """基于段落的分块"""
         # 按段落分割
         paragraphs = re.split(r"\n\s*\n", text)
@@ -726,9 +714,7 @@ class DocumentProcessor:
 
                 # 如果单个段落太长，需要进一步分割
                 if len(para) > chunk_size:
-                    sub_chunks = self._split_long_paragraph(
-                        para, chunk_size, chunk_overlap
-                    )
+                    sub_chunks = self._split_long_paragraph(para, chunk_size, chunk_overlap)
                     chunks.extend(sub_chunks)
                     current_chunk = ""
                 else:
@@ -768,19 +754,13 @@ class DocumentProcessor:
 
         return chunks
 
-    def _chunk_by_semantic(
-        self, text: str, chunk_size: int, chunk_overlap: int
-    ) -> List[str]:
+    def _chunk_by_semantic(self, text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
         """语义分块（使用新的语义分块器）"""
-        chunker = self._get_chunker(
-            ChunkStrategy.SEMANTIC, chunk_size, chunk_overlap, None
-        )
+        chunker = self._get_chunker(ChunkStrategy.SEMANTIC, chunk_size, chunk_overlap, None)
         document_chunks = chunker.chunk_text(text)
         return [chunk.content for chunk in document_chunks]
 
-    def _chunk_recursive(
-        self, text: str, chunk_size: int, chunk_overlap: int
-    ) -> List[str]:
+    def _chunk_recursive(self, text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
         """递归分块"""
         if len(text) <= chunk_size:
             return [text]
@@ -800,12 +780,8 @@ class DocumentProcessor:
                     left_part = text[:split_pos].strip()
                     right_part = text[split_pos + len(separator) :].strip()
 
-                    left_chunks = self._chunk_recursive(
-                        left_part, chunk_size, chunk_overlap
-                    )
-                    right_chunks = self._chunk_recursive(
-                        right_part, chunk_size, chunk_overlap
-                    )
+                    left_chunks = self._chunk_recursive(left_part, chunk_size, chunk_overlap)
+                    right_chunks = self._chunk_recursive(right_part, chunk_size, chunk_overlap)
 
                     return left_chunks + right_chunks
 
@@ -813,9 +789,7 @@ class DocumentProcessor:
         mid_point = chunk_size
         return [text[:mid_point], text[mid_point:]]
 
-    def _chunk_hybrid(
-        self, text: str, chunk_size: int, chunk_overlap: int
-    ) -> List[str]:
+    def _chunk_hybrid(self, text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
         """混合策略分块"""
         # 首先尝试段落分块
         chunks = self._chunk_by_paragraph(text, chunk_size, chunk_overlap)
@@ -844,9 +818,7 @@ class DocumentProcessor:
 
             # 从前一个块的末尾提取重叠内容
             overlap_text = (
-                prev_chunk[-overlap_size:]
-                if len(prev_chunk) > overlap_size
-                else prev_chunk
+                prev_chunk[-overlap_size:] if len(prev_chunk) > overlap_size else prev_chunk
             )
 
             # 添加到当前块的开头

@@ -149,7 +149,12 @@ class AIConfig(BaseSettings):
                 "max_tokens": self.max_tokens,
             }
         # Default: return minimal
-        return {"model": self.openai_model, "temperature": self.temperature, "top_p": self.top_p, "max_tokens": self.max_tokens}
+        return {
+            "model": self.openai_model,
+            "temperature": self.temperature,
+            "top_p": self.top_p,
+            "max_tokens": self.max_tokens,
+        }
 
 
 # Global AI configuration instance
@@ -177,41 +182,25 @@ def reload_ai_config():
 
     # Force update the existing instance with new values from environment
     ai_config.openai_model = os.environ.get("OPENAI_MODEL", ai_config.openai_model)
-    ai_config.openai_base_url = os.environ.get(
-        "OPENAI_BASE_URL", ai_config.openai_base_url
-    )
-    ai_config.openai_api_key = os.environ.get(
-        "OPENAI_API_KEY", ai_config.openai_api_key
-    )
-    ai_config.anthropic_api_key = os.environ.get(
-        "ANTHROPIC_API_KEY", ai_config.anthropic_api_key
-    )
+    ai_config.openai_base_url = os.environ.get("OPENAI_BASE_URL", ai_config.openai_base_url)
+    ai_config.openai_api_key = os.environ.get("OPENAI_API_KEY", ai_config.openai_api_key)
+    ai_config.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", ai_config.anthropic_api_key)
     ai_config.anthropic_base_url = os.environ.get(
         "ANTHROPIC_BASE_URL", ai_config.anthropic_base_url
     )
-    ai_config.anthropic_model = os.environ.get(
-        "ANTHROPIC_MODEL", ai_config.anthropic_model
-    )
-    ai_config.google_api_key = os.environ.get(
-        "GOOGLE_API_KEY", ai_config.google_api_key
-    )
-    ai_config.google_base_url = os.environ.get(
-        "GOOGLE_BASE_URL", ai_config.google_base_url
-    )
+    ai_config.anthropic_model = os.environ.get("ANTHROPIC_MODEL", ai_config.anthropic_model)
+    ai_config.google_api_key = os.environ.get("GOOGLE_API_KEY", ai_config.google_api_key)
+    ai_config.google_base_url = os.environ.get("GOOGLE_BASE_URL", ai_config.google_base_url)
     ai_config.google_model = os.environ.get("GOOGLE_MODEL", ai_config.google_model)
     ai_config.default_ai_provider = os.environ.get(
         "DEFAULT_AI_PROVIDER", ai_config.default_ai_provider
     )
     ai_config.max_tokens = int(os.environ.get("MAX_TOKENS", str(ai_config.max_tokens)))
-    ai_config.temperature = float(
-        os.environ.get("TEMPERATURE", str(ai_config.temperature))
-    )
+    ai_config.temperature = float(os.environ.get("TEMPERATURE", str(ai_config.temperature)))
     ai_config.top_p = float(os.environ.get("TOP_P", str(ai_config.top_p)))
 
     # Update Tavily configuration
-    ai_config.tavily_api_key = os.environ.get(
-        "TAVILY_API_KEY", ai_config.tavily_api_key
-    )
+    ai_config.tavily_api_key = os.environ.get("TAVILY_API_KEY", ai_config.tavily_api_key)
     ai_config.tavily_max_results = int(
         os.environ.get("TAVILY_MAX_RESULTS", str(ai_config.tavily_max_results))
     )
@@ -230,17 +219,13 @@ def reload_ai_config():
     ai_config.searxng_max_results = int(
         os.environ.get("SEARXNG_MAX_RESULTS", str(ai_config.searxng_max_results))
     )
-    ai_config.searxng_language = os.environ.get(
-        "SEARXNG_LANGUAGE", ai_config.searxng_language
-    )
+    ai_config.searxng_language = os.environ.get("SEARXNG_LANGUAGE", ai_config.searxng_language)
     ai_config.searxng_timeout = int(
         os.environ.get("SEARXNG_TIMEOUT", str(ai_config.searxng_timeout))
     )
 
     # Update Research configuration
-    ai_config.research_provider = os.environ.get(
-        "RESEARCH_PROVIDER", ai_config.research_provider
-    )
+    ai_config.research_provider = os.environ.get("RESEARCH_PROVIDER", ai_config.research_provider)
     ai_config.research_enable_content_extraction = (
         os.environ.get(
             "RESEARCH_ENABLE_CONTENT_EXTRACTION",
@@ -249,14 +234,10 @@ def reload_ai_config():
         == "true"
     )
     ai_config.research_max_content_length = int(
-        os.environ.get(
-            "RESEARCH_MAX_CONTENT_LENGTH", str(ai_config.research_max_content_length)
-        )
+        os.environ.get("RESEARCH_MAX_CONTENT_LENGTH", str(ai_config.research_max_content_length))
     )
     ai_config.research_extraction_timeout = int(
-        os.environ.get(
-            "RESEARCH_EXTRACTION_TIMEOUT", str(ai_config.research_extraction_timeout)
-        )
+        os.environ.get("RESEARCH_EXTRACTION_TIMEOUT", str(ai_config.research_extraction_timeout))
     )
 
     ai_config.apryse_license_key = os.environ.get(

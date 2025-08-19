@@ -7,8 +7,7 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import (JSON, Boolean, Column, DateTime, Float, ForeignKey,
-                        Integer, String, Text)
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,9 +20,7 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    username: Mapped[str] = mapped_column(
-        String(50), unique=True, index=True, nullable=False
-    )
+    username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     email: Mapped[Optional[str]] = mapped_column(
         String(100), unique=True, index=True, nullable=True
@@ -36,12 +33,14 @@ class User(Base):
     def set_password(self, password: str):
         """Set password hash using bcrypt"""
         from passlib.context import CryptContext
+
         pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
         self.password_hash = pwd_context.hash(password)
 
     def check_password(self, password: str) -> bool:
         """Check if password is correct using bcrypt"""
         from passlib.context import CryptContext
+
         pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
         return pwd_context.verify(password, self.password_hash)
 
@@ -64,12 +63,8 @@ class UserSession(Base):
     __tablename__ = "user_sessions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    session_id: Mapped[str] = mapped_column(
-        String(128), unique=True, index=True, nullable=False
-    )
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False
-    )
+    session_id: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
     expires_at: Mapped[float] = mapped_column(Float, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -80,9 +75,7 @@ class UserSession(Base):
     def is_expired(self) -> bool:
         """Check if session is expired"""
         # If expires_at is set to year 2099 or later, consider it as never expires
-        year_2099_timestamp = time.mktime(
-            time.strptime("2099-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")
-        )
+        year_2099_timestamp = time.mktime(time.strptime("2099-01-01 00:00:00", "%Y-%m-%d %H:%M:%S"))
         if self.expires_at >= year_2099_timestamp:
             return False
         return time.time() > self.expires_at
@@ -101,23 +94,19 @@ class Project(Base):
     requirements: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="draft")
     # Owner binding for RBAC
-    owner_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    owner_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=True, index=True
+    )
     outline: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     slides_html: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    slides_data: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(
-        JSON, nullable=True
-    )
-    confirmed_requirements: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        JSON, nullable=True
-    )
+    slides_data: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSON, nullable=True)
+    confirmed_requirements: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     project_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         JSON, nullable=True
     )  # 项目元数据，包括选择的模板ID等
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
-    updated_at: Mapped[float] = mapped_column(
-        Float, default=time.time, onupdate=time.time
-    )
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
 
     # Relationships
     todo_board: Mapped[Optional["TodoBoard"]] = relationship(
@@ -126,9 +115,7 @@ class Project(Base):
     versions: Mapped[List["ProjectVersion"]] = relationship(
         "ProjectVersion", back_populates="project"
     )
-    slides: Mapped[List["SlideData"]] = relationship(
-        "SlideData", back_populates="project"
-    )
+    slides: Mapped[List["SlideData"]] = relationship("SlideData", back_populates="project")
     owner: Mapped[Optional["User"]] = relationship("User")
 
 
@@ -144,9 +131,7 @@ class TodoBoard(Base):
     current_stage_index: Mapped[int] = mapped_column(Integer, default=0)
     overall_progress: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
-    updated_at: Mapped[float] = mapped_column(
-        Float, default=time.time, onupdate=time.time
-    )
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
 
     # Relationships
     project: Mapped["Project"] = relationship("Project", back_populates="todo_board")
@@ -177,9 +162,7 @@ class TodoStage(Base):
     progress: Mapped[float] = mapped_column(Float, default=0.0)
     result: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
-    updated_at: Mapped[float] = mapped_column(
-        Float, default=time.time, onupdate=time.time
-    )
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
 
     # Relationships
     todo_board: Mapped["TodoBoard"] = relationship("TodoBoard", back_populates="stages")
@@ -194,9 +177,7 @@ class ProjectVersion(Base):
     __tablename__ = "project_versions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    project_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("projects.project_id")
-    )
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.project_id"))
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     timestamp: Mapped[float] = mapped_column(Float, default=time.time)
     data: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
@@ -212,31 +193,23 @@ class SlideData(Base):
     __tablename__ = "slide_data"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    project_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("projects.project_id")
-    )
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.project_id"))
     slide_index: Mapped[int] = mapped_column(Integer, nullable=False)
     slide_id: Mapped[str] = mapped_column(String(100), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     content_type: Mapped[str] = mapped_column(String(50), nullable=False)
     html_content: Mapped[str] = mapped_column(Text, nullable=False)
-    slide_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        JSON, nullable=True
-    )
+    slide_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     template_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("ppt_templates.id"), nullable=True
     )
     is_user_edited: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
-    updated_at: Mapped[float] = mapped_column(
-        Float, default=time.time, onupdate=time.time
-    )
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
 
     # Relationships
     project: Mapped["Project"] = relationship("Project", back_populates="slides")
-    template: Mapped[Optional["PPTTemplate"]] = relationship(
-        "PPTTemplate", back_populates="slides"
-    )
+    template: Mapped[Optional["PPTTemplate"]] = relationship("PPTTemplate", back_populates="slides")
 
 
 class PPTTemplate(Base):
@@ -245,32 +218,22 @@ class PPTTemplate(Base):
     __tablename__ = "ppt_templates"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    project_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("projects.project_id")
-    )
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.project_id"))
     template_type: Mapped[str] = mapped_column(
         String(50), nullable=False, index=True
     )  # title, content, chart, image, summary
     template_name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     html_template: Mapped[str] = mapped_column(Text, nullable=False)
-    applicable_scenarios: Mapped[List[str]] = mapped_column(
-        JSON, nullable=True
-    )  # 适用场景
-    style_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        JSON, nullable=True
-    )  # 样式配置
+    applicable_scenarios: Mapped[List[str]] = mapped_column(JSON, nullable=True)  # 适用场景
+    style_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)  # 样式配置
     usage_count: Mapped[int] = mapped_column(Integer, default=0)  # 使用次数统计
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
-    updated_at: Mapped[float] = mapped_column(
-        Float, default=time.time, onupdate=time.time
-    )
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
 
     # Relationships
     project: Mapped["Project"] = relationship("Project", foreign_keys=[project_id])
-    slides: Mapped[List["SlideData"]] = relationship(
-        "SlideData", back_populates="template"
-    )
+    slides: Mapped[List["SlideData"]] = relationship("SlideData", back_populates="template")
 
 
 class GlobalMasterTemplate(Base):
@@ -285,17 +248,11 @@ class GlobalMasterTemplate(Base):
     preview_image: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True
     )  # Base64 encoded preview image
-    style_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        JSON, nullable=True
-    )  # 样式配置
+    style_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)  # 样式配置
     tags: Mapped[List[str]] = mapped_column(JSON, nullable=True)  # 标签分类
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)  # 是否为默认模板
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)  # 是否启用
     usage_count: Mapped[int] = mapped_column(Integer, default=0)  # 使用次数统计
-    created_by: Mapped[Optional[str]] = mapped_column(
-        String(100), nullable=True
-    )  # 创建者
+    created_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # 创建者
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
-    updated_at: Mapped[float] = mapped_column(
-        Float, default=time.time, onupdate=time.time
-    )
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
