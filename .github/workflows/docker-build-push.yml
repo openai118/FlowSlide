@@ -50,8 +50,8 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        # Only build for amd64 to reduce build time (arm64 can be added later if needed)
-        platforms: linux/amd64
+        # Build multi-arch to ensure consistent runtime across platforms
+        platforms: linux/amd64,linux/arm64
         push: ${{ github.event_name != 'pull_request' }}
         tags: ${{ steps.meta.outputs.tags }}
         labels: |
@@ -61,6 +61,7 @@ jobs:
         cache-to: type=gha,mode=max
         build-args: |
           BUILDKIT_INLINE_CACHE=1
+          CACHE_BUST=${{ github.sha }}
 
     - name: Generate deployment summary
       if: github.event_name != 'pull_request'

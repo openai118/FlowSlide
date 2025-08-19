@@ -25,6 +25,10 @@ RUN apt-get update && \
 # Set work directory and copy dependency files
 WORKDIR /app
 COPY requirements.txt ./
+# Cache bust arg to force rebuild on new commits (for CI reliability)
+ARG CACHE_BUST
+RUN echo "Cache bust: ${CACHE_BUST}" > /build-cache-bust
+
 
 # Install Python dependencies to a virtual environment
 RUN python -m venv /opt/venv && \
