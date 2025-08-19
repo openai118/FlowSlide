@@ -108,24 +108,13 @@ RUN apt-get update && \
 # Install rclone for backup functionality (optional, can be skipped for faster builds)
 RUN curl -fsSL https://rclone.org/install.sh | bash || echo "Warning: rclone installation failed"
 
-# Copy Python packages from builder FIRST
+# Copy Python packages from builder (single copy, no duplication)
 COPY --from=builder /opt/venv /opt/venv
 
 # Create non-root user (for compatibility, but run as root)
 RUN groupadd -r flowslide && \
     useradd -r -g flowslide -m -d /home/flowslide flowslide && \
     mkdir -p /home/flowslide/.cache/ms-playwright /root/.cache/ms-playwright
-
-# Ensure runtime deps in production stage (defensive install after venv copy)
-COPY requirements.txt ./
-RUN /opt/venv/bin/pip install --no-cache-dir -r requirements.txt --extra-index-url https://pypi.apryse.com
-# Avoid altering system python/pip symlinks to prevent circular links
-# PATH already prioritizes /opt/venv/bin so venv tools are used by default
-RUN true
-
-
-# Copy Python packages from builder
-COPY --from=builder /opt/venv /opt/venv
 
 # Install Playwright with optimized browser installation
 RUN /opt/venv/bin/pip install --no-cache-dir playwright==1.40.0 && \
