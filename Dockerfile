@@ -9,7 +9,9 @@ FROM python:3.11-slim AS builder
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright \
+    HOME=/root
 
 # Install build dependencies
 RUN apt-get update && \
@@ -42,6 +44,9 @@ RUN python -m venv /opt/venv && \
     (/opt/venv/bin/pip install --no-cache-dir --extra-index-url https://pypi.apryse.com apryse-sdk>=11.6.0 && \
      echo "✅ Apryse SDK installed successfully") || \
     echo "⚠️ Apryse SDK installation failed - PPTX export will not be available" && \
+    # Install Playwright browsers in builder stage (where we have build tools)
+    /opt/venv/bin/playwright install chromium && \
+    echo "✅ Playwright chromium browser installed in builder stage" && \
     # Clean up build artifacts
     find /opt/venv -name "*.pyc" -delete && \
     find /opt/venv -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
@@ -108,24 +113,20 @@ RUN apt-get update && \
 # Install rclone for backup functionality (optional, can be skipped for faster builds)
 RUN curl -fsSL https://rclone.org/install.sh | bash || echo "Warning: rclone installation failed"
 
-# Copy Python packages from builder (single copy, no duplication)
+# Copy Python packages and Playwright browsers from builder
 COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /root/.cache/ms-playwright /root/.cache/ms-playwright
 
 # Create non-root user (for compatibility, but run as root)
 RUN groupadd -r flowslide && \
     useradd -r -g flowslide -m -d /home/flowslide flowslide && \
     mkdir -p /home/flowslide/.cache/ms-playwright /root/.cache/ms-playwright
 
-# Install Playwright with optimized browser installation
-RUN /opt/venv/bin/pip install --no-cache-dir playwright==1.40.0 && \
-    # Install only Chromium browser (fastest option)
-    /opt/venv/bin/playwright install chromium && \
-    # Verify critical runtime deps still present in production stage
-    /opt/venv/bin/python -c "import uvicorn, fastapi; print('deps OK (prod)')" && \
-    # Clean up browser cache to save space
-    rm -rf /root/.cache/ms-playwright/chromium-*/chrome-linux/locales && \
-    rm -rf /root/.cache/ms-playwright/chromium-*/chrome-linux/resources && \
+# Verify Playwright installation and set permissions
+RUN /opt/venv/bin/python -c "import playwright; print('✅ Playwright available in production stage')" && \
+    # Set proper permissions for browser cache directories
     chown -R flowslide:flowslide /home/flowslide && \
+    # Clean up temporary files
     rm -rf /tmp/* /var/tmp/*
 
 # Set work directory
