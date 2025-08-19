@@ -32,6 +32,8 @@ RUN python -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir psycopg2-binary requests && \
     # Install project dependencies (full requirements)
     /opt/venv/bin/pip install --no-cache-dir -r requirements.txt && \
+    # Verify critical runtime deps exist (fail fast if missing)
+    /opt/venv/bin/python -c "import uvicorn, fastapi; print('deps OK')" && \
     # Ensure Apryse SDK from official index (retry from private index if needed)
     (/opt/venv/bin/pip install --no-cache-dir --extra-index-url https://pypi.apryse.com apryse-sdk>=11.6.0 && \
      echo "✅ Apryse SDK installed successfully") || \
