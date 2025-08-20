@@ -44,9 +44,7 @@ RUN python -m venv /opt/venv && \
     (/opt/venv/bin/pip install --no-cache-dir --extra-index-url https://pypi.apryse.com apryse-sdk>=11.6.0 && \
      echo "✅ Apryse SDK installed successfully") || \
     echo "⚠️ Apryse SDK installation failed - PPTX export will not be available" && \
-    # Install Playwright browsers in builder stage
-    /opt/venv/bin/playwright install chromium && \
-    echo "✅ Playwright chromium browser installed in builder stage" && \
+    # Note: Playwright browsers will be installed in production stage to avoid cache copy issues
     # Clean up build artifacts
     find /opt/venv -name "*.pyc" -delete && \
     find /opt/venv -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
@@ -113,14 +111,17 @@ RUN apt-get update && \
 # Install rclone for backup functionality (optional, can be skipped for faster builds)
 RUN curl -fsSL https://rclone.org/install.sh | bash || echo "Warning: rclone installation failed"
 
-# Copy Python packages and Playwright browsers from builder
+# Copy Python packages from builder
 COPY --from=builder /opt/venv /opt/venv
-COPY --from=builder /root/.cache/ms-playwright /root/.cache/ms-playwright
 
 # Create non-root user (for compatibility, but run as root)
 RUN groupadd -r flowslide && \
     useradd -r -g flowslide -m -d /home/flowslide flowslide && \
     mkdir -p /home/flowslide/.cache/ms-playwright /root/.cache/ms-playwright
+
+# Install Playwright browsers in production stage (more reliable than copying from builder)
+RUN /opt/venv/bin/playwright install chromium && \
+    echo "✅ Playwright chromium browser installed in production stage"
 
 # Verify Playwright installation and set permissions
 RUN /opt/venv/bin/python -c "import playwright; print('✅ Playwright available in production stage')" && \
