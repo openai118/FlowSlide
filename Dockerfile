@@ -26,18 +26,14 @@ RUN pip install --no-cache-dir uv
 
 # Set work directory and copy dependency files
 WORKDIR /app
-COPY pyproject.toml uv.lock* README.md ./
+COPY pyproject.toml uv.toml uv.lock* README.md ./
 # Cache bust arg to force rebuild on new commits (for CI reliability)
 ARG CACHE_BUST
 RUN echo "Cache bust: ${CACHE_BUST}" > /build-cache-bust
 
 
 # Install Python dependencies using uv (faster and more reliable)
-# First install apryse-sdk separately with proper index (like LandPPT)
-RUN uv pip install --target=/opt/venv apryse-sdk>=11.6.0 --extra-index-url=https://pypi.apryse.com && \
-    echo "✅ Apryse SDK installed successfully"
-
-# Then install all other dependencies from pyproject.toml
+# uv.toml configures extra-index-url for apryse-sdk automatically
 RUN uv pip install --target=/opt/venv -r pyproject.toml && \
     echo "✅ All dependencies installed successfully"
 

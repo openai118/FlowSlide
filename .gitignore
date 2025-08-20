@@ -110,4 +110,5 @@ temp_*.py
 *.tmp
 *.bak
 .lock
-uv.lock
+# uv.lock - Keep this file for reproducible builds
+# uv.lock

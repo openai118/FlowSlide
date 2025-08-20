@@ -1,0 +1,21 @@
+# uv configuration file for FlowSlide
+
+# Extra index URLs for additional package sources
+extra-index-url = ["https://pypi.apryse.com"]
+
+# Use the fastest available index
+index-strategy = "first-index"
+
+# Cache configuration - use project temp directory
+cache-dir = "temp/.uv-cache"
+
+# Python version preference
+python-preference = "managed"
+
+# Dependency resolution strategy
+resolution = "highest"
+
+# Prerelease handling
+prerelease = "disallow"
+
+# Development dependencies are defined in pyproject.toml [project.optional-dependencies]
