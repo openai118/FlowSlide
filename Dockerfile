@@ -44,7 +44,7 @@ RUN python -m venv /opt/venv && \
     (/opt/venv/bin/pip install --no-cache-dir --extra-index-url https://pypi.apryse.com apryse-sdk>=11.6.0 && \
      echo "✅ Apryse SDK installed successfully") || \
     echo "⚠️ Apryse SDK installation failed - PPTX export will not be available" && \
-    # Install Playwright browsers in builder stage (where we have build tools)
+    # Install Playwright browsers in builder stage
     /opt/venv/bin/playwright install chromium && \
     echo "✅ Playwright chromium browser installed in builder stage" && \
     # Clean up build artifacts
