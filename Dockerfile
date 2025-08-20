@@ -21,32 +21,28 @@ RUN apt-get update && \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv for faster dependency management (optional)
-# RUN pip install --no-cache-dir uv
+# Install uv for faster dependency management
+RUN pip install --no-cache-dir uv
 
 # Set work directory and copy dependency files
 WORKDIR /app
-COPY requirements.txt ./
+COPY pyproject.toml uv.lock* README.md ./
 # Cache bust arg to force rebuild on new commits (for CI reliability)
 ARG CACHE_BUST
 RUN echo "Cache bust: ${CACHE_BUST}" > /build-cache-bust
 
 
-# Install Python dependencies to a virtual environment
-RUN python -m venv /opt/venv && \
-    /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
-    /opt/venv/bin/pip install --no-cache-dir psycopg2-binary requests && \
-    # Install project dependencies (full requirements)
-    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt && \
-    # Verify critical runtime deps exist (fail fast if missing)
-    /opt/venv/bin/python -c "import uvicorn, fastapi; print('deps OK')" && \
-    # Ensure Apryse SDK from official index (retry from private index if needed)
-    (/opt/venv/bin/pip install --no-cache-dir --extra-index-url https://pypi.apryse.com apryse-sdk>=11.6.0 && \
-     echo "✅ Apryse SDK installed successfully") || \
-    echo "⚠️ Apryse SDK installation failed - PPTX export will not be available" && \
-    # Note: Playwright browsers will be installed in production stage to avoid cache copy issues
-    # Clean up build artifacts
-    find /opt/venv -name "*.pyc" -delete && \
+# Install Python dependencies using uv (faster and more reliable)
+# First install apryse-sdk separately with proper index (like LandPPT)
+RUN uv pip install --target=/opt/venv apryse-sdk>=11.6.0 --extra-index-url=https://pypi.apryse.com && \
+    echo "✅ Apryse SDK installed successfully"
+
+# Then install all other dependencies from pyproject.toml
+RUN uv pip install --target=/opt/venv -r pyproject.toml && \
+    echo "✅ All dependencies installed successfully"
+
+# Clean up build artifacts
+RUN find /opt/venv -name "*.pyc" -delete && \
     find /opt/venv -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
 # Production stage
@@ -55,8 +51,7 @@ FROM python:3.11-slim AS production
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app/src \
-    PATH=/opt/venv/bin:$PATH \
+    PYTHONPATH=/app/src:/opt/venv \
     PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright \
     HOME=/root
 
@@ -111,23 +106,18 @@ RUN apt-get update && \
 # Install rclone for backup functionality (optional, can be skipped for faster builds)
 RUN curl -fsSL https://rclone.org/install.sh | bash || echo "Warning: rclone installation failed"
 
-# Copy Python packages from builder
-COPY --from=builder /opt/venv /opt/venv
-
 # Create non-root user (for compatibility, but run as root)
 RUN groupadd -r flowslide && \
     useradd -r -g flowslide -m -d /home/flowslide flowslide && \
     mkdir -p /home/flowslide/.cache/ms-playwright /root/.cache/ms-playwright
 
-# Install Playwright browsers in production stage (more reliable than copying from builder)
-RUN /opt/venv/bin/playwright install chromium && \
-    echo "✅ Playwright chromium browser installed in production stage"
+# Copy Python packages from builder
+COPY --from=builder /opt/venv /opt/venv
 
-# Verify Playwright installation and set permissions
-RUN /opt/venv/bin/python -c "import playwright; print('✅ Playwright available in production stage')" && \
-    # Set proper permissions for browser cache directories
+# Install Playwright with minimal footprint (like LandPPT)
+RUN pip install --no-cache-dir playwright==1.40.0 && \
+    playwright install chromium && \
     chown -R flowslide:flowslide /home/flowslide && \
-    # Clean up temporary files
     rm -rf /tmp/* /var/tmp/*
 
 # Set work directory
