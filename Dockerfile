@@ -93,8 +93,9 @@ RUN apt-get update && \
     curl \
     libmagic1 \
     unzip \
-    # Database support (conditional based on variant)
-    $([ "$BUILD_VARIANT" != "lite" ] && echo "libpq-dev postgresql-client" || echo "") \
+    # Database support
+    libpq-dev \
+    postgresql-client \
     # Document processing tools
     poppler-utils \
     # Font support
