@@ -49,8 +49,12 @@ RUN if [ "$BUILD_VARIANT" = "lite" ]; then \
         /opt/venv/bin/pip install \
         fastapi uvicorn pydantic python-multipart jinja2 aiofiles \
         python-jose passlib httpx requests aiohttp sqlalchemy alembic aiosqlite \
-        markdown python-docx pypdf2 beautifulsoup4 pillow chardet \
-        openai anthropic google-generativeai ollama \
+        psycopg2-binary asyncpg \
+        markdown python-docx pypdf2 beautifulsoup4 pillow chardet pandas \
+        openai anthropic google-generativeai ollama transformers torch tiktoken \
+        tavily-python langchain langchain-core langchain-openai langchain-anthropic \
+        langchain-ollama langchain-google-genai langgraph langchain-community \
+        mineru markitdown onnxruntime playwright \
         click python-dotenv rich pydantic-settings \
         prometheus-client prometheus-fastapi-instrumentator; \
     else \
@@ -59,8 +63,12 @@ RUN if [ "$BUILD_VARIANT" = "lite" ]; then \
         /opt/venv/bin/pip install \
         fastapi uvicorn pydantic python-multipart jinja2 aiofiles \
         python-jose passlib httpx requests aiohttp sqlalchemy alembic aiosqlite \
-        markdown python-docx pypdf2 beautifulsoup4 pillow chardet \
-        openai anthropic google-generativeai ollama \
+        psycopg2-binary asyncpg \
+        markdown python-docx pypdf2 beautifulsoup4 pillow chardet pandas \
+        openai anthropic google-generativeai ollama transformers torch tiktoken \
+        tavily-python langchain langchain-core langchain-openai langchain-anthropic \
+        langchain-ollama langchain-google-genai langgraph langchain-community \
+        mineru markitdown onnxruntime playwright \
         click python-dotenv rich pydantic-settings \
         prometheus-client prometheus-fastapi-instrumentator && \
         echo "Installing additional dependencies..." && \
