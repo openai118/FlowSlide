@@ -130,7 +130,7 @@ class SDKDownloadManager:
             # Clean up temporary file
             try:
                 os.unlink(temp_path)
-            except:
+            except Exception:
                 pass
 
             return success
@@ -381,7 +381,7 @@ class PDFToPPTXConverter:
             if temp_pdf_path and os.path.exists(temp_pdf_path):
                 try:
                     os.unlink(temp_pdf_path)
-                except:
+                except Exception:
                     pass
 
     def cleanup_temp_file(self, file_path: str):
@@ -401,7 +401,7 @@ class PDFToPPTXConverter:
 
                 PDFNet.Terminate()
                 logger.debug("Apryse SDK terminated")
-            except:
+            except Exception:
                 pass
 
 

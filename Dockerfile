@@ -1,9 +1,15 @@
 # FlowSlide Docker Image with Enhanced Database Health Check
 # Compatible with GitHub Actions and local builds
 # Multi-stage build for minimal image size
+# Supports different build variants via build args
 
 # Build stage
 FROM python:3.11-slim AS builder
+
+# Build arguments for different variants
+ARG BUILD_VARIANT=standard
+ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
+ARG ENABLE_OPTIMIZATIONS=true
 
 # Set environment variables for build
 ENV PYTHONUNBUFFERED=1 \
@@ -13,13 +19,13 @@ ENV PYTHONUNBUFFERED=1 \
     PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright \
     HOME=/root
 
-# Install build dependencies
+# Install build dependencies (optimized single layer)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Install uv for faster dependency management
 RUN pip install --no-cache-dir uv
@@ -32,14 +38,42 @@ ARG CACHE_BUST
 RUN echo "Cache bust: ${CACHE_BUST}" > /build-cache-bust
 
 
-# Install Python dependencies using uv (faster and more reliable)
-# uv.toml configures extra-index-url for apryse-sdk automatically
-RUN uv pip install --target=/opt/venv -r pyproject.toml && \
-    echo "✅ All dependencies installed successfully"
+# Install Python dependencies using uv (optimized installation)
+# Support different variants via build args
+RUN if [ "$BUILD_VARIANT" = "lite" ]; then \
+        echo "Installing lite dependencies..." && \
+        uv pip install --target=/opt/venv \
+        fastapi uvicorn pydantic python-multipart jinja2 aiofiles \
+        python-jose passlib httpx requests aiohttp sqlalchemy alembic aiosqlite \
+        markdown python-docx pypdf2 beautifulsoup4 pillow chardet \
+        openai anthropic google-generativeai ollama \
+        click python-dotenv rich pydantic-settings \
+        prometheus-client prometheus-fastapi-instrumentator; \
+    else \
+        echo "Installing full dependencies..." && \
+        uv pip install --target=/opt/venv apryse-sdk>=11.6.0 --extra-index-url=https://pypi.apryse.com && \
+        if [ "$ENABLE_OPTIMIZATIONS" = "true" ]; then \
+            echo "Using optimized PyTorch (CPU-only)..." && \
+            uv pip install --target=/opt/venv torch>=2.0.0 --index-url=$TORCH_INDEX_URL; \
+        fi && \
+        uv sync --target=/opt/venv; \
+    fi && \
+    echo "✅ Dependencies installed successfully"
 
-# Clean up build artifacts
-RUN find /opt/venv -name "*.pyc" -delete && \
-    find /opt/venv -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+# Enhanced cleanup of build artifacts (learning from LandPPT)
+RUN if [ "$ENABLE_OPTIMIZATIONS" = "true" ]; then \
+        echo "Performing enhanced cleanup..." && \
+        find /opt/venv -name "*.pyc" -delete && \
+        find /opt/venv -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true && \
+        find /opt/venv -name "tests" -type d -exec rm -rf {} + 2>/dev/null || true && \
+        find /opt/venv -name "test" -type d -exec rm -rf {} + 2>/dev/null || true && \
+        find /opt/venv -name "*.dist-info/RECORD" -delete 2>/dev/null || true && \
+        find /opt/venv -name "*.egg-info" -type d -exec rm -rf {} + 2>/dev/null || true && \
+        find /opt/venv -name "*.so" -exec strip {} \; 2>/dev/null || true; \
+    else \
+        find /opt/venv -name "*.pyc" -delete && \
+        find /opt/venv -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true; \
+    fi
 
 # Production stage
 FROM python:3.11-slim AS production
@@ -51,56 +85,34 @@ ENV PYTHONUNBUFFERED=1 \
     PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright \
     HOME=/root
 
-# Install essential runtime dependencies
+# Install runtime dependencies (optimized single layer installation)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+    # Basic system tools
     ca-certificates \
     curl \
     libmagic1 \
-    libpq-dev \
-    postgresql-client \
     unzip \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install PDF and document processing tools (core only)
-# Cache buster: 2025-08-13-v2
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+    # Database support (conditional based on variant)
+    $([ "$BUILD_VARIANT" != "lite" ] && echo "libpq-dev postgresql-client" || echo "") \
+    # Document processing tools
     poppler-utils \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Note: wkhtmltopdf installation skipped due to compatibility issues
-# Alternative PDF generation methods will be used via Playwright/Chrome
-
-# Install fonts and display tools
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+    # Font support
     fonts-liberation \
     fontconfig \
-    && fc-cache -fv \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install browser dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+    # Browser support
     chromium \
     libgomp1 \
+    # Network tools
+    netcat-traditional \
+    && fc-cache -fv \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /root/.cache
 
-# Install network tools (try different netcat packages)
-RUN apt-get update && \
-    (apt-get install -y --no-install-recommends netcat-traditional || \
-     apt-get install -y --no-install-recommends netcat-openbsd || \
-     apt-get install -y --no-install-recommends netcat) \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install rclone for backup functionality (optional, can be skipped for faster builds)
-RUN curl -fsSL https://rclone.org/install.sh | bash || echo "Warning: rclone installation failed"
+# Install rclone for backup functionality (conditional installation)
+RUN if [ "$BUILD_VARIANT" != "lite" ]; then \
+        curl -fsSL https://rclone.org/install.sh | bash || echo "Warning: rclone installation failed"; \
+    fi
 
 # Create non-root user (for compatibility, but run as root)
 RUN groupadd -r flowslide && \
@@ -110,11 +122,14 @@ RUN groupadd -r flowslide && \
 # Copy Python packages from builder
 COPY --from=builder /opt/venv /opt/venv
 
-# Install Playwright with minimal footprint (like LandPPT)
+# Install Playwright with optimized footprint
 RUN pip install --no-cache-dir playwright==1.40.0 && \
     playwright install chromium && \
+    # Remove unused browsers to save space
+    rm -rf /root/.cache/ms-playwright/webkit* && \
+    rm -rf /root/.cache/ms-playwright/firefox* && \
     chown -R flowslide:flowslide /home/flowslide && \
-    rm -rf /tmp/* /var/tmp/*
+    rm -rf /tmp/* /var/tmp/* /root/.cache
 
 # Set work directory
 WORKDIR /app
@@ -186,14 +201,17 @@ HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
 
 # Set entrypoint and command with smart script selection
 ENTRYPOINT ["./docker-entrypoint-active.sh"]
-CMD ["/opt/venv/bin/python", "run.py"]
+CMD ["python", "run.py"]
 
-# Metadata labels
+# Metadata labels (dynamic based on build variant)
 LABEL maintainer="FlowSlide Team" \
       description="FlowSlide with enhanced database health check capabilities" \
-      version="enhanced" \
+      version="enhanced-optimized" \
       org.opencontainers.image.title="FlowSlide Enhanced" \
-      org.opencontainers.image.description="FlowSlide application with integrated database monitoring" \
+      org.opencontainers.image.description="FlowSlide application with integrated database monitoring and optimizations" \
       org.opencontainers.image.vendor="FlowSlide" \
       org.opencontainers.image.source="https://github.com/openai118/FlowSlide" \
-    org.opencontainers.image.licenses="Apache-2.0"
+      org.opencontainers.image.licenses="Apache-2.0" \
+      flowslide.build.variant="$BUILD_VARIANT" \
+      flowslide.build.optimizations="$ENABLE_OPTIMIZATIONS" \
+      flowslide.torch.index="$TORCH_INDEX_URL"

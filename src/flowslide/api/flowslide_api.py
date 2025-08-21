@@ -2,9 +2,7 @@
 FlowSlide specific API endpoints
 """
 
-import json
 import logging
-import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
@@ -19,12 +17,10 @@ from .models import (
     FileOutlineGenerationResponse,
     FileUploadResponse,
     PPTGenerationRequest,
-    PPTGenerationResponse,
     PPTOutline,
     PPTProject,
     PPTScenario,
     ProjectListResponse,
-    SlideContent,
     TemplateSelectionRequest,
     TemplateSelectionResponse,
     TodoBoard,
@@ -150,7 +146,6 @@ async def get_ai_providers():
 async def test_ai_provider(provider_name: str, request: Request):
     """Test a specific AI provider - uses frontend provided config if available"""
     try:
-        import json
 
         import aiohttp
 
@@ -158,7 +153,7 @@ async def test_ai_provider(provider_name: str, request: Request):
         body = None
         try:
             body = await request.json()
-        except:
+        except Exception:
             pass  # No JSON body, use backend config
 
         # Special handling for OpenAI provider with frontend config

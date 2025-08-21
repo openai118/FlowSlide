@@ -27,7 +27,7 @@ venv\Scripts\activate
 source venv/bin/activate
 
 # 安装依赖
-pip install -r requirements.txt
+uv sync
 ```
 
 #### 方式二：Docker (推荐)
@@ -94,7 +94,7 @@ docker-compose ps
 ### Q: 启动失败，提示模块未找到
 A: 确保已安装所有依赖：
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 ### Q: 数据库连接失败

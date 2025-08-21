@@ -3,7 +3,6 @@ AI provider implementations
 """
 
 import asyncio
-import json
 import logging
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
@@ -254,12 +253,10 @@ class GoogleProvider(AIProvider):
 
         try:
             # Configure generation parameters
-            # 确保max_tokens不会太小，至少1000个token用于生成内容
-            max_tokens = max(config.get("max_tokens", 16384), 1000)
             generation_config = {
                 "temperature": config.get("temperature", 0.7),
                 "top_p": config.get("top_p", 1.0),
-                # "max_output_tokens": max_tokens,
+                # "max_output_tokens": max(config.get("max_tokens", 16384), 1000),
             }
 
             # 配置安全设置 - 设置为较宽松的安全级别以减少误拦截
@@ -429,7 +426,6 @@ class GoogleProvider(AIProvider):
         self, prompt: str, generation_config: Dict[str, Any], safety_settings=None
     ):
         """Async wrapper for Gemini generation"""
-        import asyncio
 
         loop = asyncio.get_event_loop()
 

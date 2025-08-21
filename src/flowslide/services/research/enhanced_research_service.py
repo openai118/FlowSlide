@@ -350,8 +350,8 @@ class EnhancedResearchService:
                 plan_data = json.loads(response_text)
                 if isinstance(plan_data, list):
                     return plan_data
-            except:
-                pass
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(f"Failed to parse JSON response: {e}")
 
         except Exception as e:
             logger.error(f"Failed to generate AI research plan: {e}")

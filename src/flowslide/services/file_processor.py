@@ -245,7 +245,7 @@ class FileProcessor:
                                 content = file.read()
                             if content.strip():
                                 break
-                        except:
+                        except Exception:
                             continue
 
                 return content.strip()

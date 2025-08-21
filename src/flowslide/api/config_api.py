@@ -2,19 +2,14 @@
 Configuration management API for FlowSlide
 """
 
-import asyncio
 import logging
-import os
-import signal
-import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..auth.middleware import (
     get_current_admin_user,
-    get_current_user_optional,
     get_current_user_required,
 )
 from ..database.models import User

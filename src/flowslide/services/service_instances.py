@@ -94,6 +94,10 @@ def reload_services():
     logger.info("Module variables updated with new service instances")
 
 
+# Declare module-level variables for flake8
+ppt_service = None
+project_manager = None
+
 # Export for easy import
 __all__ = [
     "get_ppt_service",

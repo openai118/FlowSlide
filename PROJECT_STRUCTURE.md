@@ -7,9 +7,9 @@ FlowSlide/
 ├── 📄 README.md                    # 项目主文档
 ├── 📄 CHANGELOG.md                 # 版本更新日志
 ├── 📄 LICENSE                      # 开源许可证
-├── 📄 requirements.txt             # Python依赖
-├── 📄 requirements-dev.txt         # 开发依赖
-├── 📄 pyproject.toml              # 项目配置
+├── 📄 pyproject.toml              # 项目配置和Python依赖
+├── 📄 uv.toml                     # uv包管理器配置
+├── 📄 uv.lock                     # 依赖锁定文件
 ├── 📄 pytest.ini                  # 测试配置
 ├── 📄 docker-compose.yml          # Docker编排
 ├── 📄 Dockerfile                  # Docker镜像构建
@@ -119,7 +119,7 @@ python -m venv .venv
 source .venv/bin/activate  # Linux/Mac
 
 # 3. 安装依赖
-pip install -r requirements.txt
+uv sync
 
 # 4. 启动应用
 python start_flowslide.py

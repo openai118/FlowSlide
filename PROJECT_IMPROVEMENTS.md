@@ -30,7 +30,7 @@ src/flowslide/
 ## 🔧 已修复的问题
 
 ### 1. 依赖关系优化
-**问题**: requirements.txt 和 pyproject.toml 中的依赖版本不一致
+**问题**: 已迁移到使用 uv 和 pyproject.toml 统一管理依赖
 **修复**: 
 - 统一了两个文件中的依赖版本
 - 添加了缺失的依赖包

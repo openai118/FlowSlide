@@ -3,6 +3,7 @@ Authentication service for FlowSlide
 """
 
 import hashlib
+import logging
 import secrets
 import time
 from typing import Any, Dict, Optional
@@ -57,7 +58,7 @@ class AuthService:
     def authenticate_user(self, db: Session, username: str, password: str) -> Optional[User]:
         """Authenticate user with username and password"""
         user = (
-            db.query(User).filter(and_(User.username == username, User.is_active == True)).first()
+            db.query(User).filter(and_(User.username == username, User.is_active.is_(True))).first()
         )
 
         if user and user.check_password(password):
@@ -96,7 +97,7 @@ class AuthService:
         """Get user by session ID"""
         session = (
             db.query(UserSession)
-            .filter(and_(UserSession.session_id == session_id, UserSession.is_active == True))
+            .filter(and_(UserSession.session_id == session_id, UserSession.is_active.is_(True)))
             .first()
         )
 
@@ -146,12 +147,12 @@ class AuthService:
 
     def get_user_by_id(self, db: Session, user_id: int) -> Optional[User]:
         """Get user by ID"""
-        return db.query(User).filter(and_(User.id == user_id, User.is_active == True)).first()
+        return db.query(User).filter(and_(User.id == user_id, User.is_active.is_(True))).first()
 
     def get_user_by_username(self, db: Session, username: str) -> Optional[User]:
         """Get user by username"""
         return (
-            db.query(User).filter(and_(User.username == username, User.is_active == True)).first()
+            db.query(User).filter(and_(User.username == username, User.is_active.is_(True))).first()
         )
 
     def update_user_password(self, db: Session, user: User, new_password: str) -> bool:
@@ -186,7 +187,7 @@ class AuthService:
         """Get all active sessions for a user"""
         return (
             db.query(UserSession)
-            .filter(and_(UserSession.user_id == user.id, UserSession.is_active == True))
+            .filter(and_(UserSession.user_id == user.id, UserSession.is_active.is_(True)))
             .all()
         )
 
@@ -278,5 +279,5 @@ def verify_password(password: str, hashed: str) -> bool:
         pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
         return pwd_context.verify(password, hashed)
     except Exception as e:
-        logger.error(f"Password verification error: {e}")
+        logging.getLogger(__name__).error(f"Password verification error: {e}")
         return False

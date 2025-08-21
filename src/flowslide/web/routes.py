@@ -7,8 +7,6 @@ import json
 import logging
 import os
 import re
-import shutil
-import subprocess
 import tempfile
 import time
 import urllib.parse
@@ -26,15 +24,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..ai import AIMessage, MessageRole, get_ai_provider
-from ..api.models import FileOutlineGenerationRequest, PPTGenerationRequest, PPTProject, TodoBoard
+from ..api.models import FileOutlineGenerationRequest, PPTGenerationRequest
 from ..auth.middleware import get_current_user_optional, get_current_user_required
 from ..core.simple_config import ai_config
 from ..database.database import get_db
 from ..database.models import User
-from ..services.enhanced_ppt_service import EnhancedPPTService
 from ..services.pdf_to_pptx_converter import get_pdf_to_pptx_converter
 from ..services.pyppeteer_pdf_converter import get_pdf_converter
-from ..utils.thread_pool import run_blocking_io, to_thread
+from ..utils.thread_pool import run_blocking_io
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -48,7 +45,8 @@ def get_aspect_ratio_settings() -> dict:
 
         cfg = get_config_service().get_all_config()
         aspect = (cfg.get("aspect_ratio") or "16:9").strip()
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to get aspect ratio from config: {e}")
         aspect = "16:9"
 
     if aspect == "4:3":
@@ -60,7 +58,6 @@ def get_aspect_ratio_settings() -> dict:
 router = APIRouter()
 
 # Templates directory - use absolute path for better reliability
-import os
 
 template_dir = os.path.join(os.path.dirname(__file__), "templates")
 templates = Jinja2Templates(directory=template_dir)
@@ -108,7 +105,8 @@ def _user_can_access_project(user: Optional[User], project: Any) -> bool:
         owner_id = getattr(project, "owner_id", None)
         # Strict: only owner can access; legacy projects with owner_id=None are admin-only
         return owner_id is not None and owner_id == getattr(user, "id", None)
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error checking user access to project: {e}")
         return False
 
 
@@ -284,7 +282,8 @@ async def web_home(request: Request, user: Optional[User] = Depends(get_current_
         # Make sure templates can read the login state via request.state.user
         try:
             request.state.user = user
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Failed to set user in request state: {e}")
             pass
 
     return templates.TemplateResponse(
@@ -327,7 +326,6 @@ async def web_ai_config(request: Request, user: User = Depends(get_current_user_
 async def get_openai_models(request: Request, user: User = Depends(get_current_user_required)):
     """Proxy endpoint to get OpenAI models list, avoiding CORS issues - uses frontend provided config"""
     try:
-        import json
 
         import aiohttp
 
@@ -428,7 +426,8 @@ async def get_anthropic_models(request: Request, user: User = Depends(get_curren
                     return {"success": False, "error": f"HTTP {resp.status}: {text}"}
                 try:
                     data = await resp.json()
-                except Exception:
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse Anthropic API response as JSON: {e}")
                     return {"success": False, "error": text}
 
                 models = []
@@ -470,7 +469,8 @@ async def get_google_models(request: Request, user: User = Depends(get_current_u
 
                 try:
                     data = await resp.json()
-                except Exception:
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse Google API response as JSON: {e}")
                     return {"success": False, "error": text}
 
                 models = []
@@ -518,7 +518,8 @@ async def get_azure_openai_deployments(
                     return {"success": False, "error": f"HTTP {resp.status}: {text}"}
                 try:
                     data = await resp.json()
-                except Exception:
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse Azure API response as JSON: {e}")
                     return {"success": False, "error": text}
 
                 models = []
@@ -550,7 +551,8 @@ async def get_ollama_models(request: Request, user: User = Depends(get_current_u
                     return {"success": False, "error": f"HTTP {resp.status}: {text}"}
                 try:
                     data = await resp.json()
-                except Exception:
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse Ollama API response as JSON: {e}")
                     return {"success": False, "error": text}
 
                 models = []
@@ -616,7 +618,8 @@ async def validate_openai_api_key(
                             else {}
                         )
                         error_msg = error_data.get("error", {}).get("message", error_text)
-                    except:
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.debug(f"Failed to parse error response: {e}")
                         error_msg = error_text
 
                     return {
@@ -705,7 +708,8 @@ async def test_openai_provider_proxy(
                         error_message = error_data.get("error", {}).get(
                             "message", f"API returned status {response.status}"
                         )
-                    except:
+                    except json.JSONDecodeError as e:
+                        logger.debug(f"Failed to parse error response: {e}")
                         error_message = f"API returned status {response.status}: {error_text}"
 
                     logger.error(f"Test failed for {base_url}: {error_message}")
@@ -950,7 +954,8 @@ async def web_projects_list(
                 if owner_ids:
                     rows = db.query(User).filter(User.id.in_(owner_ids)).all()
                     owner_name_map = {u.id: (u.username or f"user-{u.id}") for u in rows}
-        except Exception:
+        except Exception as e:
+            logger.error(f"Failed to build owner name map: {e}")
             owner_name_map = {}
 
         return templates.TemplateResponse(
@@ -2302,19 +2307,14 @@ async def update_project_slides(
 
 
 @router.post("/api/projects/{project_id}/regenerate-html")
-async def regenerate_project_html(project_id: str):
+async def regenerate_project_html(project_id: str, user: User = Depends(get_current_user_required)):
     """Regenerate project HTML with fixed encoding"""
     try:
         project = await ppt_service.project_manager.get_project(project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         # Access control: only owner or admin can regenerate
-        user = (
-            getattr(request.state, "user", None)
-            if isinstance(locals().get("request"), Request)
-            else None
-        )
-        if user and not _user_can_access_project(user, project):
+        if not _user_can_access_project(user, project):
             raise HTTPException(status_code=403, detail="Access denied")
 
         if not project.slides_data:
@@ -2366,19 +2366,14 @@ async def regenerate_project_html(project_id: str):
 
 
 @router.post("/api/projects/{project_id}/slides/{slide_number}/regenerate")
-async def regenerate_slide(project_id: str, slide_number: int):
+async def regenerate_slide(project_id: str, slide_number: int, user: User = Depends(get_current_user_required)):
     """Regenerate a specific slide"""
     try:
         project = await ppt_service.project_manager.get_project(project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         # Access control: only owner or admin can regenerate slides
-        user = (
-            getattr(request.state, "user", None)
-            if isinstance(locals().get("request"), Request)
-            else None
-        )
-        if user and not _user_can_access_project(user, project):
+        if not _user_can_access_project(user, project):
             raise HTTPException(status_code=403, detail="Access denied")
 
         if not project.outline:
@@ -3038,7 +3033,8 @@ async def ai_auto_generate_slide_images(
 
         try:
             analysis_result = json.loads(analysis_response.content.strip())
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse AI analysis result as JSON: {e}")
             # 如果JSON解析失败，使用默认配置
             analysis_result = {
                 "needs_images": True,
@@ -3861,7 +3857,8 @@ async def export_project_pdf(
         def cleanup_temp_file():
             try:
                 os.unlink(temp_pdf_path)
-            except:
+            except OSError as e:
+                logger.debug(f"Failed to remove temp PDF file: {e}")
                 pass
 
         return FileResponse(
@@ -3971,7 +3968,8 @@ async def export_project_pptx(project_id: str, user: User = Depends(get_current_
             # Clean up temp file and raise error
             try:
                 os.unlink(temp_pdf_path)
-            except:
+            except OSError as e:
+                logger.debug(f"Failed to remove temp PDF file: {e}")
                 pass
             raise HTTPException(status_code=500, detail="PDF generation failed")
 
@@ -4018,11 +4016,13 @@ async def export_project_pptx(project_id: str, user: User = Depends(get_current_
             def cleanup_temp_files():
                 try:
                     os.unlink(temp_pdf_path)
-                except:
+                except OSError as e:
+                    logger.debug(f"Failed to remove temp PDF file: {e}")
                     pass
                 try:
                     os.unlink(temp_pptx_path)
-                except:
+                except OSError as e:
+                    logger.debug(f"Failed to remove temp PPTX file: {e}")
                     pass
 
             return FileResponse(
@@ -4040,11 +4040,13 @@ async def export_project_pptx(project_id: str, user: User = Depends(get_current_
             # Clean up temp files on error
             try:
                 os.unlink(temp_pdf_path)
-            except:
+            except OSError as e:
+                logger.debug(f"Failed to remove temp PDF file: {e}")
                 pass
             try:
                 os.unlink(temp_pptx_path)
-            except:
+            except OSError as e:
+                logger.debug(f"Failed to remove temp PPTX file: {e}")
                 pass
             raise HTTPException(status_code=500, detail=f"PPTX conversion error: {str(e)}")
 
@@ -4139,7 +4141,6 @@ def _generate_individual_slide_html_sync(
     slide_title = slide.get("title", f"第{slide_number}页")
 
     # Check if it's already a complete HTML document
-    import re
 
     if slide_html.strip().lower().startswith("<!doctype") or slide_html.strip().lower().startswith(
         "<html"
@@ -4452,7 +4453,6 @@ async def _generate_individual_slide_html(
     slide_title = slide.get("title", f"第{slide_number}页")
 
     # Check if it's already a complete HTML document
-    import re
 
     if slide_html.strip().lower().startswith("<!doctype") or slide_html.strip().lower().startswith(
         "<html"
@@ -4710,7 +4710,6 @@ async def _generate_pdf_slide_html(slide, slide_number: int, total_slides: int, 
     slide_title = slide.get("title", f"第{slide_number}页")
 
     # Check if it's already a complete HTML document
-    import re
 
     if slide_html.strip().lower().startswith("<!doctype") or slide_html.strip().lower().startswith(
         "<html"
@@ -5659,7 +5658,6 @@ def select_best_image_source(
 def replace_image_in_html(html_content: str, image_info: Dict[str, Any], new_image_url: str) -> str:
     """在HTML内容中替换指定的图像，支持img标签、背景图像和SVG，保持布局和样式"""
     try:
-        import re
 
         from bs4 import BeautifulSoup
 

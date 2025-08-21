@@ -27,7 +27,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt --extra-index-url https://pypi.apryse.com
+        pip install --extra-index-url https://pypi.apryse.com -e .
         
     - name: Run basic tests
       run: |
@@ -74,9 +74,15 @@ jobs:
         labels: |
           ${{ steps.meta.outputs.labels }}
           org.opencontainers.image.licenses=Apache-2.0
-        # 临时禁用缓存以避免认证过期问题
-        # cache-from: type=gha
-        # cache-to: type=gha,mode=max
+          flowslide.variant=optimized
+          flowslide.registry=ghcr
+        build-args: |
+          BUILD_VARIANT=standard
+          ENABLE_OPTIMIZATIONS=true
+          TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
+          CACHE_BUST=${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
         
     - name: Test GitHub Container Registry image
       if: github.event_name != 'pull_request'

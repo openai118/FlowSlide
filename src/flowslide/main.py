@@ -189,6 +189,7 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Add favicon route
 
+
 @app.get("/favicon.ico")
 async def favicon():
     """Serve favicon"""

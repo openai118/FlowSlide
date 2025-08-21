@@ -4563,7 +4563,8 @@ class EnhancedPPTService(PPTService):
                 # Use 'html.parser' for better compatibility, fallback to 'lxml' if available
                 try:
                     soup = BeautifulSoup(html_content, "lxml")
-                except:
+                except Exception as e:
+                    logger.error(f"Error in exception handling: {e}")
                     soup = BeautifulSoup(html_content, "html.parser")
 
             # 1. Check for DOCTYPE declaration (Missing element)
@@ -4655,7 +4656,8 @@ class EnhancedPPTService(PPTService):
                 # 如果严格解析成功，说明 HTML 已经是有效的，直接返回
                 logger.debug("HTML 已经是有效的，无需修复")
                 return html_content
-            except:
+            except Exception as e:
+                logger.error(f"Error in processing: {e}")
                 # 严格解析失败，需要修复
                 pass
 
@@ -7274,7 +7276,8 @@ class EnhancedPPTService(PPTService):
             try:
                 with open(file_path, "r", encoding="gbk") as f:
                     return f.read()
-            except:
+            except Exception as e:
+                logger.error(f"Error in file processing: {e}")
                 with open(file_path, "r", encoding="latin-1") as f:
                     return f.read()
 

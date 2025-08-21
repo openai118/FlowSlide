@@ -235,7 +235,7 @@ class ImageProcessor:
             try:
                 font_size = max(20, min(img.width, img.height) // 40)
                 font = ImageFont.truetype("arial.ttf", font_size)
-            except:
+            except Exception:
                 font = ImageFont.load_default()
 
             # 获取文本尺寸

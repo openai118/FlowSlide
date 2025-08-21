@@ -230,19 +230,24 @@ PY
         info "Dependencies available for default python"
         :
     else
-        warn "Default python cannot import deps; trying /opt/venv/bin/python"
-        if /opt/venv/bin/python - <<'PY2'
+        warn "Default python cannot import deps; checking PYTHONPATH..."
+        # Since we install to /opt/venv but use system python, ensure PYTHONPATH is set
+        export PYTHONPATH="/opt/venv:$PYTHONPATH"
+        if python - <<'PY2'
 import sys
+sys.path.insert(0, '/opt/venv')
 import uvicorn, fastapi
-print('deps OK (venv python)')
+print('deps OK (with PYTHONPATH)')
 PY2
         then
-            info "Switching to venv python explicitly"
-            set -- /opt/venv/bin/python run.py
+            info "Dependencies found with PYTHONPATH, using system python"
+            # Keep the original command but ensure PYTHONPATH is set
         else
-            error "Dependencies missing even in venv; printing installed packages"
+            error "Dependencies missing; printing installed packages and paths"
+            echo "PYTHONPATH=$PYTHONPATH"
+            python -c "import sys; print('Python path:', sys.path)"
             python -m pip freeze || true
-            /opt/venv/bin/pip freeze || true
+            ls -la /opt/venv/ || true
             exit 1
         fi
     fi

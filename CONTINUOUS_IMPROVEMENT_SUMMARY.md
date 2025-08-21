@@ -13,7 +13,7 @@
 - ✅ 创建了集成测试 (`test_api.py`)
 - ✅ 配置了pytest和覆盖率报告 (`pytest.ini`)
 - ✅ 添加了测试运行脚本 (`run_tests.py`)
-- ✅ 创建了开发依赖文件 (`requirements-dev.txt`)
+- ✅ 迁移到 uv 包管理器，统一使用 pyproject.toml 管理依赖
 
 **技术亮点:**
 - 完整的测试配置和fixture
@@ -111,7 +111,7 @@
 - **文档文件**: 2个 (API文档, Postman集合)
 - **性能测试**: 3个 (locustfile.py, api_performance.py, 运行器)
 - **安全工具**: 1个 (security_scan.py)
-- **配置文件**: 3个 (requirements-dev.txt, pytest.ini, pyproject.toml更新)
+- **配置文件**: 3个 (uv.toml, uv.lock, pytest.ini, pyproject.toml更新)
 
 **总计**: 24个新文件，显著增强了项目的质量和可维护性
 
