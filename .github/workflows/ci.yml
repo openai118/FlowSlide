@@ -98,7 +98,7 @@ jobs:
           mkdir -p tests
           echo "# Basic test placeholder" > tests/test_basic.py
           echo "def test_import():" >> tests/test_basic.py
-          echo "    import src.flowslide" >> tests/test_basic.py
+          echo "    from src.flowslide import main" >> tests/test_basic.py
           echo "    assert True" >> tests/test_basic.py
           pytest tests/test_basic.py -v
         fi

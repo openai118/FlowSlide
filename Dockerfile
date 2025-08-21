@@ -33,16 +33,20 @@ RUN pip install --no-cache-dir uv
 # Set work directory and copy dependency files
 WORKDIR /app
 COPY pyproject.toml uv.toml uv.lock* README.md ./
+
 # Cache bust arg to force rebuild on new commits (for CI reliability)
 ARG CACHE_BUST
 RUN echo "Cache bust: ${CACHE_BUST}" > /build-cache-bust
 
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Install Python dependencies using uv (optimized installation)
 # Support different variants via build args
 RUN if [ "$BUILD_VARIANT" = "lite" ]; then \
         echo "Installing lite dependencies..." && \
-        uv pip install --target=/opt/venv \
+        /opt/venv/bin/pip install \
         fastapi uvicorn pydantic python-multipart jinja2 aiofiles \
         python-jose passlib httpx requests aiohttp sqlalchemy alembic aiosqlite \
         markdown python-docx pypdf2 beautifulsoup4 pillow chardet \
@@ -51,12 +55,12 @@ RUN if [ "$BUILD_VARIANT" = "lite" ]; then \
         prometheus-client prometheus-fastapi-instrumentator; \
     else \
         echo "Installing full dependencies..." && \
-        uv pip install --target=/opt/venv apryse-sdk>=11.6.0 --extra-index-url=https://pypi.apryse.com && \
+        /opt/venv/bin/pip install apryse-sdk>=11.6.0 --extra-index-url=https://pypi.apryse.com && \
         if [ "$ENABLE_OPTIMIZATIONS" = "true" ]; then \
             echo "Using optimized PyTorch (CPU-only)..." && \
-            uv pip install --target=/opt/venv torch>=2.0.0 --index-url=$TORCH_INDEX_URL; \
+            /opt/venv/bin/pip install torch>=2.0.0 --index-url=$TORCH_INDEX_URL; \
         fi && \
-        uv sync --target=/opt/venv; \
+        uv sync --frozen; \
     fi && \
     echo "✅ Dependencies installed successfully"
 
@@ -81,9 +85,10 @@ FROM python:3.11-slim AS production
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app/src:/opt/venv \
+    PYTHONPATH=/app/src \
     PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright \
-    HOME=/root
+    HOME=/root \
+    PATH="/opt/venv/bin:$PATH"
 
 # Install runtime dependencies (optimized single layer installation)
 RUN apt-get update && \
@@ -110,10 +115,8 @@ RUN apt-get update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /root/.cache
 
-# Install rclone for backup functionality (conditional installation)
-RUN if [ "$BUILD_VARIANT" != "lite" ]; then \
-        curl -fsSL https://rclone.org/install.sh | bash || echo "Warning: rclone installation failed"; \
-    fi
+# Install rclone for backup functionality
+RUN curl -fsSL https://rclone.org/install.sh | bash || echo "Warning: rclone installation failed"
 
 # Create non-root user (for compatibility, but run as root)
 RUN groupadd -r flowslide && \
@@ -204,7 +207,7 @@ HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
 ENTRYPOINT ["./docker-entrypoint-active.sh"]
 CMD ["python", "run.py"]
 
-# Metadata labels (dynamic based on build variant)
+# Metadata labels
 LABEL maintainer="FlowSlide Team" \
       description="FlowSlide with enhanced database health check capabilities" \
       version="enhanced-optimized" \
@@ -212,7 +215,4 @@ LABEL maintainer="FlowSlide Team" \
       org.opencontainers.image.description="FlowSlide application with integrated database monitoring and optimizations" \
       org.opencontainers.image.vendor="FlowSlide" \
       org.opencontainers.image.source="https://github.com/openai118/FlowSlide" \
-      org.opencontainers.image.licenses="Apache-2.0" \
-      flowslide.build.variant="$BUILD_VARIANT" \
-      flowslide.build.optimizations="$ENABLE_OPTIMIZATIONS" \
-      flowslide.torch.index="$TORCH_INDEX_URL"
+      org.opencontainers.image.licenses="Apache-2.0"
