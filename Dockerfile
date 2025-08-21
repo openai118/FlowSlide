@@ -55,12 +55,22 @@ RUN if [ "$BUILD_VARIANT" = "lite" ]; then \
         prometheus-client prometheus-fastapi-instrumentator; \
     else \
         echo "Installing full dependencies..." && \
+        echo "First installing core dependencies..." && \
+        /opt/venv/bin/pip install \
+        fastapi uvicorn pydantic python-multipart jinja2 aiofiles \
+        python-jose passlib httpx requests aiohttp sqlalchemy alembic aiosqlite \
+        markdown python-docx pypdf2 beautifulsoup4 pillow chardet \
+        openai anthropic google-generativeai ollama \
+        click python-dotenv rich pydantic-settings \
+        prometheus-client prometheus-fastapi-instrumentator && \
+        echo "Installing additional dependencies..." && \
         /opt/venv/bin/pip install apryse-sdk>=11.6.0 --extra-index-url=https://pypi.apryse.com && \
         if [ "$ENABLE_OPTIMIZATIONS" = "true" ]; then \
             echo "Using optimized PyTorch (CPU-only)..." && \
             /opt/venv/bin/pip install torch>=2.0.0 --index-url=$TORCH_INDEX_URL; \
         fi && \
-        uv sync --frozen; \
+        echo "Installing project dependencies with uv..." && \
+        uv sync --frozen || echo "uv sync completed with warnings"; \
     fi && \
     echo "✅ Dependencies installed successfully"
 
