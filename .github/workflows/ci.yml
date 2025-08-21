@@ -68,25 +68,25 @@ jobs:
         
     - name: Run linting
       run: |
-        flake8 src/ tests/ --exit-zero || echo "Flake8 completed with warnings"
-        black --check src/ tests/ || echo "Black check completed with warnings"
-        isort --check-only src/ tests/ || echo "Isort check completed with warnings"
+        uv run flake8 src/ tests/ --exit-zero || echo "Flake8 completed with warnings"
+        uv run black --check src/ tests/ || echo "Black check completed with warnings"
+        uv run isort --check-only src/ tests/ || echo "Isort check completed with warnings"
 
     - name: Run type checking (non-blocking)
       run: |
-        mypy src/flowslide --ignore-missing-imports || true
+        uv run mypy src/flowslide --ignore-missing-imports || true
 
     - name: Run security scan
       run: |
-        safety check || echo "Safety check completed with warnings"
-        bandit -r src/ -f json -o bandit-report.json || echo "Bandit scan completed"
+        uv run safety check || echo "Safety check completed with warnings"
+        uv run bandit -r src/ -f json -o bandit-report.json || echo "Bandit scan completed"
         
     - name: Run tests
       run: |
         # Check if there are any test files
         if find tests/ -name "test_*.py" -o -name "*_test.py" | grep -q .; then
           echo "Running pytest with test files found"
-          pytest tests/ \
+          uv run pytest tests/ \
             --cov=src/flowslide \
             --cov-report=xml \
             --cov-report=html \
@@ -100,7 +100,7 @@ jobs:
           echo "def test_import():" >> tests/test_basic.py
           echo "    from src.flowslide import main" >> tests/test_basic.py
           echo "    assert True" >> tests/test_basic.py
-          pytest tests/test_basic.py -v
+          uv run pytest tests/test_basic.py -v
         fi
       env:
         TESTING: true
