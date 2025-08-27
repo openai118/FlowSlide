@@ -42,6 +42,25 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
+    - name: Clean up disk space
+      run: |
+        echo "🧹 Cleaning up disk space..."
+        # Remove unnecessary packages
+        sudo apt-get remove -y dotnet-sdk-6.0 dotnet-sdk-7.0 dotnet-sdk-8.0 || true
+        sudo apt-get autoremove -y || true
+        sudo apt-get clean || true
+        
+        # Clean up Docker
+        docker system prune -f || true
+        docker builder prune -f || true
+        
+        # Remove temp files
+        sudo rm -rf /tmp/* || true
+        sudo rm -rf /var/tmp/* || true
+        
+        # Show disk usage
+        df -h
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
     
@@ -87,3 +106,20 @@ jobs:
         echo ""
         echo "🧪 Testing image pull..."
         docker pull ghcr.io/${{ github.repository }}:main-test 2>/dev/null || echo "⚠️ Pull test skipped (image might not be public yet)"
+
+    - name: Clean up after build
+      if: always()
+      run: |
+        echo "🧹 Final cleanup..."
+        # Clean up Docker resources
+        docker system prune -f || true
+        docker builder prune -f || true
+        docker image prune -f || true
+        
+        # Clean up temp files
+        sudo rm -rf /tmp/* || true
+        sudo rm -rf /var/tmp/* || true
+        
+        # Show final disk usage
+        echo "Final disk usage:"
+        df -h

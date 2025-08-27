@@ -15,6 +15,21 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
+    - name: Clean up disk space
+      run: |
+        echo "🧹 Cleaning up disk space..."
+        # Remove unnecessary packages
+        sudo apt-get remove -y dotnet-sdk-6.0 dotnet-sdk-7.0 dotnet-sdk-8.0 || true
+        sudo apt-get autoremove -y || true
+        sudo apt-get clean || true
+        
+        # Clean up temp files
+        sudo rm -rf /tmp/* || true
+        sudo rm -rf /var/tmp/* || true
+        
+        # Show disk usage
+        df -h
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -174,3 +189,22 @@ jobs:
       with:
         name: documentation-reports
         path: interrogate_badge.svg
+
+    - name: Clean up reports
+      if: always()
+      run: |
+        echo "🧹 Cleaning up report files..."
+        # Clean up generated reports
+        rm -f safety-report.json || true
+        rm -f bandit-report.json || true
+        rm -f semgrep-report.json || true
+        rm -f dependency-audit.json || true
+        rm -f complexity-report.json || true
+        rm -f maintainability-report.json || true
+        rm -f interrogate_badge.svg || true
+        
+        # Clean up pip cache
+        pip cache purge || true
+        
+        # Show disk usage
+        df -h

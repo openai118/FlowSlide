@@ -39,6 +39,21 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
+    - name: Clean up disk space
+      run: |
+        echo "🧹 Cleaning up disk space..."
+        # Remove unnecessary packages
+        sudo apt-get remove -y dotnet-sdk-6.0 dotnet-sdk-7.0 dotnet-sdk-8.0 || true
+        sudo apt-get autoremove -y || true
+        sudo apt-get clean || true
+        
+        # Clean up temp files
+        sudo rm -rf /tmp/* || true
+        sudo rm -rf /var/tmp/* || true
+        
+        # Show disk usage
+        df -h
+
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:
@@ -266,3 +281,24 @@ jobs:
       with:
         name: performance-results
         path: performance-results.html
+
+    - name: Clean up test artifacts
+      if: always()
+      run: |
+        echo "🧹 Cleaning up test artifacts..."
+        # Clean up test coverage files
+        rm -rf htmlcov/ || true
+        rm -f coverage.xml || true
+        rm -f bandit-report.json || true
+        rm -f test-results.xml || true
+        
+        # Clean up temp directories
+        rm -rf temp/ || true
+        rm -rf logs/ || true
+        rm -rf data/ || true
+        
+        # Clean up pip cache
+        pip cache purge || true
+        
+        # Show disk usage
+        df -h
