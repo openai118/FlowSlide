@@ -8,6 +8,11 @@ on:
   release:
     types: [ published ]
 
+# 限制并发运行，避免资源冲突
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '18'
@@ -39,19 +44,32 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Clean up disk space
+    - name: Clean up disk space safely
       run: |
-        echo "🧹 Cleaning up disk space..."
-        # Remove unnecessary packages
-        sudo apt-get remove -y dotnet-sdk-6.0 dotnet-sdk-7.0 dotnet-sdk-8.0 || true
-        sudo apt-get autoremove -y || true
-        sudo apt-get clean || true
+        echo "🧹 Safe disk cleanup..."
         
-        # Clean up temp files
-        sudo rm -rf /tmp/* || true
-        sudo rm -rf /var/tmp/* || true
+        # 安全的包清理（使用锁机制避免冲突）
+        if command -v flock >/dev/null 2>&1; then
+          flock -w 300 /var/lib/apt/lists/lock apt-get update || true
+          flock -w 300 /var/lib/apt/lists/lock apt-get remove -y dotnet-sdk-6.0 dotnet-sdk-7.0 dotnet-sdk-8.0 || true
+          flock -w 300 /var/lib/apt/lists/lock apt-get autoremove -y || true
+          flock -w 300 /var/lib/apt/lists/lock apt-get clean || true
+        else
+          # 如果没有 flock，使用重试机制
+          for i in {1..3}; do
+            if apt-get remove -y dotnet-sdk-6.0 dotnet-sdk-7.0 dotnet-sdk-8.0; then break; fi
+            sleep $((RANDOM % 10 + 5))
+          done
+          apt-get autoremove -y || true
+          apt-get clean || true
+        fi
         
-        # Show disk usage
+        # 安全的临时文件清理（保留最近的文件）
+        find /tmp -type f -mtime +1 -delete 2>/dev/null || true
+        find /var/tmp -type f -mtime +1 -delete 2>/dev/null || true
+        
+        # 显示清理结果
+        echo "Disk usage after cleanup:"
         df -h
 
     - name: Set up Python ${{ matrix.python-version }}
