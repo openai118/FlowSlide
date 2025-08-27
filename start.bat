@@ -5,7 +5,7 @@ echo.
 REM 检查虚拟环境是否存在
 if not exist ".venv\Scripts\python.exe" (
     echo ❌ 虚拟环境不存在，请先运行: python -m venv .venv
-    echo    然后安装依赖: .venv\Scripts\pip install -r requirements.txt
+    echo    然后安装依赖: .venv\Scripts\pip install -e .
     pause
     exit /b 1
 )

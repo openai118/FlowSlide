@@ -9,7 +9,7 @@ $venvPython = ".\.venv\Scripts\python.exe"
 if (-not (Test-Path $venvPython)) {
     Write-Host "❌ 虚拟环境不存在，请先运行:" -ForegroundColor Red
     Write-Host "   python -m venv .venv" -ForegroundColor Yellow
-    Write-Host "   .\.venv\Scripts\pip install -r requirements.txt" -ForegroundColor Yellow
+    Write-Host "   .\.venv\Scripts\pip install -e ." -ForegroundColor Yellow
     Read-Host "按任意键退出"
     exit 1
 }
