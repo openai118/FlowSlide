@@ -458,33 +458,43 @@ async def get_google_models(request: Request, user: User = Depends(get_current_u
         if not api_key:
             return {"success": False, "error": "API Key is required"}
 
-        # Google Gemini API endpoint for listing models
-        url = f"{base_url}/v1/models?key={api_key}"
+        # Use v1beta endpoint which returns more models
+        url = f"{base_url}/v1beta/models?key={api_key}"
+
+        logger.info(f"Calling Google v1beta API: {url}")
 
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=30) as resp:
                 text = await resp.text()
+                logger.info(f"Google v1beta API response status: {resp.status}")
+                logger.info(f"Google v1beta API response length: {len(text)} characters")
+
                 if resp.status != 200:
-                    logger.error(f"Google models fetch failed {resp.status}: {text}")
+                    logger.error(f"Google v1beta models fetch failed {resp.status}: {text}")
                     return {"success": False, "error": f"HTTP {resp.status}: {text}"}
 
                 try:
                     data = await resp.json()
+                    logger.info(f"Google v1beta API response structure: {list(data.keys()) if isinstance(data, dict) else type(data)}")
                 except Exception:
+                    logger.error(f"Failed to parse Google v1beta API response as JSON: {text[:500]}...")
                     return {"success": False, "error": text}
 
                 models = []
                 # Google API returns {"models": [{"name": "models/gemini-pro", ...}, ...]}
                 items = data.get("models", [])
+                logger.info(f"Google v1beta API returned {len(items)} models")
+
                 for item in items:
                     name = item.get("name", "")
                     if name and name.startswith("models/"):
                         # Extract model name from "models/gemini-pro" format
                         model_id = name.replace("models/", "")
-                        # Only include generative models (exclude embedding models)
-                        if not model_id.endswith("-embedding"):
-                            models.append({"id": model_id})
+                        # Include all available models
+                        models.append({"id": model_id})
+                        logger.debug(f"Added model: {model_id}")
 
+                logger.info(f"Returning {len(models)} models to frontend")
                 return {"success": True, "models": models}
     except Exception as e:
         logger.error(f"Error fetching Google models: {e}")

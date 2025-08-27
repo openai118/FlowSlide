@@ -5,29 +5,27 @@
 {% block extra_css %}
 <style>
 /* 现代化全局母版管理页面 - 优化布局 */
-.templates-hero {
+    .template-actions {
+    padding: 12px 14px;
+    border-top: 1px solid var(--glass-border);
     background: var(--glass-bg);
-    backdrop-filter: blur(30px);
-    border: 1px solid var(--glass-border);
-    color: var(--text-primary);
-    padding: var(--spacing-lg) var(--spacing-lg);
-    margin: calc(-1 * var(--spacing-lg)) calc(-1 * var(--spacing-lg)) var(--spacing-lg) calc(-1 * var(--spacing-lg));
-    text-align: center;
-    position: relative;
-    overflow: hidden;
-    border-radius: 0 0 var(--border-radius-lg) var(--border-radius-lg);
+    display: flex;
+    gap: 8px;
+    justify-content: center; /* center action buttons under the card */
+    align-items: center;
+    /* Allow buttons to wrap to the next line instead of overflowing the card */
+    flex-wrap: wrap;
+    box-sizing: border-box;
+    overflow: visible;
 }
 
-.templates-hero::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background:
-        radial-gradient(circle at 25% 25%, rgba(240, 147, 251, 0.1) 0%, transparent 50%),
-        radial-gradient(circle at 75% 75%, rgba(79, 172, 254, 0.1) 0%, transparent 50%);
+    /* Keep button text readable, allow buttons to wrap as needed and shrink moderately */
+    .template-actions .btn {
+        white-space: nowrap;
+        flex: 0 1 auto; /* allow wrapping and moderate shrinking to fit the card */
+        margin: 4px 2px; /* small spacing when wrapped */
+        min-width: 64px;
+    }
     animation: templatesFloat 20s ease-in-out infinite;
 }
 
@@ -411,7 +409,7 @@ select {
         </div>
         <div class="modal-body" style="padding: 16px;">
             <div id="previewFrameContainer" style="display:flex; align-items:center; justify-content:center; width:100%; height: calc(96vh - 80px);">
-                <iframe id="previewFrame" width="{{ aspect_ratio_settings.width }}" height="{{ aspect_ratio_settings.height }}" style="border: 1px solid var(--glass-border); background: var(--panel-bg); transform: scale(1); transform-origin: center center; margin: 0 auto; display:block; will-change: transform;"></iframe>
+                <iframe id="previewFrame" width="{{ aspect_ratio_settings.width }}" height="{{ aspect_ratio_settings.height }}" style="border: 1px solid var(--glass-border); background: var(--panel-bg); transform: scale(1); transform-origin: center center; margin: 0 auto; display:block; will-change: transform; border-radius:4px;"></iframe>
             </div>
         </div>
     </div>
@@ -568,6 +566,19 @@ select {
     justify-content: center;
 }
 
+/* Allow preview iframe in modal to be absolutely positioned and sized by JS */
+.modal-body iframe {
+    max-width: none !important;
+    max-height: none !important;
+}
+
+/* Ensure preview container enforces clipping and a neutral background so oversized content doesn't overflow visually */
+#previewFrameContainer {
+    background: var(--panel-bg);
+    border-radius: 6px;
+    box-sizing: border-box;
+}
+
 .template-card {
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
@@ -579,6 +590,19 @@ select {
     flex-direction: column;
     height: auto;
     position: relative;
+}
+
+/* Highlight briefly when a template becomes the new default */
+.template-card.default-highlight {
+    animation: defaultHighlight 1.2s ease-in-out;
+    box-shadow: 0 12px 30px rgba(102,118,234,0.25);
+    border-color: rgba(102,118,234,0.6);
+}
+
+@keyframes defaultHighlight {
+    0% { transform: translateY(-6px) scale(1.01); }
+    50% { transform: translateY(-3px) scale(1.005); }
+    100% { transform: translateY(0) scale(1); }
 }
 
 .template-card::before {
@@ -611,6 +635,7 @@ select {
     overflow: hidden;
     border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
     flex-shrink: 0;
+    margin: 0 auto; /* center the preview horizontally inside the card */
 }
 
 .template-preview-iframe {
@@ -666,15 +691,41 @@ select {
     justify-content: space-between;
 }
 
-.template-actions {
+/* Place small metadata (usage/creator) and allow a delete button to sit to its right */
+.info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+.info-text {
+    font-size: 12px;
+    color: #999;
+}
+.info-delete {
+    flex: 0 0 auto;
+}
+
+    .template-actions {
     padding: 12px 14px;
     border-top: 1px solid var(--glass-border);
     background: var(--glass-bg);
     display: flex;
-    gap: 6px;
-    justify-content: flex-end;
-    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center; /* center action buttons under the card */
+    align-items: center;
+    flex-wrap: wrap; /* allow wrapping to avoid overflow */
+    box-sizing: border-box;
+    overflow: visible;
 }
+
+    /* Ensure individual buttons don't wrap their text and don't shrink too far */
+    .template-actions .btn {
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
 
 /* 现代化标签和徽章样式 */
 .tag {
@@ -824,6 +875,30 @@ select {
     min-width: auto;
     min-height: 32px;
     gap: 4px;
+}
+
+/* Action group helpers: keep main actions centered and the destructive action pinned to the right edge */
+.template-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* center group appears centered while delete is on right */
+    gap: 12px;
+}
+
+.template-actions .action-center {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+    flex: 1 1 auto; /* allow center group to take available space and wrap */
+    flex-wrap: wrap;
+}
+
+.template-actions .action-right {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 0 0 auto;
 }
 
 /* AI生成进度样式 - 优化背景和可读性 */
@@ -987,14 +1062,28 @@ select {
     }
 
     .template-actions {
-        flex-direction: column !important;
+        /* Keep buttons on a single line on narrow screens too; allow horizontal scroll if needed */
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
         gap: 6px !important;
+        justify-content: flex-end !important;
     }
 
     .btn-sm {
         width: 100% !important;
         text-align: center !important;
         justify-content: center !important;
+    }
+
+    /* Buttons inside template cards' action bars should not become full-width on mobile
+       — keep them inline and allow horizontal scrolling if necessary. */
+    .template-card .template-actions .btn-sm {
+        width: auto !important;
+        min-width: 0 !important;
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
     }
 
     .modal-content {
@@ -1200,6 +1289,9 @@ function setupEventListeners() {
 
 async function loadTemplates(page = 1) {
     showLoading(true);
+    // Clear preview cache so updated templates (like 终端风) refresh immediately
+    window.__templateDetailCache = new Map();
+    window.__previewAlignments = window.__previewAlignments || new Map();
     try {
         // Build query parameters
         const params = new URLSearchParams({
@@ -1264,7 +1356,7 @@ function renderTemplates(templatesToRender) {
                     id="iframe-${template.id}"
                     onload="adjustIframeContent(${template.id})"
                 ></iframe>
-                <div class="preview-overlay" onclick="previewTemplateById(${template.id})" title="点击查看完整预览">
+                <div class="preview-overlay" onclick="previewTemplateById(${template.id})" ondblclick="cyclePreviewAlign(${template.id}); return false;" title="点击查看完整预览，双击切换填充对齐（居中/上/下/左/右）">
                     <div class="preview-overlay-text"><i class="fas fa-search-plus"></i> 点击放大预览</div>
                 </div>
             </div>
@@ -1278,21 +1370,27 @@ function renderTemplates(templatesToRender) {
                     ${template.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
                 </div>
                 <div style="font-size: 12px; color: #999;">
-                    使用次数: ${template.usage_count} | 创建者: ${template.created_by}
+                    <div class="info-row">
+                        <div class="info-text">使用次数: ${template.usage_count} | 创建者: ${template.created_by}</div>
+                        <div class="info-delete">
+                            ${!template.is_default ?
+                                `<button class="btn btn-sm btn-danger" onclick="deleteTemplate(${template.id})">🗑️ 删除</button>` :
+                                ''
+                            }
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="template-actions">
-                <button class="btn btn-sm btn-primary" onclick="editTemplate(${template.id})">✏️ 编辑</button>
-                <button class="btn btn-sm btn-warning" onclick="duplicateTemplate(${template.id})">📋 复制</button>
-                <button class="btn btn-sm" style="background: #17a2b8; color: white;" onclick="exportTemplate(${template.id})">📤 导出</button>
-                ${!template.is_default ?
-                    `<button class="btn btn-sm btn-success" onclick="setDefaultTemplate(${template.id})">⭐ 设为默认</button>` :
-                    ''
-                }
-                ${!template.is_default ?
-                    `<button class="btn btn-sm btn-danger" onclick="deleteTemplate(${template.id})">🗑️ 删除</button>` :
-                    ''
-                }
+                <div class="action-center">
+                    <button class="btn btn-sm btn-primary" onclick="editTemplate(${template.id})">✏️ 编辑</button>
+                    <button class="btn btn-sm btn-warning" onclick="duplicateTemplate(${template.id})">📋 复制</button>
+                    <button class="btn btn-sm" style="background: #17a2b8; color: white;" onclick="exportTemplate(${template.id})">📤 导出</button>
+                    ${!template.is_default ?
+                        `<button class="btn btn-sm btn-success" onclick="setDefaultTemplate(${template.id})">⭐ 设为默认</button>` :
+                        ''
+                    }
+                </div>
             </div>
         </div>
     `).join('');
@@ -1417,6 +1515,30 @@ async function loadTemplatePreview(templateId, cache) {
             // Set up load handlers
             iframe.onload = function() {
                 console.log('Iframe loaded successfully for template', templateId);
+                try {
+                    const container = document.getElementById('preview-' + templateId);
+                    if (container) {
+                        const rect = container.getBoundingClientRect();
+
+                        // Try to measure the actual content size inside the iframe (preferred)
+                        let contentW = 1280, contentH = 720;
+                        try {
+                            const doc = iframe.contentDocument || iframe.contentWindow.document;
+                            const body = doc && doc.body ? doc.body : doc.documentElement;
+                            // Use scroll sizes and bounding rect as fallback
+                            const bRect = body.getBoundingClientRect();
+                            contentW = Math.max(body.scrollWidth || 0, body.offsetWidth || 0, Math.abs(bRect.width) || 0) || contentW;
+                            contentH = Math.max(body.scrollHeight || 0, body.offsetHeight || 0, Math.abs(bRect.height) || 0) || contentH;
+                        } catch (innerE) {
+                            // cross-origin or other errors - fallback to natural size
+                        }
+
+                        // Use cover behavior: scale so iframe content fills both width and height (may crop)
+                        const coverScale = Math.max(rect.width / contentW, rect.height / contentH);
+                        iframe.style.transform = `translate(-50%, -50%) scale(${coverScale})`;
+                    }
+                } catch (e) { /* noop */ }
+
                 setTimeout(function() {
                     URL.revokeObjectURL(url);
                 }, 2000);
@@ -1430,6 +1552,20 @@ async function loadTemplatePreview(templateId, cache) {
 
             // Set the src to trigger loading
             iframe.src = url;
+
+            // Also attempt a quick scale update shortly after setting src in case onload fires earlier
+            setTimeout(function() {
+                try {
+                    const container = document.getElementById('preview-' + templateId);
+                    if (container) {
+                        const rect = container.getBoundingClientRect();
+                        const naturalW = 1280;
+                        const naturalH = 720;
+                        const coverScale = Math.max(rect.width / naturalW, rect.height / naturalH);
+                        iframe.style.transform = `translate(-50%, -50%) scale(${coverScale})`;
+                    }
+                } catch (e) { /* noop */ }
+            }, 60);
 
         } else {
             console.warn('No HTML template content for template', templateId);
@@ -1456,6 +1592,155 @@ function showPreviewFallback(templateId) {
 function adjustIframeContent(templateId) {
     // This function can be used to adjust iframe content after loading if needed
     // Currently just a placeholder for future enhancements
+}
+
+// Apply cover-style scaling for a preview iframe. Attempts to read iframe content size (same-origin) and
+// falls back to a default natural size. Honors per-template alignment stored in window.__previewAlignments.
+function applyCoverScaleForIframe(templateId, iframe) {
+    const container = document.getElementById('preview-' + templateId);
+    if (!container || !iframe) return;
+
+    const rect = container.getBoundingClientRect();
+
+    let contentW = 1280, contentH = 720;
+    try {
+        const doc = iframe.contentDocument || iframe.contentWindow.document;
+        const body = doc && doc.body ? doc.body : doc.documentElement;
+        const bRect = body.getBoundingClientRect();
+        contentW = Math.max(body.scrollWidth || 0, body.offsetWidth || 0, Math.abs(bRect.width) || 0) || contentW;
+        contentH = Math.max(body.scrollHeight || 0, body.offsetHeight || 0, Math.abs(bRect.height) || 0) || contentH;
+    } catch (e) {
+        // cross-origin or other access denied - fallback to default natural size
+    }
+
+    // If alignment not set by user, pick a default by template orientation
+    window.__previewAlignments = window.__previewAlignments || new Map();
+    if (!window.__previewAlignments.has(templateId)) {
+        const isLandscape = contentW >= contentH;
+        window.__previewAlignments.set(templateId, isLandscape ? 'center' : 'top');
+    }
+
+    const coverScale = Math.max(rect.width / contentW, rect.height / contentH);
+
+    // alignment: center / top / bottom / left / right
+    const align = (window.__previewAlignments && window.__previewAlignments.get(templateId)) || 'center';
+    // Default center translate
+    let tx = '-50%';
+    let ty = '-50%';
+    if (align === 'top') ty = '-20%';
+    if (align === 'bottom') ty = '-80%';
+    if (align === 'left') tx = '-20%';
+    if (align === 'right') tx = '-80%';
+
+    // Ensure container clips and is positioned for absolute child
+    container.style.position = 'relative';
+    container.style.overflow = 'hidden';
+
+    // Position iframe absolutely and center, then scale (may crop)
+    iframe.style.position = 'absolute';
+    iframe.style.left = '50%';
+    iframe.style.top = '50%';
+    iframe.style.transformOrigin = 'center center';
+    iframe.style.transform = `translate(${tx}, ${ty}) scale(${coverScale})`;
+}
+
+// Cycle preview alignment for a template: center -> top -> bottom -> left -> right -> center
+function cyclePreviewAlign(templateId) {
+    window.__previewAlignments = window.__previewAlignments || new Map();
+    const order = ['center','top','bottom','left','right'];
+    const cur = window.__previewAlignments.get(templateId) || 'center';
+    const next = order[(order.indexOf(cur) + 1) % order.length];
+    window.__previewAlignments.set(templateId, next);
+    // apply immediately if iframe exists
+    const iframe = document.getElementById('iframe-' + templateId);
+    if (iframe) applyCoverScaleForIframe(templateId, iframe);
+}
+
+// Generic cover-scaling for an arbitrary iframe inside the modal preview container
+function applyCoverScaleGeneric(frame) {
+    const container = document.getElementById('previewFrameContainer');
+    if (!container || !frame) return;
+    const rect = container.getBoundingClientRect();
+
+    // We'll attempt to measure the iframe content multiple times in case the inner layout hasn't settled.
+    let attempts = 0;
+    const maxAttempts = 6;
+
+    function measureAndApply() {
+        attempts++;
+        let contentW = parseInt(frame.getAttribute('width')) || 1280;
+        let contentH = parseInt(frame.getAttribute('height')) || 720;
+        let measured = false;
+        try {
+            const doc = frame.contentDocument || frame.contentWindow.document;
+            if (doc) {
+                const body = doc.body || doc.documentElement;
+                const bRect = body.getBoundingClientRect();
+                // prefer measuring a common slide container if present
+                const slideSelectors = ['.slide', '.ppt-slide', '#root', '.page', '.slide-content'];
+                for (const sel of slideSelectors) {
+                    try {
+                        const el = doc.querySelector(sel);
+                        if (el) {
+                            const r = el.getBoundingClientRect();
+                            if (r.width > 20 && r.height > 20) {
+                                contentW = Math.max(contentW, Math.round(r.width));
+                                contentH = Math.max(contentH, Math.round(r.height));
+                                measured = true;
+                                break;
+                            }
+                        }
+                    } catch (innerSelE) { /* noop */ }
+                }
+
+                if (!measured) {
+                    contentW = Math.max(contentW, Math.abs(bRect.width) || contentW);
+                    contentH = Math.max(contentH, Math.abs(bRect.height) || contentH);
+                    // if body is too small (e.g., only header strip), try scroll sizes
+                    contentW = Math.max(contentW, body.scrollWidth || 0, body.offsetWidth || 0);
+                    contentH = Math.max(contentH, body.scrollHeight || 0, body.offsetHeight || 0);
+                }
+
+                // set iframe intrinsic size to the measured content so scaling math is correct
+                frame.style.width = contentW + 'px';
+                frame.style.height = contentH + 'px';
+            }
+        } catch (e) {
+            // cross-origin or other access denied - keep fallback sizes
+        }
+
+        // Clamp sizes to avoid extreme values
+        contentW = Math.max(320, Math.min(4000, contentW));
+        contentH = Math.max(240, Math.min(3000, contentH));
+
+        const coverScale = Math.max(rect.width / contentW, rect.height / contentH);
+        const safeScale = Math.max(0.05, Math.min(20, coverScale));
+
+        container.style.position = 'relative';
+        container.style.overflow = 'hidden';
+        frame.style.position = 'absolute';
+
+        // honor per-template alignment if present (modal may reuse window.__previewAlignments map)
+        const align = (window.__previewAlignments && window.__previewAlignments.get && window.__previewAlignments.get('modal')) || 'center';
+        let tx = '-50%';
+        let ty = '-50%';
+        if (align === 'top') ty = '-20%';
+        if (align === 'bottom') ty = '-80%';
+        if (align === 'left') tx = '-20%';
+        if (align === 'right') tx = '-80%';
+
+        frame.style.left = '50%';
+        frame.style.top = '50%';
+        frame.style.transformOrigin = 'center center';
+        frame.style.transform = `translate(${tx}, ${ty}) scale(${safeScale})`;
+
+        // If measured size seems like just a small header (height < 200) and we have attempts left, retry after a short delay
+        if ((contentH < 200 || contentW < 200) && attempts < maxAttempts) {
+            setTimeout(measureAndApply, 120 * attempts);
+        }
+    }
+
+    measureAndApply();
 }
 
 // 导出模板功能 - 在HTML中定义以便onclick可以访问
@@ -1538,22 +1823,34 @@ async function duplicateTemplate(templateId) {
 }
 
 async function setDefaultTemplate(templateId) {
-    if (!confirm('确定要将此模板设为默认模板吗？')) {
-        return;
-    }
-
     try {
-        const response = await fetch(`/api/global-master-templates/${templateId}/set-default`, {
-            method: 'POST'
-        });
+        // Optimistic UI update: mark selected template as default locally so user sees immediate feedback
+        const previousDefaults = templates.filter(t => t.is_default).map(t => t.id);
+        templates.forEach(t => { t.is_default = (t.id === templateId); });
+        renderTemplates(templates);
 
+        // highlight the newly-default card if visible
+        const card = document.querySelector('.template-card:nth-child(1)');
+        const newCard = Array.from(document.querySelectorAll('.template-card')).find(el => el.querySelector(`[onclick='setDefaultTemplate(${templateId})']`) || el.querySelector(`[onclick="setDefaultTemplate(${templateId})"]`));
+        if (newCard) {
+            newCard.classList.add('default-highlight');
+            setTimeout(() => newCard.classList.remove('default-highlight'), 1400);
+            // if not visible, scroll it into view
+            newCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        // Call server to set default
+        const response = await fetch(`/api/global-master-templates/${templateId}/set-default`, { method: 'POST' });
         if (!response.ok) {
+            // rollback optimistic update
+            templates.forEach(t => { t.is_default = previousDefaults.includes(t.id); });
+            renderTemplates(templates);
             const error = await response.json();
             throw new Error(error.detail || 'Failed to set default template');
         }
 
-        loadTemplates(currentPage);
-        alert('默认模板设置成功！');
+    // Reconcile with server: load page 1 (server sorts default first)
+    setTimeout(() => loadTemplates(1), 500);
     } catch (error) {
         console.error('Error setting default template:', error);
         alert('设置默认模板失败: ' + error.message);
@@ -1641,7 +1938,16 @@ function showPreview(htmlContent) {
 
     // 如果缺少基础结构，则补齐，避免空白
     if (!previewHtml.includes('<!DOCTYPE') && !previewHtml.includes('<html')) {
-        previewHtml = `<!DOCTYPE html>\n<html>\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n</head>\n<body>\n${previewHtml}\n</body>\n</html>`;
+        // Add a small safety CSS block to ensure the body and likely slide containers have a minimum
+        // size and overflow hidden so modal cover-scaling works reliably.
+        const safetyCss = `<style>
+            html, body { margin:0; padding:0; background: transparent; }
+            body { min-width: 320px; min-height: 240px; box-sizing: border-box; overflow: hidden; }
+            /* If the template has a top header-only layout, prefer centering the main content */
+            .slide, .ppt-slide, .page, #root, .slide-content { box-sizing: border-box; min-width: 320px; min-height: 240px; }
+        </style>`;
+
+        previewHtml = `<!DOCTYPE html>\n<html>\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n${safetyCss}\n</head>\n<body>\n${previewHtml}\n</body>\n</html>`;
     }
 
     // Create blob URL for the HTML content
@@ -1651,7 +1957,19 @@ function showPreview(htmlContent) {
     frame.src = url;
     // Show modal and adjust scale to fit viewport
     modal.style.display = 'grid';
-    setTimeout(adjustPreviewScale, 0);
+    // prefer 'center' alignment for modal; save a modal-specific key
+    window.__previewAlignments = window.__previewAlignments || new Map();
+    window.__previewAlignments.set('modal', 'center');
+    // Once iframe content loads, measure and apply cover scaling similar to card previews
+    frame.onload = function() {
+        try {
+            applyCoverScaleGeneric(frame);
+        } catch (e) { /* noop */ }
+        // also run the existing viewport adjustment
+        setTimeout(adjustPreviewScale, 0);
+    };
+    // attempt an initial scale soon after setting src
+    setTimeout(function(){ try { applyCoverScaleGeneric(frame); } catch(e){} }, 80);
 
     // Clean up the blob URL after a delay
     setTimeout(() => {
@@ -1687,23 +2005,18 @@ function adjustPreviewScale() {
     frame.setAttribute('height', naturalH);
     if (!naturalW || !naturalH) return;
 
-    const scale = Math.max(0.1, Math.min(availableWidth / naturalW, availableHeight / naturalH));
-    frame.style.transform = `scale(${scale})`;
-
-    // 优化：容器高度按宽度和16:9比例自适应，保证预览最大化居中显示
-    const containerWidth = availableWidth;
-    const containerHeight = containerWidth * naturalH / naturalW;
-    // 如果高度超出可用空间，则按高度缩放
-    if (containerHeight > availableHeight) {
-        container.style.height = availableHeight + 'px';
-        container.style.width = availableHeight * naturalW / naturalH + 'px';
-    } else {
-        container.style.width = containerWidth + 'px';
-        container.style.height = containerHeight + 'px';
-    }
+    // Set container size to available area and let the generic cover scaler compute and apply iframe transform
+    container.style.width = availableWidth + 'px';
+    container.style.height = availableHeight + 'px';
+    container.style.overflow = 'hidden';
     container.style.display = 'flex';
     container.style.alignItems = 'center';
     container.style.justifyContent = 'center';
+
+    // Delegate actual frame scaling/positioning to applyCoverScaleGeneric so modal matches card behavior
+    try {
+        applyCoverScaleGeneric(frame);
+    } catch (e) { /* noop */ }
 }
 
 // 窗口大小变化时重新计算缩放

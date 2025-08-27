@@ -46,7 +46,7 @@ async def get_all_templates(
     active_only: bool = Query(True, description="Only return active templates"),
     tags: Optional[str] = Query(None, description="Filter by tags (comma-separated)"),
     page: int = Query(1, ge=1, description="Page number (1-based)"),
-    page_size: int = Query(6, ge=1, le=100, description="Number of items per page"),
+    page_size: int = Query(6, ge=1, le=1000, description="Number of items per page"),
     search: Optional[str] = Query(None, description="Search in template name and description"),
 ):
     """Get all global master templates with pagination"""

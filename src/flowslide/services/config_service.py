@@ -432,6 +432,14 @@ class ConfigService:
 
     def get_all_config(self) -> Dict[str, Any]:
         """Get all configuration values"""
+        # Reload environment variables to ensure we have the latest values
+        try:
+            load_dotenv(self.env_file, override=True)
+        except (PermissionError, FileNotFoundError) as e:
+            logger.debug(f"Could not reload .env file {self.env_file}: {e}")
+        except Exception as e:
+            logger.debug(f"Error reloading .env file {self.env_file}: {e}")
+        
         config = {}
 
         for key, schema in self.config_schema.items():
@@ -452,6 +460,14 @@ class ConfigService:
 
     def get_config_by_category(self, category: str) -> Dict[str, Any]:
         """Get configuration values by category"""
+        # Reload environment variables to ensure we have the latest values
+        try:
+            load_dotenv(self.env_file, override=True)
+        except (PermissionError, FileNotFoundError) as e:
+            logger.debug(f"Could not reload .env file {self.env_file}: {e}")
+        except Exception as e:
+            logger.debug(f"Error reloading .env file {self.env_file}: {e}")
+        
         config = {}
 
         for key, schema in self.config_schema.items():

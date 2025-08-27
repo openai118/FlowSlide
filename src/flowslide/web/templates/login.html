@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>登录 - FlowSlide</title>
     <link rel="icon" type="image/svg+xml" href="/static/images/flowslide-logo.svg">
-    <link rel="alternate icon" href="/static/images/favicon.ico">
     <!-- Font Awesome icons inline -->
     <style>
         /* Font Awesome icons - inline minimal set */
         .fas { font-family: "Font Awesome 5 Free"; font-weight: 900; }
         .fa-sign-in-alt:before { content: "→"; }
-        .fa-moon:before { content: "🌙"; }
+    .fa-moon:before { content: "🌙"; }
+    .fa-sun:before { content: "☀️"; }
         .fa-spinner:before { content: "⟳"; }
         .fa-spin { animation: fa-spin 2s infinite linear; }
         @keyframes fa-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -366,25 +366,49 @@
         (function(){
             var btn = document.getElementById('theme-toggle');
             if(!btn) return;
+            var icon = btn.querySelector('i');
             var mql = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+
             function apply(theme){
                 document.documentElement.classList.remove('theme-github','theme-dark');
-                if (theme === 'github') document.documentElement.classList.add('theme-github');
                 if (theme === 'dark') document.documentElement.classList.add('theme-dark');
+                else document.documentElement.classList.add('theme-github');
+                if (icon) icon.className = (theme === 'dark') ? 'fas fa-moon' : 'fas fa-sun';
             }
-            function current(){
-                var saved = null; try { saved = localStorage.getItem('fs-theme'); } catch(e) {}
+
+            function effectiveMode(){
+                var saved = null;
+                try { saved = localStorage.getItem('fs-theme'); } catch(e) {}
                 if (saved === 'github' || saved === 'dark') return saved;
                 return (mql && mql.matches) ? 'dark' : 'github';
             }
-            function cycle(){
-                var saved = null; try { saved = localStorage.getItem('fs-theme'); } catch(e) {}
-                var next = saved === 'github' ? 'dark' : saved === 'dark' ? null : 'github';
-                try { if (next) localStorage.setItem('fs-theme', next); else localStorage.removeItem('fs-theme'); } catch(e) {}
-                apply(current());
+
+            function refresh(){
+                var mode = effectiveMode();
+                apply(mode);
             }
-            if (mql && mql.addEventListener) mql.addEventListener('change', function(){ apply(current()); });
-            btn.addEventListener('click', cycle);
+
+            function toggle(){
+                var mode = effectiveMode();
+                var next = (mode === 'dark') ? 'github' : 'dark';
+                try { localStorage.setItem('fs-theme', next); } catch(e) {}
+                refresh();
+            }
+
+            if (mql && mql.addEventListener) {
+                mql.addEventListener('change', function(){
+                    var saved = null; try { saved = localStorage.getItem('fs-theme'); } catch(e) {}
+                    if (!saved) refresh();
+                });
+            } else if (mql && mql.addListener) {
+                mql.addListener(function(){
+                    var saved = null; try { saved = localStorage.getItem('fs-theme'); } catch(e) {}
+                    if (!saved) refresh();
+                });
+            }
+
+            btn.addEventListener('click', toggle);
+            refresh();
         })();
     </script>
 </body>

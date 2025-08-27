@@ -286,14 +286,14 @@ async def create_default_global_template():
             db_service = DatabaseService(session)
 
             # Check if default template already exists
-            existing = await db_service.get_global_master_template_by_name("默认商务模板")
+            existing = await db_service.get_global_master_template_by_name("商务模板")
             if existing:
                 logger.info("Default global master template already exists")
                 return existing.id
 
             # Create default template
             template_data = {
-                "template_name": "默认商务模板",
+                "template_name": "商务模板",
                 "description": "现代简约的商务PPT模板，适用于各种商务演示场景。采用深色背景和蓝色主色调，支持多种内容类型展示。",
                 "html_template": DEFAULT_TEMPLATE_HTML,
                 "tags": ["默认", "商务", "现代", "简约", "深色"],
