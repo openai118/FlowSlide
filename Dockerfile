@@ -34,8 +34,8 @@ RUN echo "Cache bust: ${CACHE_BUST}" > /build-cache-bust
 
 # Install Python dependencies using uv (faster and more reliable)
 # uv.toml configures extra-index-url for apryse-sdk automatically
-RUN uv pip install --target=/opt/venv -r pyproject.toml && \
-    echo "✅ All dependencies installed successfully"
+RUN uv pip install --system -r pyproject.toml && \
+    echo "✅ All dependencies installed successfully to system Python"
 
 # Clean up build artifacts
 RUN find /opt/venv -name "*.pyc" -delete && \
@@ -47,7 +47,7 @@ FROM python:3.11-slim AS production
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app/src:/opt/venv \
+    PYTHONPATH=/app/src \
     PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright \
     HOME=/root
 
@@ -108,7 +108,7 @@ RUN groupadd -r flowslide && \
     mkdir -p /home/flowslide/.cache/ms-playwright /root/.cache/ms-playwright
 
 # Copy Python packages from builder
-COPY --from=builder /opt/venv /opt/venv
+# Note: Using system Python instead of virtual environment for simplicity
 
 # Install Playwright with minimal footprint (like LandPPT)
 RUN pip install --no-cache-dir playwright==1.40.0 && \
@@ -186,7 +186,7 @@ HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
 
 # Set entrypoint and command with smart script selection
 ENTRYPOINT ["./docker-entrypoint-active.sh"]
-CMD ["/opt/venv/bin/python", "run.py"]
+CMD ["python", "run.py"]
 
 # Metadata labels
 LABEL maintainer="FlowSlide Team" \

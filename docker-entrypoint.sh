@@ -220,34 +220,22 @@ main() {
 import sys
 try:
     import uvicorn, fastapi
-    print('deps OK (default python)')
+    print('deps OK (system python)')
     sys.exit(0)
 except Exception as e:
-    print('default python deps check failed:', e)
+    print('system python deps check failed:', e)
     sys.exit(1)
 PY
     then
-        info "Dependencies available for default python"
+        info "Dependencies available for system python"
         :
     else
-        warn "Default python cannot import deps; trying /opt/venv/bin/python"
-        if /opt/venv/bin/python - <<'PY2'
-import sys
-import uvicorn, fastapi
-print('deps OK (venv python)')
-PY2
-        then
-            info "Switching to venv python explicitly"
-            set -- /opt/venv/bin/python run.py
-        else
-            error "Dependencies missing even in venv; printing installed packages"
-            python -m pip freeze || true
-            /opt/venv/bin/pip freeze || true
-            exit 1
-        fi
+        error "Dependencies missing for system python; printing installed packages"
+        python -m pip freeze || true
+        exit 1
     fi
 
-    # Execute the main command (possibly adjusted to venv python)
+    # Execute the main command (using system python)
     exec "$@"
 }
 
