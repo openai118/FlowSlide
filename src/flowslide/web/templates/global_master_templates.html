@@ -26,8 +26,7 @@
         margin: 4px 2px; /* small spacing when wrapped */
         min-width: 64px;
     }
-    animation: templatesFloat 20s ease-in-out infinite;
-}
+    
 
 @keyframes templatesFloat {
     0%, 100% { transform: scale(1) rotate(0deg); }
@@ -45,6 +44,10 @@
     position: relative;
     z-index: 1;
     letter-spacing: -0.02em;
+}
+
+.templates-hero {
+    animation: templatesFloat 20s ease-in-out infinite;
 }
 
 .templates-hero p {
@@ -1236,6 +1239,31 @@ let currentTag = '';
     } catch (e) { window.__gm_log = { debug:()=>{}, info:()=>{}, warn:()=>{}, error:()=>{} }; }
 })();
 
+// Allow cancelling pending preview loads to avoid blocking navigation when user changes page
+window.__gm_cancelPendingPreviews = function(){
+    try {
+        const s = window.__previewLoadState;
+        if (!s) return;
+        try { s.observer && s.observer.disconnect(); } catch(e){}
+        // clear queue
+        try { s.queue = []; } catch(e){}
+        // abort ongoing fetches
+        try {
+            if (Array.isArray(s.abortControllers)) {
+                s.abortControllers.forEach(c => { try{ c.abort(); }catch(e){} });
+            }
+        } catch(e){}
+        // revoke blob urls
+        try {
+            if (Array.isArray(s.blobUrls)) {
+                s.blobUrls.forEach(u => { try{ URL.revokeObjectURL(u); }catch(e){} });
+            }
+        } catch(e){}
+        // reset state
+        window.__previewLoadState = { queue: [], running: 0, abortControllers: [], blobUrls: [] };
+    } catch(e) { /* noop */ }
+};
+
 // Initialize page
 document.addEventListener('DOMContentLoaded', function() {
     loadTemplates(1);
@@ -1303,6 +1331,10 @@ function setupEventListeners() {
 }
 
 async function loadTemplates(page = 1) {
+    // Cancel any pending preview loads to make user navigation responsive
+    try { window.__gm_cancelPendingPreviews(); } catch(e){}
+    // init state
+    window.__previewLoadState = window.__previewLoadState || { queue: [], running: 0, abortControllers: [], blobUrls: [] };
     showLoading(true);
     // Clear preview cache so updated templates (like 终端风) refresh immediately
     window.__templateDetailCache = new Map();
@@ -1413,16 +1445,24 @@ function renderTemplates(templatesToRender) {
     // Load template content into iframes after rendering
     // Lazy-load previews using IntersectionObserver with small delay
     setTimeout(() => {
-        const maxConcurrent = 3;
-        const queue = [];
-        let running = 0;
+        // More conservative concurrency to avoid many simultaneous iframe loads
+        const maxConcurrent = 1;
+        const state = window.__previewLoadState = window.__previewLoadState || { queue: [], running: 0, abortControllers: [], blobUrls: [] };
         const cache = window.__templateDetailCache = window.__templateDetailCache || new Map();
 
         function next() {
-            if (running >= maxConcurrent || queue.length === 0) return;
-            const fn = queue.shift();
-            running++;
-            fn().finally(() => { running--; next(); });
+            if (state.running >= maxConcurrent || state.queue.length === 0) return;
+            const fn = state.queue.shift();
+            state.running++;
+            // run the queued load; allow micro-yielding so UI stays responsive
+            const run = () => fn().finally(() => { state.running--; setTimeout(next, 0); });
+            // schedule run in idle time if available, otherwise run immediately
+            if (window.requestIdleCallback) {
+                try { window.requestIdleCallback(run, { timeout: 100 }); }
+                catch(e) { run(); }
+            } else {
+                run();
+            }
         }
 
         const observer = new IntersectionObserver((entries) => {
@@ -1430,12 +1470,14 @@ function renderTemplates(templatesToRender) {
                 if (entry.isIntersecting) {
                     const el = entry.target;
                     const id = el.getAttribute('data-template-id');
-                    observer.unobserve(el);
-                    queue.push(() => loadTemplatePreview(parseInt(id), cache));
+                    try { observer.unobserve(el); } catch(e){}
+                    state.queue.push(() => loadTemplatePreview(parseInt(id), cache));
                     next();
                 }
             });
         }, { rootMargin: '100px' });
+
+        state.observer = observer;
 
         templatesToRender.forEach(t => {
             const container = document.getElementById('preview-' + t.id);
@@ -1454,8 +1496,29 @@ async function loadTemplatePreview(templateId, cache) {
         if (cache && cache.has(templateId)) {
             template = cache.get(templateId);
         } else {
-            const response = await fetch('/api/global-master-templates/' + templateId, { cache: 'no-store' });
-            if (!response.ok) {
+            // Use AbortController so we can cancel in-flight preview loads
+            const controller = new AbortController();
+            try {
+                if (!window.__previewLoadState) window.__previewLoadState = { abortControllers: [], blobUrls: [] };
+                window.__previewLoadState.abortControllers.push(controller);
+            } catch (e) { /* noop */ }
+            let response;
+            try {
+                response = await fetch('/api/global-master-templates/' + templateId, { cache: 'no-store', signal: controller.signal });
+            } catch (err) {
+                // likely aborted
+                window.__gm_log.info && window.__gm_log.info('Preview fetch aborted for', templateId);
+                return;
+            } finally {
+                try {
+                    // remove controller from state (if present)
+                    if (window.__previewLoadState && Array.isArray(window.__previewLoadState.abortControllers)) {
+                        const idx = window.__previewLoadState.abortControllers.indexOf(controller);
+                        if (idx !== -1) window.__previewLoadState.abortControllers.splice(idx, 1);
+                    }
+                } catch (e) { /* noop */ }
+            }
+            if (!response || !response.ok) {
                 console.warn('Failed to load template', templateId, 'for preview');
                 showPreviewFallback(templateId);
                 return;
@@ -1564,6 +1627,10 @@ async function loadTemplatePreview(templateId, cache) {
             // Create a blob URL for the HTML content
             const blob = new Blob([previewHtml], { type: 'text/html' });
             const url = URL.createObjectURL(blob);
+            try {
+                if (!window.__previewLoadState) window.__previewLoadState = { abortControllers: [], blobUrls: [] };
+                if (Array.isArray(window.__previewLoadState.blobUrls)) window.__previewLoadState.blobUrls.push(url);
+            } catch (e) { /* noop */ }
 
             // Set up load handlers
             // Use a retrying measurement to avoid race conditions where inner layout isn't ready on first read.
@@ -1579,32 +1646,37 @@ async function loadTemplatePreview(templateId, cache) {
                         return;
                     }
 
-                    // Use fixed natural size for card previews to avoid measurement randomness
-                    const contentW = 960;
-                    const contentH = 540;
+                    const doCardMeasure = function() {
+                        // Use fixed natural size for card previews to avoid measurement randomness
+                        const contentW = 960;
+                        const contentH = 540;
 
-                    // Compute cover scale based on fixed natural size
-                    const coverScale = Math.max(rect.width / contentW, rect.height / contentH);
-                    const chosenScaleCard = Math.max(0.05, Math.min(20, coverScale));
+                        // Compute cover scale based on fixed natural size
+                        const coverScale = Math.max(rect.width / contentW, rect.height / contentH);
+                        const chosenScaleCard = Math.max(0.05, Math.min(20, coverScale));
 
-                    // synchronize iframe intrinsic size attributes (intrinsic content size)
-                    try {
-                        iframe.setAttribute('width', String(contentW));
-                        iframe.setAttribute('height', String(contentH));
-                    } catch (_) { /* noop */ }
+                        // synchronize iframe intrinsic size attributes (intrinsic content size)
+                        try { iframe.setAttribute('width', String(contentW)); iframe.setAttribute('height', String(contentH)); } catch (_) { /* noop */ }
 
-                    // Instead of using CSS scale (which doesn't change layout box), set the rendered
-                    // iframe width/height to the scaled pixel size so DevTools reported size matches visual size.
-                    try {
-                        const finalW = Math.max(8, Math.round(contentW * chosenScaleCard));
-                        const finalH = Math.max(8, Math.round(contentH * chosenScaleCard));
-                        iframe.style.width = finalW + 'px';
-                        iframe.style.height = finalH + 'px';
-                    } catch (_) { /* noop */ }
+                        // Instead of using CSS scale (which doesn't change layout box), set the rendered
+                        // iframe width/height to the scaled pixel size so DevTools reported size matches visual size.
+                        try {
+                            const finalW = Math.max(8, Math.round(contentW * chosenScaleCard));
+                            const finalH = Math.max(8, Math.round(contentH * chosenScaleCard));
+                            iframe.style.width = finalW + 'px';
+                            iframe.style.height = finalH + 'px';
+                        } catch (_) { /* noop */ }
 
-                    // keep centered translate but remove scale transform
-                    iframe.style.transform = `translate(-50%, -50%)`;
-                    iframe.style.opacity = '1';
+                        // keep centered translate but remove scale transform
+                        try { iframe.style.transform = `translate(-50%, -50%)`; iframe.style.opacity = '1'; } catch(e){}
+                    };
+
+                    if (window.requestIdleCallback) {
+                        try { window.requestIdleCallback(doCardMeasure, { timeout: 120 }); }
+                        catch(e) { setTimeout(doCardMeasure, 0); }
+                    } else {
+                        setTimeout(doCardMeasure, 0);
+                    }
                 } catch (e) { /* noop */ }
             }
 
@@ -1855,8 +1927,29 @@ function applyCoverScaleGeneric(frame) {
 // 导出模板功能 - 在HTML中定义以便onclick可以访问
 async function exportTemplate(templateId) {
     try {
-        const response = await fetch(`/api/global-master-templates/${templateId}`);
-        if (!response.ok) {
+        // Abortable fetch so previews can be cancelled
+        const controller = new AbortController();
+        try {
+            if (!window.__previewLoadState) window.__previewLoadState = { abortControllers: [], blobUrls: [] };
+            window.__previewLoadState.abortControllers.push(controller);
+        } catch (e) { /* noop */ }
+
+        let response;
+        try {
+            response = await fetch(`/api/global-master-templates/${templateId}`, { signal: controller.signal });
+        } catch (err) {
+            window.__gm_log.info && window.__gm_log.info('Preview fetch aborted for modal', templateId);
+            return;
+        } finally {
+            try {
+                if (window.__previewLoadState && Array.isArray(window.__previewLoadState.abortControllers)) {
+                    const idx = window.__previewLoadState.abortControllers.indexOf(controller);
+                    if (idx !== -1) window.__previewLoadState.abortControllers.splice(idx, 1);
+                }
+            } catch (e) { /* noop */ }
+        }
+
+        if (!response || !response.ok) {
             throw new Error('Failed to load template');
         }
 
@@ -1878,10 +1971,11 @@ async function exportTemplate(templateId) {
 
         // 创建下载链接
         const dataStr = JSON.stringify(exportData, null, 2);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
 
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    const linkUrl = URL.createObjectURL(dataBlob);
+    link.href = linkUrl;
         link.download = `${template.template_name}_${new Date().toISOString().split('T')[0]}.json`;
 
         // 触发下载
@@ -1891,7 +1985,8 @@ async function exportTemplate(templateId) {
 
         // 清理URL
         setTimeout(() => {
-            URL.revokeObjectURL(link.href);
+            try { URL.revokeObjectURL(linkUrl); }
+            catch(e){}
         }, 1000);
 
     window.__gm_log.info && window.__gm_log.info('模板导出成功:', template.template_name);
@@ -2083,6 +2178,10 @@ function showPreview(htmlContent) {
     // Create blob URL for the HTML content
     const blob = new Blob([previewHtml], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
+    try {
+        if (!window.__previewLoadState) window.__previewLoadState = { abortControllers: [], blobUrls: [] };
+        if (Array.isArray(window.__previewLoadState.blobUrls)) window.__previewLoadState.blobUrls.push(url);
+    } catch (e) { /* noop */ }
 
     frame.src = url;
     // Show modal and adjust scale to fit viewport
@@ -2101,9 +2200,15 @@ function showPreview(htmlContent) {
     // attempt an initial scale soon after setting src
     setTimeout(function(){ try { applyCoverScaleGeneric(frame); } catch(e){} }, 80);
 
-    // Clean up the blob URL after a delay
+    // Clean up the blob URL after a delay; also remove from global tracking
     setTimeout(() => {
-        URL.revokeObjectURL(url);
+        try { URL.revokeObjectURL(url); } catch(e){}
+        try {
+            if (window.__previewLoadState && Array.isArray(window.__previewLoadState.blobUrls)) {
+                const idx = window.__previewLoadState.blobUrls.indexOf(url);
+                if (idx !== -1) window.__previewLoadState.blobUrls.splice(idx, 1);
+            }
+        } catch(e){}
     }, 1000);
 }
 
@@ -2168,13 +2273,82 @@ function closePreviewModal() {
 }
 
 // Pagination functions
+    function measureAndApply() {
+        attempts++;
+        // Defer actual measurement & style writes to idle time to avoid blocking
+        const doMeasure = function() {
+            let contentW = parseInt(frame.getAttribute('width')) || 1280;
+            let contentH = parseInt(frame.getAttribute('height')) || 720;
+            let measured = false;
+            try {
+                const doc = frame.contentDocument || frame.contentWindow.document;
+                if (doc) {
+                    const body = doc.body || doc.documentElement;
+                    const bRect = body.getBoundingClientRect();
+                    // prefer measuring a common slide container if present
+                    const slideSelectors = ['.slide', '.ppt-slide', '#root', '.page', '.slide-content'];
+                    for (const sel of slideSelectors) {
+                        try {
+                            const el = doc.querySelector(sel);
+                            if (el) {
+                                const r = el.getBoundingClientRect();
+                                if (r.width > 20 && r.height > 20) {
+                                    contentW = Math.max(contentW, Math.round(r.width));
+                                    contentH = Math.max(contentH, Math.round(r.height));
+                                    measured = true;
+                                    break;
+                                }
+                            }
+                        } catch (innerSelE) { /* noop */ }
+                    }
+
+                    if (!measured) {
+                        contentW = Math.max(contentW, Math.abs(bRect.width) || contentW);
+                        contentH = Math.max(contentH, Math.abs(bRect.height) || contentH);
+                        // if body is too small (e.g., only header strip), try scroll sizes
+                        contentW = Math.max(contentW, body.scrollWidth || 0, body.offsetWidth || 0);
+                        contentH = Math.max(contentH, body.scrollHeight || 0, body.offsetHeight || 0);
+                    }
+
+                    // Clamp sizes to avoid extreme values
+                    contentW = Math.max(320, Math.min(4000, contentW));
+                    contentH = Math.max(200, Math.min(3000, contentH));
+
+                    // Apply sizes (style writes) - do this last to minimize layout thrash
+                    try {
+                        frame.style.width = contentW + 'px';
+                        frame.style.height = contentH + 'px';
+                    } catch (e) { /* noop */ }
+                }
+            } catch (e) {
+                // cross-origin or other access denied - keep fallback sizes
+            }
+
+            // If measured size seems like just a small header (height < 200) and we have attempts left, retry after a short delay
+            try {
+                const bH = parseInt(frame.style.height) || 0;
+                if ((bH < 200 || (parseInt(frame.style.width) || 0) < 200) && attempts < maxAttempts) {
+                    setTimeout(measureAndApply, 120 * attempts);
+                }
+            } catch(e) { if (attempts < maxAttempts) setTimeout(measureAndApply, 120 * attempts); }
+        };
+
+        if (window.requestIdleCallback) {
+            try { window.requestIdleCallback(doMeasure, { timeout: 200 }); }
+            catch(e) { setTimeout(doMeasure, 0); }
+        } else {
+            setTimeout(doMeasure, 0);
+        }
+    }
+
 function updatePagination() {
     const paginationContainer = document.getElementById('paginationContainer');
     const paginationInfo = document.getElementById('paginationInfo');
     const prevBtn = document.getElementById('prevPageBtn');
     const nextBtn = document.getElementById('nextPageBtn');
     const pageNumbers = document.getElementById('pageNumbers');
-    // Always show pagination if there are templates
+
+    if (!paginationContainer) return;
     if (totalCount > 0) {
         paginationContainer.style.display = 'block';
     } else {
@@ -2182,55 +2356,32 @@ function updatePagination() {
         return;
     }
 
-    // Update info
-    const startItem = totalCount > 0 ? (currentPage - 1) * pageSize + 1 : 0;
+    const startItem = totalCount > 0 ? ((currentPage - 1) * pageSize) + 1 : 0;
     const endItem = Math.min(currentPage * pageSize, totalCount);
-    paginationInfo.textContent = `显示第 ${startItem}-${endItem} 项，共 ${totalCount} 项`;
+    if (paginationInfo) paginationInfo.textContent = `显示第 ${startItem}-${endItem} 项，共 ${totalCount} 项`;
 
-    // Update buttons
-    prevBtn.disabled = currentPage <= 1;
-    nextBtn.disabled = currentPage >= totalPages;
+    if (prevBtn) prevBtn.disabled = currentPage <= 1;
+    if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
 
-    // Generate page numbers (only if more than 1 page)
-    if (totalPages > 1) {
-        generatePageNumbers(pageNumbers);
-        pageNumbers.style.display = 'flex';
-    } else {
-        pageNumbers.style.display = 'none';
-    }
-}
+    if (!pageNumbers) return;
+    pageNumbers.innerHTML = '';
 
-function generatePageNumbers(container) {
-    container.innerHTML = '';
+    const visibleCount = 7;
+    const half = Math.floor(visibleCount / 2);
+    let startPage = Math.max(1, currentPage - half);
+    let endPage = Math.min(totalPages, startPage + visibleCount - 1);
+    if (endPage - startPage < visibleCount - 1) startPage = Math.max(1, endPage - visibleCount + 1);
 
-    const maxVisiblePages = 5;
-    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-
-    // Adjust start page if we're near the end
-    if (endPage - startPage + 1 < maxVisiblePages) {
-        startPage = Math.max(1, endPage - maxVisiblePages + 1);
-    }
-
-    // Add first page and ellipsis if needed
     if (startPage > 1) {
-        addPageNumber(container, 1);
-        if (startPage > 2) {
-            addEllipsis(container);
-        }
+        addPageNumber(pageNumbers, 1);
+        if (startPage > 2) addEllipsis(pageNumbers);
     }
 
-    // Add visible page numbers
-    for (let i = startPage; i <= endPage; i++) {
-        addPageNumber(container, i);
-    }
+    for (let i = startPage; i <= endPage; i++) addPageNumber(pageNumbers, i);
 
-    // Add ellipsis and last page if needed
     if (endPage < totalPages) {
-        if (endPage < totalPages - 1) {
-            addEllipsis(container);
-        }
-        addPageNumber(container, totalPages);
+        if (endPage < totalPages - 1) addEllipsis(pageNumbers);
+        addPageNumber(pageNumbers, totalPages);
     }
 }
 

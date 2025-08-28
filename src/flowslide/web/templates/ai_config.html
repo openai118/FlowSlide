@@ -2133,24 +2133,40 @@ function toggleSecretVisibility(fieldName, btn){
 // 提供者测试状态缓存（已在上面定义）
 
 // 初始化
-document.addEventListener('DOMContentLoaded', async function() {
-    // 加载初始配置
-    await loadAllConfigs();
-    // 等待一小段时间确保表单填充完成
-    setTimeout(async () => {
-        // 初始化当前提供者下拉框（这会自动更新可用提供者数量）
-        await initCurrentProviderSelect();
-        // 同步当前提供者状态
-        await syncCurrentProviderStatus();
-        // 初始化顶部状态显示
-        initTopStatusDisplay();
-    }, 100);
-    // 检查图片服务状态
-    checkImageServiceStatus();
-    // 加载缓存的测试状态（在配置加载完成后）
-    loadCachedTestResults();
-    // 重置所有提供者状态为未测试状态（避免后端状态与实际测试结果不一致）
-    resetAllProviderStatus();
+document.addEventListener('DOMContentLoaded', function() {
+    // 关键：尽快返回以提升页面响应性。非关键工作在空闲时运行。
+    // 触发配置加载，但不要在此处 await（避免在DOMContentLoaded阶段顺序阻塞）
+    loadAllConfigs().then(() => {
+        // 在短延迟后初始化会话相关UI（仍较为重要）
+        setTimeout(async () => {
+            try {
+                await initCurrentProviderSelect();
+                await syncCurrentProviderStatus();
+                initTopStatusDisplay();
+            } catch (e) {
+                window.__ai_log.warn('延迟初始化提供者时出错', e);
+            }
+        }, 100);
+    }).catch(e => {
+        window.__ai_log.warn('加载配置失败（非致命）', e);
+    });
+
+    // 将非关键的后台检查放到空闲回调中执行以避免影响首次交互
+    const deferredStartup = () => {
+        try {
+            checkImageServiceStatus();
+            loadCachedTestResults();
+            resetAllProviderStatus();
+        } catch (e) {
+            window.__ai_log.warn('延迟启动任务出错', e);
+        }
+    };
+
+    if ('requestIdleCallback' in window) {
+        try { requestIdleCallback(deferredStartup, { timeout: 2000 }); } catch(e){ setTimeout(deferredStartup, 500); }
+    } else {
+        setTimeout(deferredStartup, 500);
+    }
 });
 
 // 获取可用的提供者列表（只返回测试成功的提供者）
@@ -3159,17 +3175,41 @@ async function testAllConfiguredProviders() {
         return;
     }
 
-    // 逐个测试提供者
-    for (let i = 0; i < configuredProviders.length; i++) {
-        const provider = configuredProviders[i];
+    // 并行化测试（有限并发），避免顺序阻塞页面交互
+    const maxConcurrent = 3;
+    let running = 0;
+    let index = 0;
 
+    const runNext = async () => {
+        if (index >= configuredProviders.length) return;
+        const provider = configuredProviders[index++];
+        running++;
         try {
             await testProviderSilently(provider);
         } catch (error) {
             console.error(`测试 ${provider} 时出错:`, error);
+        } finally {
+            running--;
+            // schedule next in next tick to yield to UI
+            setTimeout(runNext, 0);
         }
+    };
+
+    // 启动初始并发任务
+    for (let k = 0; k < Math.min(maxConcurrent, configuredProviders.length); k++) {
+        runNext();
     }
 
+    // 等待所有完成（轮询式）
+    const waitForAll = () => new Promise(resolve => {
+        const check = () => {
+            if (running === 0 && index >= configuredProviders.length) return resolve();
+            setTimeout(check, 150);
+        };
+        check();
+    });
+
+    await waitForAll();
     window.__ai_log.info('所有提供者测试完成');
 }
 

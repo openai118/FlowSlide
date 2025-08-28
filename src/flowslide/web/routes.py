@@ -916,8 +916,9 @@ async def web_dashboard(request: Request, user: User = Depends(get_current_user_
     try:
         # Get project statistics (RBAC: non-admin only sees own projects)
         owner_filter = None if user.is_admin else user.id
+        # Load a reasonable page size for dashboard to avoid large payloads
         projects_response = await ppt_service.project_manager.list_projects(
-            page=1, page_size=100, owner_id=owner_filter
+            page=1, page_size=20, owner_id=owner_filter
         )
         projects = projects_response.projects
 
@@ -929,13 +930,12 @@ async def web_dashboard(request: Request, user: User = Depends(get_current_user_
         # Get recent projects (last 5)
         recent_projects = sorted(projects, key=lambda x: x.updated_at, reverse=True)[:5]
 
-        # Get active TODO boards
+        # Get active TODO boards (use already-loaded todo_board to avoid N+1 DB calls)
         active_todo_boards = []
         for project in projects:
-            if project.status == "in_progress" and project.todo_board:
-                todo_board = await ppt_service.get_project_todo_board(project.project_id)
-                if todo_board:
-                    active_todo_boards.append(todo_board)
+            if project.status == "in_progress" and getattr(project, 'todo_board', None):
+                # project.todo_board is eager-loaded by the repository; reuse it directly
+                active_todo_boards.append(project.todo_board)
 
         return templates.TemplateResponse(
             "project_dashboard.html",

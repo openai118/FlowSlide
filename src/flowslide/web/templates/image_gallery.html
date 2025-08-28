@@ -458,10 +458,7 @@ window.closeImageDetailModal = window.closeImageDetailModal || function(){
 
 <!-- 图片网格 -->
 <div id="image-grid" class="image-grid">
-    <div class="loading-placeholder" style="text-align: center; padding: 60px; color: var(--text-secondary);">
-        <div style="font-size: 3em; margin-bottom: 20px;">⏳</div>
-        <p>正在加载图片库...</p>
-    </div>
+    <!-- 初始保持空白。真实占位由 loadImages 的延迟计时器控制，避免短暂闪烁 -->
 </div>
 
 <!-- 分页控件 -->
@@ -699,7 +696,14 @@ async function loadImages(page = 1) {
             sort: sort
         });
 
+        // 延迟显示loading占位（只有当请求较慢时才显示），避免短暂闪烁
+        let loadingTimer = setTimeout(function(){
+            const grid = document.getElementById('image-grid');
+            if (grid) grid.innerHTML = '<div class="loading-placeholder" style="text-align: center; padding: 60px; color: var(--text-secondary); grid-column: 1 / -1;">\n                <div style="font-size: 3em; margin-bottom: 20px;">⏳</div><p>正在加载图片库...</p></div>';
+        }, 150);
+
         const response = await fetch(`/api/image/gallery/list?${params}`);
+        clearTimeout(loadingTimer);
         const data = await response.json();
 
         if (data.success) {

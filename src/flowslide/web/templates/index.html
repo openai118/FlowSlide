@@ -13,6 +13,19 @@
     .home-accent-red { color: var(--accent-red); }
     .home-accent-yellow { color: var(--accent-yellow); }
     .home-api { margin-top: 30px; text-align: center; padding: 20px; background: var(--tint-blue); border-radius: 10px; border: 1px solid var(--panel-border); }
+    /* Ensure the top-level cards on the home page are equal-height and their content is vertically centered */
+    .grid {
+        align-items: stretch; /* make grid children match height */
+    }
+
+    .grid > .card {
+        display: flex;
+        flex-direction: column;
+        justify-content: center; /* vertical centering */
+        gap: 12px;
+        text-align: center; /* horizontal centering for headings, paragraphs and buttons */
+        align-items: center; /* center inline elements like buttons */
+    }
 </style>
 {% endblock %}
 

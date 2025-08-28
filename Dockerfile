@@ -34,8 +34,14 @@ RUN echo "Cache bust: ${CACHE_BUST}" > /build-cache-bust
 
 # Install Python dependencies using uv (faster and more reliable)
 # uv.toml configures extra-index-url for apryse-sdk automatically
-RUN uv pip install --system -r pyproject.toml && \
-    echo "✅ All dependencies installed successfully to system Python"
+# Create a virtual environment and install all Python dependencies into it.
+# We install into /opt/venv in the builder stage and copy that venv to the final image.
+RUN python -m venv /opt/venv && \
+    /opt/venv/bin/pip install --upgrade pip setuptools wheel && \
+    # Use uv if available to accelerate installs (uv was installed earlier)
+    /opt/venv/bin/pip install --no-cache-dir uv && \
+    /opt/venv/bin/uv pip install --no-cache-dir -r pyproject.toml && \
+    echo "✅ All dependencies installed successfully into /opt/venv"
 
 # Clean up build artifacts
 RUN find /opt/venv -name "*.pyc" -delete && \
@@ -173,6 +179,12 @@ RUN chmod +x docker-healthcheck*.sh docker-entrypoint*.sh backup_to_r2*.sh 2>/de
         echo "#!/bin/bash\necho 'No backup script configured'" > backup-active.sh && \
         chmod +x backup-active.sh; \
     fi
+
+# Copy the venv created during the build stage into the production image so runtime
+# has all Python dependencies available.
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH" \
+    VIRTUAL_ENV="/opt/venv"
 
 # Keep flowslide user but run as root to handle file permissions
 # USER flowslide
