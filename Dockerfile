@@ -38,9 +38,9 @@ RUN echo "Cache bust: ${CACHE_BUST}" > /build-cache-bust
 # We install into /opt/venv in the builder stage and copy that venv to the final image.
 RUN python -m venv /opt/venv && \
     /opt/venv/bin/pip install --upgrade pip setuptools wheel && \
-    # Use uv if available to accelerate installs (uv was installed earlier)
-    /opt/venv/bin/pip install --no-cache-dir uv && \
-    /opt/venv/bin/uv pip install --no-cache-dir -r pyproject.toml && \
+    # Install the project and development extras into the venv.
+    # Do not pass pyproject.toml to pip -r (that's for requirements files).
+    /opt/venv/bin/pip install --no-cache-dir -e '.[dev]' --extra-index-url https://pypi.apryse.com && \
     echo "✅ All dependencies installed successfully into /opt/venv"
 
 # Clean up build artifacts
