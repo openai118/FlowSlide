@@ -72,6 +72,23 @@ def get_aspect_ratio_settings() -> dict:
 
 router = APIRouter()
 
+
+def _build_provider_status(ai_config_obj) -> dict:
+    """Return a dict mapping provider->availability to avoid long inline comprehensions."""
+    try:
+        providers = ai_config_obj.get_available_providers()
+        status = {}
+        for p in providers:
+            try:
+                status[p] = ai_config_obj.is_provider_available(p)
+            except Exception:
+                status[p] = False
+        return status
+    except Exception:
+        return {}
+# Templates directory - use absolute path for better reliability
+
+
 # Templates directory - use absolute path for better reliability
 
 template_dir = os.path.join(os.path.dirname(__file__), "templates")
@@ -121,7 +138,6 @@ def strftime_filter(timestamp, format_string="%Y-%m-%d %H:%M"):
 # Register custom filters
 templates.env.filters["timestamp_to_datetime"] = timestamp_to_datetime
 templates.env.filters["strftime"] = strftime_filter
-
 
 
 # --- RBAC helpers ---
@@ -346,10 +362,8 @@ async def web_ai_config(request: Request, user: User = Depends(get_current_user_
                 "request": request,
                 "current_provider": ai_config.default_ai_provider,
                 "available_providers": ai_config.get_available_providers(),
-                "provider_status": {
-                    provider: ai_config.is_provider_available(provider)
-                    for provider in ai_config.get_available_providers()
-                },
+                # build provider status separately to avoid long inline comprehension
+                "provider_status": _build_provider_status(ai_config),
                 "current_config": current_config,
                 "user": user.to_dict(),
             },
@@ -373,7 +387,9 @@ async def get_openai_models(request: Request, user: User = Depends(get_current_u
         base_url = data.get("base_url", "https://api.openai.com/v1")
         api_key = data.get("api_key", "")
 
-        logger.info(f"Frontend requested models from: {base_url}")
+        base_info = f"Frontend requested models from: {base_url}"
+        logger.info(base_info)
+
         if not api_key:
             return {"success": False, "error": "API Key is required"}
 
@@ -459,8 +475,9 @@ async def get_anthropic_models(request: Request, user: User = Depends(get_curren
             async with session.get(url, headers=headers, timeout=30) as resp:
                 text = await resp.text()
                 if resp.status != 200:
-                    logger.error(f"Anthropic models fetch failed {resp.status}: {text}")
-                    return {"success": False, "error": f"HTTP {resp.status}: {text}"}
+                    logger.error("Anthropic models fetch failed %s: %s", resp.status, text)
+                    err = f"HTTP {resp.status}: {text}"
+                    return {"success": False, "error": err}
                 try:
                     data = await resp.json()
                 except Exception:
@@ -495,9 +512,9 @@ async def get_google_models(request: Request, user: User = Depends(get_current_u
 
         # Use v1beta endpoint which returns more models
         models_endpoint = build_api_url(base_url, "v1beta/models")
-        url = f"{models_endpoint}?key={api_key}"
+        url = models_endpoint + "?key=" + api_key
 
-        logger.info(f"Calling Google v1beta API: {url}")
+        logger.info("Calling Google v1beta API: %s", url)
 
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=30) as resp:
@@ -511,9 +528,8 @@ async def get_google_models(request: Request, user: User = Depends(get_current_u
 
                 try:
                     data = await resp.json()
-                    logger.info(
-                        f"Google v1beta API response structure: {list(data.keys()) if isinstance(data, dict) else type(data)}"
-                    )
+                    structure = list(data.keys()) if isinstance(data, dict) else type(data)
+                    logger.info("Google v1beta API response structure: %s", structure)
                 except Exception:
                     logger.error(
                         f"Failed to parse Google v1beta API response as JSON: {text[:500]}..."
@@ -558,7 +574,7 @@ async def get_azure_openai_deployments(
         if not api_key:
             return {"success": False, "error": "API Key is required"}
         deployments_endpoint = build_api_url(endpoint, "openai/deployments")
-        url = f"{deployments_endpoint}?api-version={api_version}"
+        url = deployments_endpoint + "?api-version=" + api_version
 
         async with aiohttp.ClientSession() as session:
             headers = {"api-key": api_key}
@@ -639,7 +655,7 @@ async def validate_openai_api_key(
         base_url = data.get("base_url", "https://api.openai.com/v1")
         api_key = data.get("api_key", "")
 
-        logger.info(f"Validating API Key for: {base_url}")
+        logger.info("Validating API Key for: %s", base_url)
 
         if not api_key:
             return {"success": False, "error": "API Key is required"}
@@ -660,7 +676,7 @@ async def validate_openai_api_key(
                     model_count = len(data.get("data", []))
                     return {
                         "success": True,
-                        "message": f"API Key 有效，可访问 {model_count} 个模型",
+                        "message": "API Key 有效，可访问 %d 个模型" % model_count,
                         "model_count": model_count,
                     }
                 else:
@@ -702,7 +718,7 @@ async def test_openai_provider_proxy(
         api_key = data.get("api_key", "")
         model = data.get("model", "gpt-4o")
 
-        logger.info(f"Frontend requested test with: base_url={base_url}, model={model}")
+        logger.info("Frontend requested test with base_url=%s model=%s", base_url, model)
 
         if not api_key:
             return {"success": False, "error": "API Key is required"}
@@ -1645,6 +1661,7 @@ async def regenerate_outline(project_id: str, user: User = Depends(get_current_u
                     "content_analysis_depth", "standard"
                 ),
             )
+
 
             result = await ppt_service.generate_outline_from_file(file_request)
 
