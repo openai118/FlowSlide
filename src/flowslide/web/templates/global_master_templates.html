@@ -639,14 +639,16 @@ select {
 }
 
 .template-preview-iframe {
-    width: 1280px;
-    height: 720px;
+    width: 960px;
+    height: 540px;
     border: none;
     pointer-events: none;
     position: absolute;
     left: 50%;
     top: 50%;
-    transform: translate(-50%, -50%) scale(0.32);
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    transition: transform 180ms ease-out, opacity 180ms ease-out;
     transform-origin: center center;
     border-radius: 4px;
 }
@@ -1053,12 +1055,11 @@ select {
         gap: var(--spacing-md) !important;
     }
 
-    .template-preview {
-        /* 移除多余的高度覆盖，统一用 200px */
-    }
+    /* mobile: keep preview height unchanged (avoid empty rule) */
 
     .template-preview-iframe {
-        transform: translate(-50%, -50%) scale(0.26) !important;
+        transform: translate(-50%, -50%);
+        transition: transform 180ms ease-out !important;
     }
 
     .template-actions {
@@ -1221,6 +1222,20 @@ let totalCount = 0;
 let currentSearch = '';
 let currentTag = '';
 
+// Lightweight logger wrapper: control verbosity via ?debug=1 or window.__gm_debug = true
+(function(){
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const debugOn = urlParams.get('debug') === '1' || !!window.__gm_debug;
+        window.__gm_log = {
+            debug: function(){ if (debugOn) console.debug.apply(console, arguments); },
+            info: function(){ if (debugOn) console.info.apply(console, arguments); },
+            warn: function(){ console.warn.apply(console, arguments); },
+            error: function(){ console.error.apply(console, arguments); }
+        };
+    } catch (e) { window.__gm_log = { debug:()=>{}, info:()=>{}, warn:()=>{}, error:()=>{} }; }
+})();
+
 // Initialize page
 document.addEventListener('DOMContentLoaded', function() {
     loadTemplates(1);
@@ -1374,7 +1389,7 @@ function renderTemplates(templatesToRender) {
                         <div class="info-text">使用次数: ${template.usage_count} | 创建者: ${template.created_by}</div>
                         <div class="info-delete">
                             ${!template.is_default ?
-                                `<button class="btn btn-sm btn-danger" onclick="deleteTemplate(${template.id})">🗑️ 删除</button>` :
+                                `<button class="btn btn-sm btn-success" onclick="setDefaultTemplate(${template.id})">⭐ 设为默认</button>` :
                                 ''
                             }
                         </div>
@@ -1387,7 +1402,7 @@ function renderTemplates(templatesToRender) {
                     <button class="btn btn-sm btn-warning" onclick="duplicateTemplate(${template.id})">📋 复制</button>
                     <button class="btn btn-sm" style="background: #17a2b8; color: white;" onclick="exportTemplate(${template.id})">📤 导出</button>
                     ${!template.is_default ?
-                        `<button class="btn btn-sm btn-success" onclick="setDefaultTemplate(${template.id})">⭐ 设为默认</button>` :
+                        `<button class="btn btn-sm btn-danger" onclick="deleteTemplate(${template.id})">🗑️ 删除</button>` :
                         ''
                     }
                 </div>
@@ -1434,7 +1449,7 @@ function renderTemplates(templatesToRender) {
 
 async function loadTemplatePreview(templateId, cache) {
     try {
-        console.log('Loading preview for template', templateId);
+            window.__gm_log.info && window.__gm_log.info('Loading preview for template', templateId);
         let template;
         if (cache && cache.has(templateId)) {
             template = cache.get(templateId);
@@ -1450,10 +1465,10 @@ async function loadTemplatePreview(templateId, cache) {
         }
         const iframe = document.getElementById('iframe-' + templateId);
 
-        console.log('Template', templateId, 'loaded:', template.template_name);
+    window.__gm_log.info && window.__gm_log.info('Template', templateId, 'loaded:', template.template_name);
 
         if (iframe && template.html_template && template.html_template.trim()) {
-            console.log('Setting up iframe for template', templateId);
+            window.__gm_log.info && window.__gm_log.info('Setting up iframe for template', templateId);
 
             // 使用实际的模板HTML内容，但添加一些示例数据
             let previewHtml = template.html_template || '';
@@ -1491,6 +1506,42 @@ async function loadTemplatePreview(templateId, cache) {
                 } catch (e) { /* noop */ }
             });
 
+                // Inject a small preview-only CSS to encourage the main slide area to fill the iframe.
+                // This is applied only to the preview blob and should not affect stored templates.
+                const previewInjectCSS = `<style>
+                    /* Ensure the root elements occupy the full iframe viewport */
+                    html, html * { box-sizing: border-box !important; }
+                    html, body { width:100% !important; height:100% !important; min-width:100% !important; min-height:100% !important; margin:0 !important; padding:0 !important; overflow:hidden !important; display:block !important; }
+                    /* Ensure body direct children expand to fill the body so body size equals html size */
+                    body > * { width:100% !important; height:100% !important; min-width:100% !important; min-height:100% !important; display:block !important; box-sizing:border-box !important; }
+                    /* target common slide containers and wrapper classes to avoid narrow column layouts */
+                    .slide, .ppt-slide, #root, .page, .slide-content,
+                    .container, .wrap, .content, main, section, article,
+                    .cols, .row, .column, .col, .inner {
+                        width:100% !important;
+                        height:100% !important;
+                        min-width:100% !important;
+                        min-height:100% !important;
+                        max-width:none !important;
+                        max-height:none !important;
+                        display:block !important;
+                        box-sizing:border-box !important;
+                    }
+                    /* images and SVGs should scale to container */
+                    img, svg { max-width:100% !important; height:auto !important; }
+                </style>`;
+
+                // Lightweight script to encourage templates that initialized once to relayout
+                const previewInjectScript = `<script>(function(){try{function __fs_fix(){try{document.documentElement.style.width='100%';document.documentElement.style.height='100%';document.body.style.width='100%';document.body.style.height='100%';}catch(e){}try{window.dispatchEvent(new Event('resize'));}catch(e){}setTimeout(function(){try{window.dispatchEvent(new Event('resize'));}catch(e){}},80);setTimeout(function(){try{window.dispatchEvent(new Event('resize'));}catch(e){}},300);setTimeout(function(){try{if(window && window.initSlides) try{window.initSlides();}catch(e){}; if(window && window.recalcLayout) try{window.recalcLayout();}catch(e){} }catch(e){}},500);}if(document.readyState==='complete'){__fs_fix();}else{window.addEventListener('load', __fs_fix);setTimeout(__fs_fix, 120);} }catch(e){} })()<\/script>`;
+
+                try {
+                    if (/\<head[^>]*\>/i.test(previewHtml)) {
+                        previewHtml = previewHtml.replace(/\<head[^>]*\>/i, function(m) { return m + previewInjectCSS + previewInjectScript; });
+                    } else if (/\<html[^>]*\>/i.test(previewHtml)) {
+                        previewHtml = previewHtml.replace(/\<html([^>]*)\>/i, function(m) { return m + '<head>' + previewInjectCSS + previewInjectScript + '</head>'; });
+                    }
+                } catch (e) { /* noop - continue, wrapper below will include CSS/script */ }
+
             // 确保HTML有基本结构
             if (!previewHtml.includes('<!DOCTYPE') && !previewHtml.includes('<html')) {
                 previewHtml = `<!DOCTYPE html>
@@ -1501,6 +1552,8 @@ async function loadTemplatePreview(templateId, cache) {
     <style>
         body { width: {{ aspect_ratio_settings.width }}px; height: {{ aspect_ratio_settings.height }}px; margin: 0; padding: 0; overflow: hidden; }
     </style>
+    ${previewInjectCSS}
+    ${previewInjectScript}
 </head>
 <body>
     ${previewHtml}
@@ -1513,35 +1566,52 @@ async function loadTemplatePreview(templateId, cache) {
             const url = URL.createObjectURL(blob);
 
             // Set up load handlers
-            iframe.onload = function() {
-                console.log('Iframe loaded successfully for template', templateId);
+            // Use a retrying measurement to avoid race conditions where inner layout isn't ready on first read.
+            function measureAndApplyCardIframe(attemptsLeft) {
                 try {
                     const container = document.getElementById('preview-' + templateId);
-                    if (container) {
-                        const rect = container.getBoundingClientRect();
+                    if (!container) return;
+                    const rect = container.getBoundingClientRect();
 
-                        // Try to measure the actual content size inside the iframe (preferred)
-                        let contentW = 1280, contentH = 720;
-                        try {
-                            const doc = iframe.contentDocument || iframe.contentWindow.document;
-                            const body = doc && doc.body ? doc.body : doc.documentElement;
-                            // Use scroll sizes and bounding rect as fallback
-                            const bRect = body.getBoundingClientRect();
-                            contentW = Math.max(body.scrollWidth || 0, body.offsetWidth || 0, Math.abs(bRect.width) || 0) || contentW;
-                            contentH = Math.max(body.scrollHeight || 0, body.offsetHeight || 0, Math.abs(bRect.height) || 0) || contentH;
-                        } catch (innerE) {
-                            // cross-origin or other errors - fallback to natural size
-                        }
-
-                        // Use cover behavior: scale so iframe content fills both width and height (may crop)
-                        const coverScale = Math.max(rect.width / contentW, rect.height / contentH);
-                        iframe.style.transform = `translate(-50%, -50%) scale(${coverScale})`;
+                    // If container hasn't expanded to a sensible size yet, retry a few times
+                    if (attemptsLeft > 0 && (rect.width < 200 || rect.height < 120)) {
+                        setTimeout(() => measureAndApplyCardIframe(attemptsLeft - 1), 80 + (4 - attemptsLeft) * 60);
+                        return;
                     }
-                } catch (e) { /* noop */ }
 
-                setTimeout(function() {
-                    URL.revokeObjectURL(url);
-                }, 2000);
+                    // Use fixed natural size for card previews to avoid measurement randomness
+                    const contentW = 960;
+                    const contentH = 540;
+
+                    // Compute cover scale based on fixed natural size
+                    const coverScale = Math.max(rect.width / contentW, rect.height / contentH);
+                    const chosenScaleCard = Math.max(0.05, Math.min(20, coverScale));
+
+                    // synchronize iframe intrinsic size attributes (intrinsic content size)
+                    try {
+                        iframe.setAttribute('width', String(contentW));
+                        iframe.setAttribute('height', String(contentH));
+                    } catch (_) { /* noop */ }
+
+                    // Instead of using CSS scale (which doesn't change layout box), set the rendered
+                    // iframe width/height to the scaled pixel size so DevTools reported size matches visual size.
+                    try {
+                        const finalW = Math.max(8, Math.round(contentW * chosenScaleCard));
+                        const finalH = Math.max(8, Math.round(contentH * chosenScaleCard));
+                        iframe.style.width = finalW + 'px';
+                        iframe.style.height = finalH + 'px';
+                    } catch (_) { /* noop */ }
+
+                    // keep centered translate but remove scale transform
+                    iframe.style.transform = `translate(-50%, -50%)`;
+                    iframe.style.opacity = '1';
+                } catch (e) { /* noop */ }
+            }
+
+            iframe.onload = function() {
+                // Apply fixed-size cover scale once loaded
+                measureAndApplyCardIframe(0);
+                setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
             };
 
             iframe.onerror = function() {
@@ -1550,22 +1620,34 @@ async function loadTemplatePreview(templateId, cache) {
                 URL.revokeObjectURL(url);
             };
 
+            // Set an initial inline transform immediately using the same fixed natural size
+            try {
+                const container = document.getElementById('preview-' + templateId);
+                if (container) {
+                    const rect = container.getBoundingClientRect();
+                    const naturalW = 960;
+                    const naturalH = 540;
+                    const initialScale = Math.max(rect.width / naturalW, rect.height / naturalH) || 0.32;
+                    try {
+                        const initialW = Math.max(8, Math.round(naturalW * initialScale));
+                        const initialH = Math.max(8, Math.round(naturalH * initialScale));
+                        iframe.style.width = initialW + 'px';
+                        iframe.style.height = initialH + 'px';
+                    } catch(_) {}
+                    iframe.style.transform = `translate(-50%, -50%)`;
+                    iframe.style.opacity = '1';
+                    // set intrinsic attributes early
+                    try { iframe.setAttribute('width', String(naturalW)); iframe.setAttribute('height', String(naturalH)); } catch(_) {}
+                }
+            } catch(e) { /* noop */ }
+
             // Set the src to trigger loading
             iframe.src = url;
 
-            // Also attempt a quick scale update shortly after setting src in case onload fires earlier
+            // Also attempt a quick measurement shortly after setting src in case onload fires earlier
             setTimeout(function() {
-                try {
-                    const container = document.getElementById('preview-' + templateId);
-                    if (container) {
-                        const rect = container.getBoundingClientRect();
-                        const naturalW = 1280;
-                        const naturalH = 720;
-                        const coverScale = Math.max(rect.width / naturalW, rect.height / naturalH);
-                        iframe.style.transform = `translate(-50%, -50%) scale(${coverScale})`;
-                    }
-                } catch (e) { /* noop */ }
-            }, 60);
+                try { measureAndApplyCardIframe(3); } catch(e) { /* noop */ }
+            }, 80);
 
         } else {
             console.warn('No HTML template content for template', templateId);
@@ -1602,16 +1684,10 @@ function applyCoverScaleForIframe(templateId, iframe) {
 
     const rect = container.getBoundingClientRect();
 
-    let contentW = 1280, contentH = 720;
-    try {
-        const doc = iframe.contentDocument || iframe.contentWindow.document;
-        const body = doc && doc.body ? doc.body : doc.documentElement;
-        const bRect = body.getBoundingClientRect();
-        contentW = Math.max(body.scrollWidth || 0, body.offsetWidth || 0, Math.abs(bRect.width) || 0) || contentW;
-        contentH = Math.max(body.scrollHeight || 0, body.offsetHeight || 0, Math.abs(bRect.height) || 0) || contentH;
-    } catch (e) {
-        // cross-origin or other access denied - fallback to default natural size
-    }
+    // Use fixed natural size for card previews to ensure stable, consistent cover behavior
+    const naturalW_card = 960;
+    const naturalH_card = 540;
+    let contentW = naturalW_card, contentH = naturalH_card;
 
     // If alignment not set by user, pick a default by template orientation
     window.__previewAlignments = window.__previewAlignments || new Map();
@@ -1620,7 +1696,13 @@ function applyCoverScaleForIframe(templateId, iframe) {
         window.__previewAlignments.set(templateId, isLandscape ? 'center' : 'top');
     }
 
+    // ensure the iframe element reports the intrinsic content size we used for math
+    try { iframe.setAttribute('width', contentW); iframe.setAttribute('height', contentH); } catch(e) {}
+    try { iframe.style.width = contentW + 'px'; iframe.style.height = contentH + 'px'; } catch(e) {}
+
+    // calculate cover scale based on the measured or natural card content size
     const coverScale = Math.max(rect.width / contentW, rect.height / contentH);
+    const safeScale = Math.max(0.05, Math.min(20, coverScale));
 
     // alignment: center / top / bottom / left / right
     const align = (window.__previewAlignments && window.__previewAlignments.get(templateId)) || 'center';
@@ -1641,7 +1723,13 @@ function applyCoverScaleForIframe(templateId, iframe) {
     iframe.style.left = '50%';
     iframe.style.top = '50%';
     iframe.style.transformOrigin = 'center center';
-    iframe.style.transform = `translate(${tx}, ${ty}) scale(${coverScale})`;
+    try {
+        const finalW = Math.max(8, Math.round(contentW * safeScale));
+        const finalH = Math.max(8, Math.round(contentH * safeScale));
+        iframe.style.width = finalW + 'px';
+        iframe.style.height = finalH + 'px';
+    } catch (e) { /* noop */ }
+    iframe.style.transform = `translate(${tx}, ${ty})`;
 }
 
 // Cycle preview alignment for a template: center -> top -> bottom -> left -> right -> center
@@ -1709,12 +1797,16 @@ function applyCoverScaleGeneric(frame) {
             // cross-origin or other access denied - keep fallback sizes
         }
 
-        // Clamp sizes to avoid extreme values
-        contentW = Math.max(320, Math.min(4000, contentW));
-        contentH = Math.max(240, Math.min(3000, contentH));
+    // Clamp sizes to avoid extreme values
+    contentW = Math.max(320, Math.min(4000, contentW));
+    contentH = Math.max(240, Math.min(3000, contentH));
 
-        const coverScale = Math.max(rect.width / contentW, rect.height / contentH);
-        const safeScale = Math.max(0.05, Math.min(20, coverScale));
+    // Compute both cover and contain scales. For modal preview prefer contain so content fits fully.
+    const coverScale = Math.max(rect.width / contentW, rect.height / contentH);
+    const containScale = Math.min(rect.width / contentW, rect.height / contentH);
+    const isModal = container && container.id === 'previewFrameContainer';
+    const chosenScale = isModal ? containScale : coverScale;
+    const safeScale = Math.max(0.05, Math.min(20, chosenScale));
 
         container.style.position = 'relative';
         container.style.overflow = 'hidden';
@@ -1729,10 +1821,27 @@ function applyCoverScaleGeneric(frame) {
         if (align === 'left') tx = '-20%';
         if (align === 'right') tx = '-80%';
 
-        frame.style.left = '50%';
-        frame.style.top = '50%';
-        frame.style.transformOrigin = 'center center';
-        frame.style.transform = `translate(${tx}, ${ty}) scale(${safeScale})`;
+            frame.style.left = '50%';
+            frame.style.top = '50%';
+            frame.style.transformOrigin = 'center center';
+            try {
+                if (isModal) {
+                    // For modal previews, make the iframe fill the container so inner content can use 100% sizing
+                    frame.style.width = Math.max(8, Math.round(rect.width)) + 'px';
+                    frame.style.height = Math.max(8, Math.round(rect.height)) + 'px';
+                    // center exactly
+                    tx = '-50%';
+                    ty = '-50%';
+                } else {
+                    const finalW = Math.max(8, Math.round(contentW * safeScale));
+                    const finalH = Math.max(8, Math.round(contentH * safeScale));
+                    frame.style.width = finalW + 'px';
+                    frame.style.height = finalH + 'px';
+                }
+            } catch(e) { /* noop */ }
+            // keep translate for centering/alignment; modal uses translate(-50%,-50%) to center the full-size iframe
+            frame.style.transform = `translate(${tx}, ${ty})`;
+            try { frame.style.opacity = '1'; } catch(e) { /* noop */ }
 
         // If measured size seems like just a small header (height < 200) and we have attempts left, retry after a short delay
         if ((contentH < 200 || contentW < 200) && attempts < maxAttempts) {
@@ -1785,7 +1894,7 @@ async function exportTemplate(templateId) {
             URL.revokeObjectURL(link.href);
         }, 1000);
 
-        console.log('模板导出成功:', template.template_name);
+    window.__gm_log.info && window.__gm_log.info('模板导出成功:', template.template_name);
 
     } catch (error) {
         console.error('Error exporting template:', error);
@@ -1946,9 +2055,30 @@ function showPreview(htmlContent) {
             /* If the template has a top header-only layout, prefer centering the main content */
             .slide, .ppt-slide, .page, #root, .slide-content { box-sizing: border-box; min-width: 320px; min-height: 240px; }
         </style>`;
+        // Stronger modal preview CSS: force html/body and direct children to fill the iframe viewport
+        const modalPreviewInjectCSS = `<style>
+            html, html * { box-sizing: border-box !important; }
+            html, body { width:100% !important; height:100% !important; min-width:100% !important; min-height:100% !important; margin:0 !important; padding:0 !important; overflow:hidden !important; display:block !important; }
+            body > * { width:100% !important; height:100% !important; min-width:100% !important; min-height:100% !important; display:block !important; box-sizing:border-box !important; }
+            .slide, .ppt-slide, #root, .page, .slide-content, .container, .wrap, .content, main, section, article, .cols, .row, .column, .col, .inner {
+                width:100% !important; height:100% !important; min-width:100% !important; min-height:100% !important; max-width:none !important; max-height:none !important; display:block !important; box-sizing:border-box !important;
+            }
+            img, svg { max-width:100% !important; height:auto !important; }
+        </style>`;
 
-        previewHtml = `<!DOCTYPE html>\n<html>\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n${safetyCss}\n</head>\n<body>\n${previewHtml}\n</body>\n</html>`;
+    const previewInjectScript = `<script>(function(){try{function __fs_fix(){try{document.documentElement.style.width='100%';document.documentElement.style.height='100%';document.body.style.width='100%';document.body.style.height='100%';}catch(e){}try{window.dispatchEvent(new Event('resize'));}catch(e){}setTimeout(function(){try{window.dispatchEvent(new Event('resize'));}catch(e){}},80);setTimeout(function(){try{window.dispatchEvent(new Event('resize'));}catch(e){}},300);setTimeout(function(){try{if(window && window.initSlides) try{window.initSlides();}catch(e){}; if(window && window.recalcLayout) try{window.recalcLayout();}catch(e){} }catch(e){}},500);}if(document.readyState==='complete'){__fs_fix();}else{window.addEventListener('load', __fs_fix);setTimeout(__fs_fix, 120);} }catch(e){} })()<\/script>`;
+
+        previewHtml = `<!DOCTYPE html>\n<html>\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n${safetyCss}\n${modalPreviewInjectCSS}\n</head>\n<body>\n${previewHtml}\n</body>\n</html>`;
     }
+
+    // Also attempt to inject modalPreviewInjectCSS if the template already contains a <head> so rules apply
+        try {
+        if (typeof modalPreviewInjectCSS !== 'undefined' && /<head[^>]*>/i.test(previewHtml)) {
+            previewHtml = previewHtml.replace(/<head[^>]*>/i, function(m) { return m + modalPreviewInjectCSS + previewInjectScript; });
+        } else if (typeof modalPreviewInjectCSS !== 'undefined' && /<html[^>]*>/i.test(previewHtml)) {
+            previewHtml = previewHtml.replace(/<html([^>]*)>/i, function(m) { return m + '<head>' + modalPreviewInjectCSS + previewInjectScript + '</head>'; });
+        }
+    } catch (e) { /* noop */ }
 
     // Create blob URL for the HTML content
     const blob = new Blob([previewHtml], { type: 'text/html' });
@@ -1999,8 +2129,8 @@ function adjustPreviewScale() {
 
     // 自然尺寸（由模板宽高定义）
     // 强制 16:9 比例
-    const naturalW = 1280;
-    const naturalH = 720;
+    const naturalW = 960;
+    const naturalH = 540;
     frame.setAttribute('width', naturalW);
     frame.setAttribute('height', naturalH);
     if (!naturalW || !naturalH) return;

@@ -2055,6 +2055,16 @@
 
 {% block extra_js %}
 <script>
+// 受控日志：只有在 ?debug=1 或 window.__ai_debug 为 true 时输出 info/debug
+window.__ai_log = (function(){
+    const enabled = (new URLSearchParams(window.location.search).get('debug') === '1') || window.__ai_debug === true;
+    return {
+        debug: (...args) => { if(enabled) console.debug(...args); },
+        info:  (...args) => { if(enabled) console.info(...args); },
+        warn:  (...args) => console.warn(...args),
+        error: (...args) => console.error(...args)
+    };
+})();
 // 全局变量和常量
 let currentConfig = {{ current_config | tojson }};
 const AVAILABLE_PROVIDERS = ['openai', 'anthropic', 'google', 'azure_openai', 'ollama'];
@@ -2156,7 +2166,7 @@ function getAvailableProviders() {
             }
         } catch (error) {
             // 配置不完整，跳过
-            console.log(`提供者 ${provider} 配置检查失败，跳过:`, error.message);
+            window.__ai_log.info(`提供者 ${provider} 配置检查失败，跳过:`, error.message);
         }
     }
 
@@ -2187,9 +2197,9 @@ async function initCurrentProviderSelect() {
         });
 
         // 恢复之前的选择（如果仍然可用）
-        if (currentSelection && availableProviders.includes(currentSelection)) {
+            if (currentSelection && availableProviders.includes(currentSelection)) {
             selectElement.value = currentSelection;
-            console.log('恢复提供者选择:', currentSelection);
+            window.__ai_log.info('恢复提供者选择:', currentSelection);
         } else if (availableProviders.length > 0) {
             // 如果之前没有选择或选择的提供者不可用，尝试从API获取当前提供者
             try {
@@ -2198,7 +2208,7 @@ async function initCurrentProviderSelect() {
                     const result = await response.json();
                     if (result.success && result.current_provider && availableProviders.includes(result.current_provider)) {
                         selectElement.value = result.current_provider;
-                        console.log('从API设置当前提供者:', result.current_provider);
+                        window.__ai_log.info('从API设置当前提供者:', result.current_provider);
                     }
                 }
             } catch (error) {
@@ -2206,7 +2216,7 @@ async function initCurrentProviderSelect() {
             }
         }
 
-        console.log('可用提供者:', availableProviders);
+    window.__ai_log.info('可用提供者:', availableProviders);
 
         // 更新页面显示的可用提供者数量
         updateAvailableProvidersCount(availableProviders.length);
@@ -2361,7 +2371,7 @@ async function syncCurrentProviderStatus() {
             const result = await response.json();
             if (result.success && result.current_provider) {
                 const currentProvider = result.current_provider;
-                console.log('同步当前提供者状态:', currentProvider);
+                window.__ai_log.info('同步当前提供者状态:', currentProvider);
 
                 // 更新页面显示的当前提供者
                 updateCurrentProviderDisplay(currentProvider);
@@ -2665,7 +2675,7 @@ async function testOpenAIProvider(config) {
                     }
                 }
             } catch (e) {
-                console.log('获取模型列表失败，但测试仍然成功:', e);
+                window.__ai_log.info('获取模型列表失败，但测试仍然成功:', e);
             }
 
             // 标准化响应格式
@@ -3030,7 +3040,7 @@ async function testCurrentProvider() {
 
     // 如果选择了模型，先保存配置再测试
     if (selectedModel) {
-        console.log(`使用提供者 ${currentProvider} 和模型 ${selectedModel} 进行测试`);
+    window.__ai_log.info(`使用提供者 ${currentProvider} 和模型 ${selectedModel} 进行测试`);
 
         // 构建配置对象
         const config = {};
@@ -3061,7 +3071,7 @@ async function testCurrentProvider() {
                 throw new Error(saveResult.message || '保存配置失败');
             }
 
-            console.log('模型配置已保存');
+            window.__ai_log.info('模型配置已保存');
         } catch (error) {
             console.warn('保存模型配置失败:', error);
             // 继续测试，即使保存失败
@@ -3102,7 +3112,7 @@ async function refreshProviders() {
         async () => {
             // 首先清除所有测试缓存
             clearTestCache();
-            console.log('已清除所有测试缓存');
+            window.__ai_log.info('已清除所有测试缓存');
 
             // 测试所有已配置的提供者
             await testAllConfiguredProviders();
@@ -3126,18 +3136,18 @@ async function refreshProviders() {
 async function testAllConfiguredProviders() {
     const configuredProviders = [];
 
-    console.log('开始测试所有已配置的提供者...');
+    window.__ai_log.info('开始测试所有已配置的提供者...');
 
     // 首先检查哪些提供者已配置
     for (const provider of AVAILABLE_PROVIDERS) {
         const isConfigured = isProviderConfigured(provider);
-        console.log(`检查提供者 ${provider}: ${isConfigured ? '已配置' : '未配置'}`);
+    window.__ai_log.info(`检查提供者 ${provider}: ${isConfigured ? '已配置' : '未配置'}`);
 
         if (isConfigured) {
             configuredProviders.push(provider);
-            console.log(`发现已配置的提供者: ${provider}`);
+            window.__ai_log.info(`发现已配置的提供者: ${provider}`);
         } else {
-            console.log(`跳过未配置的提供者: ${provider}`);
+            window.__ai_log.info(`跳过未配置的提供者: ${provider}`);
             // 未配置的提供者设置为不可用
             updateProviderStatusDisplay(provider, false);
             cacheTestResult(provider, false);
@@ -3145,7 +3155,7 @@ async function testAllConfiguredProviders() {
     }
 
     if (configuredProviders.length === 0) {
-        console.log('没有找到已配置的提供者');
+    window.__ai_log.info('没有找到已配置的提供者');
         return;
     }
 
@@ -3160,14 +3170,14 @@ async function testAllConfiguredProviders() {
         }
     }
 
-    console.log('所有提供者测试完成');
+    window.__ai_log.info('所有提供者测试完成');
 }
 
 // 检查提供者是否已配置（直接从页面表单读取）
 function isProviderConfigured(providerName) {
     const card = document.querySelector(`[data-provider="${providerName}"]`);
     if (!card) {
-        console.log(`${providerName}: 找不到配置卡片`);
+    window.__ai_log.info(`${providerName}: 找不到配置卡片`);
         return false;
     }
 
@@ -3183,7 +3193,7 @@ function isProviderConfigured(providerName) {
         }
     });
 
-    console.log(`${providerName} 配置:`, config);
+    window.__ai_log.info(`${providerName} 配置:`, config);
 
     // 检查必要的配置字段
     let result = false;
@@ -3191,33 +3201,33 @@ function isProviderConfigured(providerName) {
         case 'openai':
             // OpenAI只需要API Key，Base URL有默认值
             result = !!config.openai_api_key;
-            console.log(`${providerName}: API Key=${!!config.openai_api_key}, Base URL=${!!config.openai_base_url || '有默认值'}`);
+            window.__ai_log.info(`${providerName}: API Key=${!!config.openai_api_key}, Base URL=${!!config.openai_base_url || '有默认值'}`);
             break;
         case 'anthropic':
             // Anthropic只需要API Key，Base URL有默认值
             result = !!config.anthropic_api_key;
-            console.log(`${providerName}: API Key=${!!config.anthropic_api_key}`);
+            window.__ai_log.info(`${providerName}: API Key=${!!config.anthropic_api_key}`);
             break;
         case 'google':
             // Google只需要API Key，Base URL有默认值
             result = !!config.google_api_key;
-            console.log(`${providerName}: API Key=${!!config.google_api_key}, Base URL=${!!config.google_base_url || '有默认值'}`);
+            window.__ai_log.info(`${providerName}: API Key=${!!config.google_api_key}, Base URL=${!!config.google_base_url || '有默认值'}`);
             break;
         case 'azure_openai':
             result = !!(config.azure_openai_api_key && config.azure_openai_endpoint);
-            console.log(`${providerName}: API Key=${!!config.azure_openai_api_key}, Endpoint=${!!config.azure_openai_endpoint}`);
+            window.__ai_log.info(`${providerName}: API Key=${!!config.azure_openai_api_key}, Endpoint=${!!config.azure_openai_endpoint}`);
             break;
         case 'ollama':
             // Ollama只需要Base URL，有默认值
             result = true; // Ollama总是可用，因为有默认的localhost地址
-            console.log(`${providerName}: Base URL=${!!config.ollama_base_url || '有默认值'}`);
+            window.__ai_log.info(`${providerName}: Base URL=${!!config.ollama_base_url || '有默认值'}`);
             break;
         default:
-            console.log(`${providerName}: 不支持的提供者`);
+            window.__ai_log.info(`${providerName}: 不支持的提供者`);
             return false;
     }
 
-    console.log(`${providerName} 配置检查结果: ${result}`);
+    window.__ai_log.info(`${providerName} 配置检查结果: ${result}`);
     return result;
 }
 
@@ -3267,11 +3277,11 @@ async function testProviderSilently(providerName) {
         if (testResult.success) {
             updateProviderStatusDisplay(providerName, true);
             cacheTestResult(providerName, true);
-            console.log(`${providerName} 测试成功`);
+            window.__ai_log.info(`${providerName} 测试成功`);
         } else {
             updateProviderStatusDisplay(providerName, false);
             cacheTestResult(providerName, false);
-            console.log(`${providerName} 测试失败:`, testResult.error || testResult.detail);
+            window.__ai_log.info(`${providerName} 测试失败:`, testResult.error || testResult.detail);
         }
 
         return testResult;
@@ -4044,7 +4054,7 @@ async function saveProviderConfigSilently(provider) {
         throw new Error('保存配置失败');
     }
 
-    console.log(`${provider} 配置已静默保存`);
+    window.__ai_log.info(`${provider} 配置已静默保存`);
     return result;
 }
 
@@ -4062,7 +4072,7 @@ function cacheTestResult(provider, success) {
 
 // 从localStorage加载缓存的测试结果
 function loadCachedTestResults() {
-    console.log('正在加载缓存的测试结果...');
+    window.__ai_log.info('正在加载缓存的测试结果...');
     AVAILABLE_PROVIDERS.forEach(provider => {
         const cacheKey = `test_result_${provider}`;
         const cached = localStorage.getItem(cacheKey);
@@ -4072,11 +4082,11 @@ function loadCachedTestResults() {
                 // 检查是否过期
                 if (result.expires > Date.now()) {
                     providerTestCache.set(provider, result);
-                    console.log(`恢复 ${provider} 的缓存状态:`, result.success ? '可用' : '不可用');
+                    window.__ai_log.info(`恢复 ${provider} 的缓存状态:`, result.success ? '可用' : '不可用');
                     // 更新UI显示
                     updateProviderStatusDisplay(provider, result.success);
                 } else {
-                    console.log(`${provider} 的缓存已过期，清除`);
+                    window.__ai_log.info(`${provider} 的缓存已过期，清除`);
                     // 清除过期的缓存
                     localStorage.removeItem(cacheKey);
                 }
@@ -4085,7 +4095,7 @@ function loadCachedTestResults() {
                 localStorage.removeItem(cacheKey);
             }
         } else {
-            console.log(`${provider} 没有缓存的测试结果`);
+            window.__ai_log.info(`${provider} 没有缓存的测试结果`);
         }
     });
 }
@@ -4109,7 +4119,7 @@ function clearTestCache() {
     // 重新初始化当前提供者选择
     initCurrentProviderSelect();
 
-    console.log('所有测试缓存已清除');
+    window.__ai_log.info('所有测试缓存已清除');
 }
 
 // 重置所有提供者状态为未测试状态
@@ -4167,7 +4177,7 @@ function updateModelDropdown(provider, models) {
                 }
             };
 
-            console.log(`已更新 ${provider} 的模型列表，共 ${models.length} 个模型`);
+            window.__ai_log.info(`已更新 ${provider} 的模型列表，共 ${models.length} 个模型`);
         }
     }
 }
@@ -4807,11 +4817,11 @@ async function validateApiKey() {
         });
 
         const result = await response.json();
-        console.log('验证API响应:', { status: response.status, result });
+    window.__ai_log.info('验证API响应:', { status: response.status, result });
 
         if (response.ok && result.success) {
             showNotification(`✅ API Key 验证成功！可访问 ${result.model_count || 0} 个模型`, 'success');
-            console.log('API Key验证详情:', result);
+            window.__ai_log.info('API Key验证详情:', result);
         } else {
             const errorMsg = result.error || result.message || `HTTP ${response.status}: 验证失败`;
             let detailedMessage = `❌ API Key 验证失败: ${errorMsg}`;
@@ -4896,7 +4906,7 @@ async function initCurrentModelSelect() {
             const result = await response.json();
             if (result.success && result.current_provider) {
                 currentProvider = result.current_provider;
-                console.log('从API获取当前提供者:', currentProvider);
+                window.__ai_log.info('从API获取当前提供者:', currentProvider);
             }
         }
     } catch (error) {
@@ -4905,16 +4915,16 @@ async function initCurrentModelSelect() {
 
     // 如果API获取失败，尝试从可用提供者中推断
     if (!currentProvider) {
-        console.log('API未返回提供者，尝试从可用提供者推断...');
+    window.__ai_log.info('API未返回提供者，尝试从可用提供者推断...');
 
         // 获取可用的提供者列表
         const availableProviders = getAvailableProviders();
-        console.log('可用提供者列表:', availableProviders);
+    window.__ai_log.info('可用提供者列表:', availableProviders);
 
         if (availableProviders.length > 0) {
             // 使用第一个可用的提供者作为默认值
             currentProvider = availableProviders[0];
-            console.log('使用第一个可用提供者作为当前提供者:', currentProvider);
+            window.__ai_log.info('使用第一个可用提供者作为当前提供者:', currentProvider);
         }
     }
 
@@ -4923,7 +4933,7 @@ async function initCurrentModelSelect() {
         return;
     }
 
-    console.log('初始化模型选择框，当前提供者:', currentProvider);
+    window.__ai_log.info('初始化模型选择框，当前提供者:', currentProvider);
 
     // 延迟加载以确保DOM完全准备好
     setTimeout(() => {
@@ -4939,7 +4949,7 @@ async function loadCurrentProviderModels(provider) {
         return;
     }
 
-    console.log('加载提供者模型:', provider);
+    window.__ai_log.info('加载提供者模型:', provider);
 
     try {
         // 清空现有选项
@@ -4988,19 +4998,19 @@ async function loadCurrentProviderModels(provider) {
                         const configResponse = await fetch('/api/config/ai_providers');
                         if (configResponse.ok) {
                             const configResult = await configResponse.json();
-                            console.log('OpenAI API配置响应:', configResult);
+                            window.__ai_log.info('OpenAI API配置响应:', configResult);
                             if (configResult.success && configResult.config) {
                                 const currentModel = configResult.config.openai_model;
-                                console.log('从API获取到OpenAI当前模型:', currentModel);
-                                console.log('可用模型选项:', Array.from(modelSelect.options).map(opt => opt.value));
+                                window.__ai_log.info('从API获取到OpenAI当前模型:', currentModel);
+                                window.__ai_log.info('可用模型选项:', Array.from(modelSelect.options).map(opt => opt.value));
                                 if (currentModel) {
                                     modelSelect.value = currentModel;
-                                    console.log('设置后的模型选择框值:', modelSelect.value);
+                                    window.__ai_log.info('设置后的模型选择框值:', modelSelect.value);
                                 } else {
-                                    console.log('API中没有OpenAI模型配置');
+                                    window.__ai_log.info('API中没有OpenAI模型配置');
                                 }
                             } else {
-                                console.log('API响应格式异常:', configResult);
+                                window.__ai_log.info('API响应格式异常:', configResult);
                             }
                         } else {
                             console.error('获取配置API失败，状态码:', configResponse.status);
@@ -5040,7 +5050,7 @@ async function loadCurrentProviderModels(provider) {
                             currentModel = configResult.config['azure_openai_deployment_name'] || '';
                         }
 
-                        console.log(`从API获取到 ${provider} 的当前模型:`, currentModel);
+                        window.__ai_log.info(`从API获取到 ${provider} 的当前模型:`, currentModel);
 
                         if (currentModel) {
                             modelSelect.value = currentModel;
@@ -5079,7 +5089,7 @@ async function saveAndTestCurrentModel() {
                 const result = await response.json();
                 if (result.success && result.current_provider) {
                     currentProvider = result.current_provider;
-                    console.log('从API获取到当前提供者:', currentProvider);
+                    window.__ai_log.info('从API获取到当前提供者:', currentProvider);
                 }
             }
         } catch (error) {
@@ -5088,16 +5098,16 @@ async function saveAndTestCurrentModel() {
 
         // 如果API获取失败，尝试从可用提供者中推断
         if (!currentProvider) {
-            console.log('API未返回提供者，尝试从可用提供者推断...');
+            window.__ai_log.info('API未返回提供者，尝试从可用提供者推断...');
 
             // 获取可用的提供者列表
             const availableProviders = getAvailableProviders();
-            console.log('可用提供者列表:', availableProviders);
+            window.__ai_log.info('可用提供者列表:', availableProviders);
 
             if (availableProviders.length > 0) {
                 // 使用第一个可用的提供者作为默认值
                 currentProvider = availableProviders[0];
-                console.log('使用第一个可用提供者作为当前提供者:', currentProvider);
+                window.__ai_log.info('使用第一个可用提供者作为当前提供者:', currentProvider);
             }
         }
 
@@ -5118,7 +5128,7 @@ async function saveAndTestCurrentModel() {
             config[currentProvider + '_model'] = selectedModel;
         }
 
-        console.log('保存模型配置:', config);
+    window.__ai_log.info('保存模型配置:', config);
 
         // 保存配置 - 使用正确的API端点
         const saveResponse = await fetch('/api/config/all', {
@@ -5141,7 +5151,7 @@ async function saveAndTestCurrentModel() {
             throw new Error(saveResult.message || '保存失败');
         }
 
-        console.log('模型配置保存成功');
+    window.__ai_log.info('模型配置保存成功');
 
         // 保存成功后，测试该提供者和模型
         const testSuccess = await testProviderSilently(currentProvider);
@@ -5191,7 +5201,7 @@ async function saveCurrentModel() {
                 const result = await response.json();
                 if (result.success && result.current_provider) {
                     currentProvider = result.current_provider;
-                    console.log('从API获取到当前提供者:', currentProvider);
+                    window.__ai_log.info('从API获取到当前提供者:', currentProvider);
                 }
             }
         } catch (error) {
@@ -5200,16 +5210,16 @@ async function saveCurrentModel() {
 
         // 如果API获取失败，尝试从可用提供者中推断
         if (!currentProvider) {
-            console.log('API未返回提供者，尝试从可用提供者推断...');
+            window.__ai_log.info('API未返回提供者，尝试从可用提供者推断...');
 
             // 获取可用的提供者列表
             const availableProviders = getAvailableProviders();
-            console.log('可用提供者列表:', availableProviders);
+            window.__ai_log.info('可用提供者列表:', availableProviders);
 
             if (availableProviders.length > 0) {
                 // 使用第一个可用的提供者作为默认值
                 currentProvider = availableProviders[0];
-                console.log('使用第一个可用提供者作为当前提供者:', currentProvider);
+                window.__ai_log.info('使用第一个可用提供者作为当前提供者:', currentProvider);
             }
         }
 

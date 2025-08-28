@@ -40,6 +40,19 @@ from ..utils.thread_pool import run_blocking_io, to_thread
 logger = logging.getLogger(__name__)
 
 
+# Simple filter to allow only records at or above a given level
+class _LevelFilter(logging.Filter):
+    def __init__(self, level=logging.WARNING):
+        super().__init__()
+        self._level = level
+
+    def filter(self, record):
+        try:
+            return record.levelno >= self._level
+        except Exception:
+            return True
+
+
 # Helper function for aspect ratio settings
 def get_aspect_ratio_settings() -> dict:
     """Get aspect ratio related settings from config (defaults to 16:9)."""
@@ -307,20 +320,30 @@ async def web_ai_config(request: Request, user: User = Depends(get_current_user_
     config_service = get_config_service()
     current_config = config_service.get_all_config()
 
-    return templates.TemplateResponse(
-        "ai_config.html",
-        {
-            "request": request,
-            "current_provider": ai_config.default_ai_provider,
-            "available_providers": ai_config.get_available_providers(),
-            "provider_status": {
-                provider: ai_config.is_provider_available(provider)
-                for provider in ai_config.get_available_providers()
+    # Temporarily suppress info/debug logs for this module while rendering this page
+    level_filter = _LevelFilter(level=logging.WARNING)
+    module_logger = logging.getLogger(__name__)
+    try:
+        module_logger.addFilter(level_filter)
+        return templates.TemplateResponse(
+            "ai_config.html",
+            {
+                "request": request,
+                "current_provider": ai_config.default_ai_provider,
+                "available_providers": ai_config.get_available_providers(),
+                "provider_status": {
+                    provider: ai_config.is_provider_available(provider)
+                    for provider in ai_config.get_available_providers()
+                },
+                "current_config": current_config,
+                "user": user.to_dict(),
             },
-            "current_config": current_config,
-            "user": user.to_dict(),
-        },
-    )
+        )
+    finally:
+        try:
+            module_logger.removeFilter(level_filter)
+        except Exception:
+            pass
 
 
 @router.post("/api/ai/providers/openai/models")
