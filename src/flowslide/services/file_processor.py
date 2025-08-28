@@ -6,9 +6,8 @@ Handles document upload and content extraction as specified in requires.md
 import logging
 import os
 import re
-import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 # Document processing libraries
 try:

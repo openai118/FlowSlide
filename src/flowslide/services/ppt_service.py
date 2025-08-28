@@ -3,9 +3,7 @@ PPT Service for generating presentations
 """
 
 import io
-import json
-import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import docx
 import PyPDF2
@@ -172,7 +170,7 @@ class PPTService:
             <button id="nextBtn" onclick="changeSlide(1)">下一页 ›</button>
         </div>
     </div>
-    
+
     <script>
         let currentSlide = 0;
         const totalSlides = {len(outline.slides)};

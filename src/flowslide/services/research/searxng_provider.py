@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 from typing import Any, Dict, List, Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 import aiohttp
 

@@ -15,7 +15,6 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeEl
 from rich.table import Table
 
 from .config.settings import create_default_config, create_env_template, load_settings
-from .core.models import ChunkStrategy, ProcessingConfig
 from .generators.ppt_generator import PPTOutlineGenerator
 from .utils.file_handler import FileHandler
 from .utils.logger import get_logger, setup_logging

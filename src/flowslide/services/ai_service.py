@@ -2,13 +2,12 @@
 Enhanced AI Service for handling OpenAI-compatible requests and PPT generation
 """
 
-import json
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from ..ai import AIMessage, MessageRole, get_ai_provider
-from ..api.models import ChatCompletionRequest, CompletionRequest, PPTGenerationRequest
+from ..api.models import ChatCompletionRequest, CompletionRequest
 from ..core.config import ai_config
 
 logger = logging.getLogger(__name__)

@@ -6,9 +6,9 @@ Prometheus metrics collection for application monitoring
 import logging
 import time
 from functools import wraps
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
-from fastapi import Request, Response
+from fastapi import Request
 from fastapi.responses import PlainTextResponse
 from prometheus_client import (
     CONTENT_TYPE_LATEST,

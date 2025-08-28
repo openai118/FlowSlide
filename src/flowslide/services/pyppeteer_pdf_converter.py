@@ -6,10 +6,9 @@ Replaces the Pyppeteer implementation with Python Playwright for better stabilit
 import asyncio
 import logging
 import os
-import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 try:
     from playwright.async_api import Browser, BrowserContext, Page, async_playwright

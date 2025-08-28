@@ -2,16 +2,14 @@
 Authentication service for FlowSlide
 """
 
-import hashlib
 import secrets
 import time
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from ..core.simple_config import app_config
-from ..database.database import get_db
 from ..database.models import User, UserSession
 
 

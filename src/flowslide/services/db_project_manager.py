@@ -5,21 +5,15 @@ Replaces the in-memory ProjectManager with persistent database storage
 
 import logging
 import time
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..api.models import (
-    EnhancedPPTOutline,
     PPTGenerationRequest,
-    PPTOutline,
     PPTProject,
     ProjectListResponse,
     TodoBoard,
-    TodoStage,
 )
-from ..database.database import get_async_db
 from ..database.service import DatabaseService
 
 # Configure logger for this module

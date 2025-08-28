@@ -5,7 +5,6 @@ Create default global master template
 import asyncio
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -34,7 +33,7 @@ DEFAULT_TEMPLATE_HTML = """<!DOCTYPE html>
             background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
             font-family: 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
         }
-        
+
         .slide-container {
             width: 100%;
             height: 100%;
@@ -43,12 +42,12 @@ DEFAULT_TEMPLATE_HTML = """<!DOCTYPE html>
             color: white;
             position: relative;
         }
-        
+
         .slide-header {
             padding: 40px 60px 20px 60px;
             border-bottom: 2px solid rgba(96, 165, 250, 0.3);
         }
-        
+
         .slide-title {
             font-size: clamp(2rem, 4vw, 3.5rem);
             font-weight: bold;
@@ -58,7 +57,7 @@ DEFAULT_TEMPLATE_HTML = """<!DOCTYPE html>
             max-height: 80px;
             overflow: hidden;
         }
-        
+
         .slide-content {
             flex: 1;
             padding: 30px 60px;
@@ -68,25 +67,25 @@ DEFAULT_TEMPLATE_HTML = """<!DOCTYPE html>
             max-height: 580px;
             overflow: hidden;
         }
-        
+
         .content-main {
             font-size: clamp(1rem, 2.5vw, 1.4rem);
             line-height: 1.5;
             color: #e2e8f0;
         }
-        
+
         .content-points {
             list-style: none;
             padding: 0;
             margin: 0;
         }
-        
+
         .content-points li {
             margin-bottom: 15px;
             padding-left: 30px;
             position: relative;
         }
-        
+
         .content-points li:before {
             content: "▶";
             position: absolute;
@@ -94,7 +93,7 @@ DEFAULT_TEMPLATE_HTML = """<!DOCTYPE html>
             color: #60a5fa;
             font-size: 0.8em;
         }
-        
+
         .slide-footer {
             position: absolute;
             bottom: 20px;
@@ -103,12 +102,12 @@ DEFAULT_TEMPLATE_HTML = """<!DOCTYPE html>
             color: #94a3b8;
             font-weight: 600;
         }
-        
+
         .chart-container {
             max-height: 300px;
             margin: 20px 0;
         }
-        
+
         .highlight-box {
             background: rgba(96, 165, 250, 0.1);
             border-left: 4px solid #60a5fa;
@@ -116,14 +115,14 @@ DEFAULT_TEMPLATE_HTML = """<!DOCTYPE html>
             margin: 20px 0;
             border-radius: 0 8px 8px 0;
         }
-        
+
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             margin: 20px 0;
         }
-        
+
         .stat-card {
             background: rgba(255, 255, 255, 0.1);
             padding: 20px;
@@ -131,20 +130,20 @@ DEFAULT_TEMPLATE_HTML = """<!DOCTYPE html>
             text-align: center;
             border: 1px solid rgba(96, 165, 250, 0.3);
         }
-        
+
         .stat-number {
             font-size: 2.5rem;
             font-weight: bold;
             color: #60a5fa;
             display: block;
         }
-        
+
         .stat-label {
             font-size: 1rem;
             color: #cbd5e1;
             margin-top: 5px;
         }
-        
+
         /* 响应式调整 */
         @media (max-width: 1280px) {
             body {
@@ -160,13 +159,13 @@ DEFAULT_TEMPLATE_HTML = """<!DOCTYPE html>
         <div class="slide-header">
             <h1 class="slide-title">{{ main_heading }}</h1>
         </div>
-        
+
         <div class="slide-content">
             <div class="content-main">
                 {{ page_content }}
             </div>
         </div>
-        
+
         <div class="slide-footer">
             {{ current_page_number }} / {{ total_page_count }}
         </div>

@@ -2,14 +2,13 @@
 智能图片匹配算法
 """
 
-import asyncio
 import logging
 import math
 import re
 from collections import Counter
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
-from ..models import ImageInfo, ImageTag
+from ..models import ImageInfo
 
 logger = logging.getLogger(__name__)
 

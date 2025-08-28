@@ -2,12 +2,9 @@
 文档处理器 - 处理各种格式的文档并进行智能分块
 """
 
-import hashlib
-import json
 import logging
 import os
 import re
-import shutil
 import tempfile
 from datetime import datetime
 from pathlib import Path

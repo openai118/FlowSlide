@@ -3,7 +3,7 @@ PPT大纲生成相关提示词
 包含所有用于生成PPT大纲的提示词模板
 """
 
-from typing import Any, Dict, List
+from typing import List
 
 
 class OutlinePrompts:

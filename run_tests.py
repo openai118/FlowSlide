@@ -14,7 +14,7 @@ from pathlib import Path
 def install_test_dependencies():
     """安装测试依赖"""
     print("📦 安装测试依赖...")
-    
+
     test_deps = [
         "pytest>=7.0.0",
         "pytest-asyncio>=0.21.0",
@@ -24,7 +24,7 @@ def install_test_dependencies():
         "httpx>=0.25.0",  # For async client testing
         "requests-mock>=1.10.0",  # For mocking HTTP requests
     ]
-    
+
     try:
         subprocess.run([
             sys.executable, "-m", "pip", "install"
@@ -39,10 +39,10 @@ def install_test_dependencies():
 def run_tests(test_type="all", verbose=False, coverage=True, parallel=False):
     """运行测试"""
     print(f"🧪 运行测试: {test_type}")
-    
+
     # 基础命令
     cmd = [sys.executable, "-m", "pytest"]
-    
+
     # 根据测试类型添加参数
     if test_type == "unit":
         cmd.extend(["-m", "unit"])
@@ -58,11 +58,11 @@ def run_tests(test_type="all", verbose=False, coverage=True, parallel=False):
         cmd.extend(["-m", "not slow"])
     elif test_type == "slow":
         cmd.extend(["-m", "slow"])
-    
+
     # 详细输出
     if verbose:
         cmd.append("-v")
-    
+
     # 覆盖率报告
     if coverage:
         cmd.extend([
@@ -71,16 +71,16 @@ def run_tests(test_type="all", verbose=False, coverage=True, parallel=False):
             "--cov-report=html:htmlcov",
             "--cov-report=xml:coverage.xml"
         ])
-    
+
     # 并行执行
     if parallel:
         cmd.extend(["-n", "auto"])
-    
+
     # 添加测试目录
     cmd.append("tests/")
-    
+
     print(f"🚀 执行命令: {' '.join(cmd)}")
-    
+
     try:
         result = subprocess.run(cmd, check=False)
         return result.returncode == 0
@@ -95,15 +95,15 @@ def run_tests(test_type="all", verbose=False, coverage=True, parallel=False):
 def run_linting():
     """运行代码检查"""
     print("🔍 运行代码检查...")
-    
+
     linting_tools = [
         (["python", "-m", "flake8", "src/", "tests/"], "Flake8"),
         (["python", "-m", "black", "--check", "src/", "tests/"], "Black"),
         (["python", "-m", "isort", "--check-only", "src/", "tests/"], "isort"),
     ]
-    
+
     all_passed = True
-    
+
     for cmd, tool_name in linting_tools:
         print(f"  📋 运行 {tool_name}...")
         try:
@@ -120,21 +120,21 @@ def run_linting():
         except Exception as e:
             print(f"  ❌ {tool_name} 执行失败: {e}")
             all_passed = False
-    
+
     return all_passed
 
 
 def run_security_scan():
     """运行安全扫描"""
     print("🔒 运行安全扫描...")
-    
+
     security_tools = [
         (["python", "-m", "safety", "check"], "Safety"),
         (["python", "-m", "bandit", "-r", "src/"], "Bandit"),
     ]
-    
+
     all_passed = True
-    
+
     for cmd, tool_name in security_tools:
         print(f"  🛡️ 运行 {tool_name}...")
         try:
@@ -150,24 +150,24 @@ def run_security_scan():
         except Exception as e:
             print(f"  ❌ {tool_name} 执行失败: {e}")
             all_passed = False
-    
+
     return all_passed
 
 
 def generate_test_report():
     """生成测试报告"""
     print("📊 生成测试报告...")
-    
+
     # 检查覆盖率报告
     coverage_html = Path("htmlcov/index.html")
     coverage_xml = Path("coverage.xml")
-    
+
     if coverage_html.exists():
         print(f"✅ HTML 覆盖率报告: {coverage_html.absolute()}")
-    
+
     if coverage_xml.exists():
         print(f"✅ XML 覆盖率报告: {coverage_xml.absolute()}")
-    
+
     # 检查测试结果
     junit_xml = Path("test-results.xml")
     if junit_xml.exists():
@@ -178,7 +178,7 @@ def main():
     """主函数"""
     parser = argparse.ArgumentParser(description="FlowSlide 测试运行器")
     parser.add_argument(
-        "--type", 
+        "--type",
         choices=["all", "unit", "integration", "api", "auth", "database", "fast", "slow"],
         default="all",
         help="测试类型"
@@ -190,29 +190,29 @@ def main():
     parser.add_argument("--lint", action="store_true", help="运行代码检查")
     parser.add_argument("--security", action="store_true", help="运行安全扫描")
     parser.add_argument("--all-checks", action="store_true", help="运行所有检查")
-    
+
     args = parser.parse_args()
-    
+
     print("🚀 FlowSlide 测试运行器")
     print("=" * 50)
-    
+
     success = True
-    
+
     # 安装依赖
     if args.install_deps or args.all_checks:
         if not install_test_dependencies():
             success = False
-    
+
     # 运行代码检查
     if args.lint or args.all_checks:
         if not run_linting():
             success = False
-    
+
     # 运行安全扫描
     if args.security or args.all_checks:
         if not run_security_scan():
             success = False
-    
+
     # 运行测试
     if not run_tests(
         test_type=args.type,
@@ -221,10 +221,10 @@ def main():
         parallel=args.parallel
     ):
         success = False
-    
+
     # 生成报告
     generate_test_report()
-    
+
     print("\n" + "=" * 50)
     if success:
         print("🎉 所有检查通过！")

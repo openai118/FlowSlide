@@ -6,11 +6,9 @@ import asyncio
 import hashlib
 import json
 import logging
-import shutil
 import time
-from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from ..models import ImageCacheInfo, ImageInfo, ImageProvider, ImageSourceType
 

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..database.database import get_db
 from ..database.models import User
-from .auth_service import AuthService, get_auth_service
+from .auth_service import get_auth_service
 
 logger = logging.getLogger(__name__)
 

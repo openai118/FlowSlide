@@ -10,13 +10,12 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
-from langchain.schema import Document
 
-from ...ai import AIMessage, MessageRole, get_ai_provider
+from ...ai import get_ai_provider
 from ...core.simple_config import ai_config
-from ..deep_research_service import DEEPResearchService, ResearchReport, ResearchStep
+from ..deep_research_service import DEEPResearchService
 from .content_extractor import ExtractedContent, WebContentExtractor
 from .searxng_provider import SearXNGContentProvider, SearXNGSearchResponse
 

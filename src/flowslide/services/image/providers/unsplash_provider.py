@@ -2,7 +2,6 @@
 Unsplash图片搜索提供者
 """
 
-import asyncio
 import hashlib
 import logging
 import time

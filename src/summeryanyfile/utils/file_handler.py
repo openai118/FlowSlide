@@ -7,7 +7,7 @@ import os
 import tempfile
 from pathlib import Path
 from typing import Optional, Tuple
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup

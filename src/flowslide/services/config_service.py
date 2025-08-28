@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from dotenv import load_dotenv, set_key, unset_key
+from dotenv import load_dotenv, set_key
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +84,7 @@ class ConfigService:
                 "category": "ai_providers",
                 "default": "http://localhost:11434",
             },
+            "ollama_api_key": {"type": "password", "category": "ai_providers"},
             "ollama_model": {
                 "type": "text",
                 "category": "ai_providers",
@@ -439,7 +440,7 @@ class ConfigService:
             logger.debug(f"Could not reload .env file {self.env_file}: {e}")
         except Exception as e:
             logger.debug(f"Error reloading .env file {self.env_file}: {e}")
-        
+
         config = {}
 
         for key, schema in self.config_schema.items():
@@ -467,7 +468,7 @@ class ConfigService:
             logger.debug(f"Could not reload .env file {self.env_file}: {e}")
         except Exception as e:
             logger.debug(f"Error reloading .env file {self.env_file}: {e}")
-        
+
         config = {}
 
         for key, schema in self.config_schema.items():

@@ -2,11 +2,9 @@
 Configuration management for FlowSlide AI features
 """
 
-import os
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
-from pydantic import Field
 from pydantic_settings import BaseSettings
 
 # Load environment variables with error handling

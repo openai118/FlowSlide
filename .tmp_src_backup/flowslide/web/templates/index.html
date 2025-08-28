@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}FlowSlide - AI PPT Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .home-pill { background: var(--tint-blue); padding: 15px; border-radius: 10px; display: inline-block; margin-bottom: 20px; border: 1px solid var(--panel-border); }
+    .home-panel { margin-top: 40px; padding: 30px; background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 15px; }
+    .home-muted { color: var(--text-secondary); }
+    .home-accent-blue { color: var(--accent-blue); }
+    .home-accent-purple { color: var(--accent-purple); }
+    .home-accent-green { color: var(--accent-green); }
+    .home-accent-red { color: var(--accent-red); }
+    .home-accent-yellow { color: var(--accent-yellow); }
+    .home-api { margin-top: 30px; text-align: center; padding: 20px; background: var(--tint-blue); border-radius: 10px; border: 1px solid var(--panel-border); }
+    /* Ensure the top-level cards on the home page are equal-height and their content is vertically centered */
+    .grid {
+        align-items: stretch; /* make grid children match height */
+    }
+
+    .grid > .card {
+        display: flex;
+        flex-direction: column;
+        justify-content: center; /* vertical centering */
+        gap: 12px;
+        text-align: center; /* horizontal centering for headings, paragraphs and buttons */
+        align-items: center; /* center inline elements like buttons */
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="text-align: center; margin-bottom: 40px;">
+    <h2 class="home-accent-blue" style="margin-bottom: 20px;"><i class="fas fa-rocket home-accent-blue"></i> 欢迎使用 FlowSlide</h2>
+    <p class="home-muted" style="font-size: 1.2em; margin-bottom: 20px;">
+        只需输入主题和需求，AI 即可自动生成专业的 PPT 演示文稿
+    </p>
+    {% if ai_provider %}
+    <div class="home-pill">
+        <p style="margin: 0;">
+            <strong>🤖 当前 AI 提供者:</strong>
+            <span style="background: var(--accent-blue); color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.9em;">
+                {{ ai_provider }}
+            </span>
+            <a href="/ai-config" style="margin-left: 10px; color: var(--accent-blue); text-decoration: none;">⚙️ 配置</a>
+        </p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="grid">
+    <div class="card">
+        <h3 class="home-accent-blue" style="margin-bottom: 15px;"><i class="fas fa-bullseye"></i> 快速生成</h3>
+        <p style="margin-bottom: 20px;">选择场景模板，输入主题，一键生成专业PPT</p>
+        <a href="/scenarios" class="btn btn-primary">开始创建 PPT</a>
+    </div>
+    
+    <div class="card">
+        <h3 class="home-accent-purple" style="margin-bottom: 15px;"><i class="fas fa-chart-bar"></i> 项目仪表板</h3>
+        <p style="margin-bottom: 20px;">管理项目、查看 TODO 看板和进度跟踪</p>
+        <a href="/dashboard" class="btn" style="background: var(--accent-purple); border: 1px solid var(--accent-purple);">项目仪表板</a>
+    </div>
+</div>
+
+<div class="home-panel">
+    <h3 style="margin-bottom: 20px; text-align: center;"><i class="fas fa-star home-accent-yellow"></i> 核心功能特色</h3>
+    
+    <div class="grid">
+        <div style="text-align: center;">
+            <div style="font-size: 3em; margin-bottom: 10px;" class="home-accent-blue"><i class="fas fa-tasks"></i></div>
+            <h4 class="home-accent-blue" style="margin-bottom: 10px;">TODO 看板管理</h4>
+            <p class="home-muted">可视化5阶段工作流程：大纲生成→主题设计→内容生成→排版校验→导出分享</p>
+        </div>
+
+        <div style="text-align: center;">
+            <div style="font-size: 3em; margin-bottom: 10px;" class="home-accent-green"><i class="fas fa-palette"></i></div>
+            <h4 class="home-accent-green" style="margin-bottom: 10px;">7种专业场景</h4>
+            <p class="home-muted">通用、旅游观光、儿童科普、深入分析、历史文化、科技技术、方案汇报</p>
+        </div>
+
+        <div style="text-align: center;">
+            <div style="font-size: 3em; margin-bottom: 10px;" class="home-accent-red"><i class="fas fa-sync-alt"></i></div>
+            <h4 class="home-accent-red" style="margin-bottom: 10px;">实时迭代优化</h4>
+            <p class="home-muted">支持单页重新生成、内容锁定、版本历史管理和项目协作</p>
+        </div>
+    </div>
+</div>
+
+<div class="home-api">
+    <h4 style="margin-bottom: 15px;"><i class="fas fa-link home-accent-blue"></i> API 接口支持</h4>
+    <p class="home-muted" style="margin-bottom: 15px;">
+        FlowSlide 提供完整的 OpenAI 兼容 API，支持与现有工具和客户端无缝集成
+    </p>
+    <a href="/docs" class="btn btn-primary">查看 API 文档</a>
+</div>
+{% endblock %}

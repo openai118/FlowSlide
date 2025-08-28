@@ -2,8 +2,6 @@
 AI provider implementations
 """
 
-import asyncio
-import json
 import logging
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
@@ -65,15 +63,17 @@ class OpenAIProvider(AIProvider):
             # 提供更详细的错误信息
             error_msg = str(e)
             if "Expecting value" in error_msg:
-                logger.error(
-                    f"OpenAI API JSON parsing error: {error_msg}. This usually indicates the API returned malformed JSON."
-                )
+                logger.error("OpenAI API JSON parsing error while parsing response")
+                logger.error(error_msg)
             elif "timeout" in error_msg.lower():
-                logger.error(f"OpenAI API timeout error: {error_msg}")
+                logger.error("OpenAI API timeout error")
+                logger.error(error_msg)
             elif "rate limit" in error_msg.lower():
-                logger.error(f"OpenAI API rate limit error: {error_msg}")
+                logger.error("OpenAI API rate limit error")
+                logger.error(error_msg)
             else:
-                logger.error(f"OpenAI API error: {error_msg}")
+                logger.error("OpenAI API error")
+                logger.error(error_msg)
             raise
 
     async def text_completion(self, prompt: str, **kwargs) -> AIResponse:
@@ -190,10 +190,11 @@ class GoogleProvider(AIProvider):
         super().__init__(config)
         # Always capture config bits we need
         self.api_key = config.get("api_key")
-        self.base_url = config.get("base_url", "https://generativelanguage.googleapis.com").rstrip(
-            "/"
-        )
+        # Normalize base_url and ensure no trailing slash
+        self.base_url = config.get("base_url") or ("https://generativelanguage.googleapis.com")
+        self.base_url = self.base_url.rstrip("/")
         self._use_rest = False
+
         try:
             import google.generativeai as genai
 
@@ -209,7 +210,8 @@ class GoogleProvider(AIProvider):
                 self._use_rest = True
         except ImportError:
             logger.warning(
-                "Google Generative AI library not installed. Install with: pip install google-generativeai"
+                "Google Generative AI library not installed."
+                " Install with: pip install google-generativeai"
             )
             # If SDK missing, fall back to REST (works for default or custom base URL)
             self.client = None
@@ -255,11 +257,10 @@ class GoogleProvider(AIProvider):
         try:
             # Configure generation parameters
             # 确保max_tokens不会太小，至少1000个token用于生成内容
-            max_tokens = max(config.get("max_tokens", 16384), 1000)
+            # (max tokens handled by generation config when needed)
             generation_config = {
                 "temperature": config.get("temperature", 0.7),
                 "top_p": config.get("top_p", 1.0),
-                # "max_output_tokens": max_tokens,
             }
 
             # 配置安全设置 - 设置为较宽松的安全级别以减少误拦截

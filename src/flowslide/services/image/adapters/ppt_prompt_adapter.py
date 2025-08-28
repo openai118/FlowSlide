@@ -6,7 +6,7 @@ PPT内容到图片生成提示词的适配器
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
 from ..models import ImageGenerationRequest, ImageProvider
 

@@ -4,11 +4,10 @@ Stable Diffusion 图片生成提供者
 
 import asyncio
 import base64
-import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import aiohttp
 

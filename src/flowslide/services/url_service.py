@@ -4,8 +4,6 @@ URL生成服务
 """
 
 import logging
-from typing import Optional
-from urllib.parse import urljoin
 
 logger = logging.getLogger(__name__)
 

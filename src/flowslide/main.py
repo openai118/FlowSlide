@@ -186,6 +186,7 @@ app.include_router(web_router, prefix="", tags=["Web Interface"])
 # Mount static files
 static_dir = os.path.join(os.path.dirname(__file__), "web", "static")
 
+
 # Custom route for JS files to ensure correct MIME type
 @app.get("/static/js/{file_path:path}")
 async def serve_js_file(file_path: str):
@@ -196,9 +197,11 @@ async def serve_js_file(file_path: str):
     else:
         raise HTTPException(status_code=404, detail="JS file not found")
 
+
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Add favicon route
+
 
 @app.get("/favicon.ico")
 async def favicon():

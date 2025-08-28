@@ -10,9 +10,6 @@ from sqlalchemy import and_, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from ..api.models import PPTProject
-from ..api.models import TodoBoard as TodoBoardModel
-from ..api.models import TodoStage as TodoStageModel
 from .models import (
     GlobalMasterTemplate,
     PPTTemplate,

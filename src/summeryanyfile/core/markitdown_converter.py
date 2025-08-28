@@ -3,9 +3,7 @@ MarkItDown转换器 - 支持多种文件格式转换为Markdown
 """
 
 import logging
-import os
 import re
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 

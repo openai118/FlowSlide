@@ -5,7 +5,6 @@ Enhanced PPT Service with real AI integration and project management
 import asyncio
 import json
 import logging
-import os
 import re
 import tempfile
 import time
@@ -13,9 +12,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ..ai import AIMessage, MessageRole, get_ai_provider
+from ..ai import get_ai_provider
 from ..api.models import (
-    EnhancedPPTOutline,
     PPTGenerationRequest,
     PPTOutline,
     PPTProject,
@@ -23,7 +21,7 @@ from ..api.models import (
     TodoBoard,
 )
 from ..core.config import ai_config
-from ..utils.thread_pool import run_blocking_io, to_thread
+from ..utils.thread_pool import run_blocking_io
 from .db_project_manager import DatabaseProjectManager
 from .global_master_template_service import GlobalMasterTemplateService
 from .image.adapters.ppt_prompt_adapter import PPTSlideContext
@@ -343,7 +341,6 @@ class EnhancedPPTService(PPTService):
         try:
             import json
             import time
-            from pathlib import Path
 
             cache_dir = self.cache_dirs["style_genes"]
             if not cache_dir.exists():
@@ -3878,7 +3875,6 @@ class EnhancedPPTService(PPTService):
         """使用图片处理器处理幻灯片多图片"""
         try:
             # 初始化图片处理器
-            from .models.slide_image_info import SlideImagesCollection
             from .ppt_image_processor import PPTImageProcessor
 
             image_processor = PPTImageProcessor(
@@ -4094,7 +4090,6 @@ class EnhancedPPTService(PPTService):
         """获取或提取设计基因，只在第一页提取一次，后续复用"""
         import hashlib
         import json
-        from pathlib import Path
 
         # 如果没有项目ID，直接提取
         if not project_id:

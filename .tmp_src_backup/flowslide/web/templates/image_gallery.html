@@ -1,0 +1,1892 @@
+<script>
+// 兜底：确保关闭按钮始终可用
+window.closeImageDetailModal = window.closeImageDetailModal || function(){
+    try{
+        var modal=document.getElementById('image-detail-modal');
+        if(modal) modal.style.display='none';
+    }catch(e){ console.error('closeImageDetailModal error', e); }
+};
+</script>
+{% extends "base.html" %}
+
+{% block title %}本地图床管理 - FlowSlide{% endblock %}
+
+{% block content %}
+<div style="text-align: center; margin-bottom: 40px;">
+    <h2 style="color: var(--text-primary); margin-bottom: 20px;">🖼️ 本地图床管理</h2>
+    <p style="font-size: 1.1em; color: var(--text-secondary);">
+        管理和浏览您的本地图片库
+    </p>
+</div>
+
+<!-- 操作工具栏 -->
+<div class="toolbar" style="margin-bottom: 30px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+            <!-- 分类筛选 -->
+            <select id="category-filter" onchange="filterImages()" style="padding: 10px 12px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--text-primary); border-radius: 8px;">
+                <option value="all">全部分类</option>
+                <option value="ai_generated">AI生成</option>
+                <option value="web_search">网络搜索</option>
+                <option value="local_storage">本地上传</option>
+            </select>
+
+            <!-- 搜索框 -->
+            <div style="position: relative;">
+                <input type="text" id="search-input" placeholder="搜索图片..."
+                       style="padding: 10px 40px 10px 15px; border: 2px solid var(--glass-border); background: var(--glass-bg); color: var(--text-primary); border-radius: 8px; width: 420px;"
+                       onkeyup="searchImages(event)">
+                <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary);">🔍</span>
+            </div>
+
+            <!-- 排序选项 -->
+            <select id="sort-option" onchange="sortImages()" style="padding: 10px 12px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--text-primary); border-radius: 8px;">
+                <option value="created_desc">最新创建</option>
+                <option value="created_asc">最早创建</option>
+                <option value="accessed_desc">最近访问</option>
+                <option value="size_desc">文件大小↓</option>
+                <option value="size_asc">文件大小↑</option>
+            </select>
+        </div>
+
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <!-- 上传按钮 -->
+            <button type="button" id="open-upload-modal-btn" onclick="showUploadModal()" class="btn btn-primary">
+                📤 上传图片
+            </button>
+
+            <!-- 批量操作 -->
+            <button onclick="toggleBatchMode()" class="btn btn-info" id="batch-mode-btn">
+                ☑️ 批量选择
+            </button>
+
+            <!-- 刷新按钮 -->
+            <button onclick="refreshGallery()" class="btn btn-success">
+                🔄 刷新
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 最小内联兜底，确保 showUploadModal 总是可用 -->
+<script>
+  window.showUploadModal = window.showUploadModal || function() {
+    var modal = document.getElementById('upload-modal');
+    if (modal) modal.style.display = 'flex';
+  };
+</script>
+
+<!-- 关键事件兜底（closeUploadModal / handleFileSelect） -->
+<script>
+(function(){
+  try {
+    if (!('selectedFiles' in window)) window.selectedFiles = [];
+    if (!window.closeUploadModal) window.closeUploadModal = function(){
+      try{
+        var m=document.getElementById('upload-modal'); if(m) m.style.display='none';
+        var up=document.getElementById('upload-progress'); if(up) up.style.display='none';
+        var info=document.getElementById('image-info-section'); if(info) info.style.display='none';
+        var pf=document.getElementById('progress-fill'); if(pf) pf.style.width='0%';
+        var fi=document.getElementById('file-input'); if(fi) fi.value='';
+        window.selectedFiles = [];
+      }catch(e){ console.error(e); }
+    };
+    // 强化兜底：与主逻辑保持一致，仅负责收集文件并触发统一的 startUpload
+    window.handleFileSelect = function(event){
+      try{
+        var files = (event && event.target && event.target.files) ? Array.from(event.target.files) : [];
+        if (!files || !files.length) return;
+        // 仅保留后端支持的格式
+        var allowed = ['image/jpeg','image/jpg','image/png','image/webp','image/gif'];
+        var valid = files.filter(function(f){ return allowed.indexOf(f.type)>=0; });
+        if (!valid.length) { try{ alert('请选择 JPG/PNG/WEBP/GIF 图片'); }catch(e){} return; }
+        window.selectedFiles = valid;
+        // 展示信息输入区，不立即上传，保持与主流程一致
+        var info=document.getElementById('image-info-section'); if(info) info.style.display='block';
+        var up=document.getElementById('upload-progress'); if(up) up.style.display='none';
+        var title=document.getElementById('image-title'); if(title && valid.length===1){ title.value=(valid[0].name||'').replace(/\.[^.]+$/,''); }
+        // 若页面没有“开始上传”按钮（极端情况），则直接调用主上传流程
+        var btn=document.getElementById('start-upload-btn');
+        if (!btn && typeof window.startUpload==='function') { window.startUpload(); }
+      }catch(e){ console.error('fallback handleFileSelect error', e); }
+    };
+    // 兜底：如果页面主脚本未成功加载，提供一个最小可用的 startUpload
+    if (!window.startUpload) window.startUpload = async function(){
+      try{
+        var files = Array.isArray(window.selectedFiles) ? window.selectedFiles : [];
+        if (!files.length) { (window.showError||function(m){console.error(m); alert(m);})("请先选择文件"); return; }
+
+        var titleEl=document.getElementById('image-title');
+        var descEl=document.getElementById('image-description');
+        var tagsEl=document.getElementById('image-tags');
+        var catEl=document.getElementById('image-category');
+        var title=(titleEl&&titleEl.value||'').trim();
+        var description=(descEl&&descEl.value||'').trim();
+        var tags=(tagsEl&&tagsEl.value||'').trim();
+        var category=(catEl&&catEl.value)||'local_storage';
+
+        var info=document.getElementById('image-info-section'); if(info) info.style.display='none';
+        var up=document.getElementById('upload-progress'); if(up) up.style.display='block';
+        var statusEl=document.getElementById('upload-status');
+        var fill=document.getElementById('progress-fill');
+
+        var uploaded=0, total=files.length;
+        for (var i=0;i<files.length;i++){
+          var f=files[i];
+          try{
+            if (statusEl) statusEl.textContent = '正在上传 ' + (f.name||('第'+(i+1)+'个文件')) + ' ('+(i+1)+'/'+total+')';
+            var fd=new FormData();
+            fd.append('file', f);
+            fd.append('title', title || (f.name||'').replace(/\.[^.]+$/,''));
+            fd.append('description', description);
+            fd.append('tags', tags);
+            fd.append('category', category);
+            var resp = await fetch('/api/image/upload', { method:'POST', body: fd });
+            var data = {};
+            try{ data = await resp.json(); }catch(_){ }
+            if (resp.ok && data && data.success) uploaded++; else console.error('upload failed', data||resp.status);
+          }catch(e){ console.error('upload error', e); }
+          if (fill) fill.style.width = (((i+1)/total)*100)+'%';
+        }
+        if (statusEl) statusEl.textContent = '上传完成！成功上传 '+uploaded+'/'+total+' 个文件';
+        if (uploaded>0){ setTimeout(function(){ try{ if (typeof window.closeUploadModal==='function') window.closeUploadModal(); }catch(e){}; try{ if (typeof window.refreshGallery==='function') window.refreshGallery(); }catch(e){}; (window.showSuccess||function(m){console.log(m);})('成功上传 '+uploaded+' 张图片'); }, 1200); }
+      }catch(e){ console.error('fallback startUpload error', e); }
+    };
+
+  } catch(e) { console.error('fallback init error', e); }
+})();
+</script>
+
+<!-- 图库加载兜底：若主脚本未注册 loadImages/renderImageGrid/refreshGallery，则提供最小实现 -->
+<script>
+(function(){
+  try{
+    if (typeof window.loadImages !== 'function' || typeof window.renderImageGrid !== 'function' || typeof window.refreshGallery !== 'function'){
+      if (!('itemsPerPage' in window)) window.itemsPerPage = 20;
+      if (!('currentPage' in window)) window.currentPage = 1;
+      if (!('currentImages' in window)) window.currentImages = [];
+      if (!('filteredImages' in window)) window.filteredImages = [];
+
+      window.refreshGallery = window.refreshGallery || function(){
+        try { window.loadImages(window.currentPage||1); } catch(e){ console.error(e); }
+      };
+
+      window.renderImageGrid = window.renderImageGrid || function(){
+        var grid = document.getElementById('image-grid');
+        if (!grid) return;
+        var images = window.filteredImages || [];
+        if (!Array.isArray(images) || !images.length){
+          grid.innerHTML = '<div class="loading-placeholder" style="text-align: center; padding: 60px; color: var(--text-secondary); grid-column: 1 / -1;">\
+<div style="font-size: 3em; margin-bottom: 20px;">📷</div><p>暂无图片</p></div>';
+          return;
+        }
+        var origin = (window.location && window.location.origin) || '';
+        var bm = !!window.batchMode;
+        if (!('selectedImages' in window) || !(window.selectedImages instanceof Set)) window.selectedImages = new Set();
+        grid.innerHTML = images.map(function(image){
+          var id = image.image_id || image.id || '';
+          var title = (image && (image.title || image.filename)) || id;
+          var fileSize = image && image.file_size ? (Math.round(image.file_size/1024)+' KB') : '';
+          var checked = window.selectedImages.has(id) ? 'checked' : '';
+          var checkbox = bm ? '<input type="checkbox" class="batch-checkbox" '+checked+' onchange="toggleImageSelection(\''+id+'\')">' : '';
+          return '<div class="image-item" data-image-id="'+id+'">'+
+            checkbox+
+            '<img class="image-thumbnail" src="'+ origin + '/api/image/thumbnail/' + id + '" alt="'+ title.replace(/"/g,'&quot;') +'" onclick="showImageDetail(\''+id+'\')" onerror="this.src=\'/static/images/placeholder.svg\'">'+
+            '<div class="image-info">'+
+              '<div class="image-title">'+ title +'</div>'+
+              '<div class="image-meta"><span>'+ fileSize +'</span></div>'+
+              '<div class="image-actions">'+
+                '<button onclick="downloadSingleImage(\''+id+'\')" class="btn btn-sm btn-primary">下载</button>'+
+                '<button onclick="deleteSingleImage(\''+id+'\')" class="btn btn-sm btn-danger">删除</button>'+
+              '</div>'+
+            '</div>'+
+          '</div>';
+        }).join('');
+      };
+
+      window.loadImages = window.loadImages || async function(page){
+        try{
+          page = page || 1; window.currentPage = page;
+          var categoryEl = document.getElementById('category-filter');
+          var searchEl = document.getElementById('search-input');
+          var sortEl = document.getElementById('sort-option');
+          var params = new URLSearchParams({
+            page: page,
+            per_page: window.itemsPerPage || 20,
+            category: (categoryEl && categoryEl.value && categoryEl.value !== 'all') ? categoryEl.value : '',
+            search: (searchEl && searchEl.value) || '',
+            sort: (sortEl && sortEl.value) || 'created_desc'
+          });
+          var resp = await fetch('/api/image/gallery/list?' + params.toString());
+      // 交互相关兜底函数：批量模式/选择/下载/删除/提示
+      if (!('batchMode' in window)) window.batchMode = false;
+      if (!('selectedImages' in window) || !(window.selectedImages instanceof Set)) window.selectedImages = new Set();
+      window.showError = window.showError || function(msg){ try{ alert(msg); }catch(e){ console.error(msg); } };
+      window.showSuccess = window.showSuccess || function(msg){ try{ console.log(msg); }catch(e){} };
+
+      window.updateSelectedCount = window.updateSelectedCount || function(){
+        var el = document.getElementById('selected-count');
+        if (el) el.textContent = window.selectedImages.size;
+      };
+
+      window.toggleImageSelection = window.toggleImageSelection || function(imageId){
+        try{
+          if (!imageId) return;
+          if (window.selectedImages.has(imageId)) window.selectedImages.delete(imageId); else window.selectedImages.add(imageId);
+          var card = document.querySelector('[data-image-id="'+imageId+'"]');
+          if (card) card.classList.toggle('selected');
+          window.updateSelectedCount();
+        }catch(e){ console.error('toggleImageSelection error', e); }
+      };
+
+      window.toggleBatchMode = window.toggleBatchMode || function(){
+        try{
+          window.batchMode = !window.batchMode;
+          var btn = document.getElementById('batch-mode-btn');
+          var toolbar = document.getElementById('batch-toolbar');
+          if (btn){
+            if (window.batchMode){ btn.textContent = '❌ 退出批量'; btn.className = 'btn btn-warning'; }
+            else { btn.textContent = '☑️ 批量选择'; btn.className = 'btn btn-info'; }
+          }
+          if (toolbar) toolbar.style.display = window.batchMode ? 'block' : 'none';
+          if (!window.batchMode) window.selectedImages.clear();
+          if (typeof window.renderImageGrid === 'function') window.renderImageGrid();
+          window.updateSelectedCount();
+        }catch(e){ console.error('toggleBatchMode error', e); }
+      };
+
+      window.downloadSingleImage = window.downloadSingleImage || async function(imageId){
+        try{
+          var resp = await fetch('/api/image/download/'+imageId);
+          if (!resp.ok) { window.showError('下载失败'); return; }
+          var blob = await resp.blob();
+          var url = window.URL.createObjectURL(blob);
+          var a = document.createElement('a'); a.href = url; a.download = 'image'; a.click();
+          setTimeout(function(){ window.URL.revokeObjectURL(url); }, 1000);
+        }catch(e){ console.error('download error', e); window.showError('下载失败'); }
+      };
+
+      window.deleteSingleImage = window.deleteSingleImage || async function(imageId){
+        try{
+          if (!confirm('确定要删除这张图片吗？此操作不可撤销。')) return;
+          var resp = await fetch('/api/image/delete/'+imageId, { method: 'DELETE' });
+          var data = {}; try{ data = await resp.json(); }catch(_){ }
+          if (resp.ok && data && data.success){ window.showSuccess('图片删除成功'); if (typeof window.refreshGallery==='function') window.refreshGallery(); }
+          else { window.showError('删除失败' + (data && data.message ? (': '+data.message) : '')); }
+        }catch(e){ console.error('delete error', e); window.showError('删除失败'); }
+      };
+
+      window.showImageDetail = window.showImageDetail || async function(imageId){
+        try{
+          // 设置当前图片 ID
+          window.currentImageDetail = { image_id: imageId };
+          var origin = (window.location && window.location.origin) || '';
+          var modal = document.getElementById('image-detail-modal');
+          if (!modal){ window.open('/api/image/view/'+imageId, '_blank'); return; }
+          // 先显示预览
+          var img = document.getElementById('detail-image');
+          if (img) img.src = origin + '/api/image/view/' + imageId;
+          // 拉取详情填充右侧信息（忽略失败）
+          try{
+            var resp = await fetch('/api/image/detail/' + imageId);
+            var data = await resp.json();
+            if (data && data.success){
+              window.currentImageDetail = data.image || { image_id: imageId };
+              var t = document.getElementById('image-detail-title'); if (t) t.textContent = window.currentImageDetail.title || window.currentImageDetail.filename || imageId;
+              var fn = document.getElementById('detail-filename'); if (fn) fn.textContent = window.currentImageDetail.filename || '-';
+              var fs = document.getElementById('detail-size'); if (fs) fs.textContent = (window.currentImageDetail.file_size ? (Math.round(window.currentImageDetail.file_size/1024)+' KB') : '-');
+              var dm = document.getElementById('detail-dimensions'); if (dm) dm.textContent = (window.currentImageDetail.width && window.currentImageDetail.height ? (window.currentImageDetail.width+' x '+window.currentImageDetail.height) : '-');
+              var fmt = document.getElementById('detail-format'); if (fmt) fmt.textContent = window.currentImageDetail.format || '-';
+              var src = document.getElementById('detail-source'); if (src) src.textContent = window.currentImageDetail.source_type || '-';
+            }
+          }catch(e){ console.warn('load detail failed', e); }
+          modal.style.display = 'flex';
+        }catch(e){ window.open('/api/image/view/'+imageId, '_blank'); }
+      };
+
+      // 批量工具函数兜底：全选/清除/批量删除/批量下载/清空图床
+      window.selectAll = window.selectAll || function(){
+        try{
+          var ids=(window.filteredImages||[]).map(function(it){ return it.image_id||it.id; });
+          window.selectedImages = new Set(ids);
+          if (typeof window.renderImageGrid==='function') window.renderImageGrid();
+          window.updateSelectedCount();
+        }catch(e){ console.error('selectAll error', e); }
+      };
+
+      window.clearSelection = window.clearSelection || function(){
+        try{
+          if (window.selectedImages) window.selectedImages.clear();
+          if (typeof window.renderImageGrid==='function') window.renderImageGrid();
+          window.updateSelectedCount();
+        }catch(e){ console.error('clearSelection error', e); }
+      };
+
+      window.batchDelete = window.batchDelete || async function(){
+        try{
+          var ids = Array.from(window.selectedImages||[]);
+          if (!ids.length){ window.showError('请先选择图片'); return; }
+          if (!confirm('确定要删除选中的 '+ids.length+' 张图片吗？此操作不可撤销。')) return;
+          var resp = await fetch('/api/image/gallery/batch-delete', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ image_ids: ids }) });
+          var data = {}; try{ data = await resp.json(); }catch(_){ }
+          if (resp.ok && data && data.success){ window.showSuccess('成功删除 '+(data.deleted_count||ids.length)+' 张图片'); if (typeof window.refreshGallery==='function') window.refreshGallery(); window.selectedImages.clear(); window.updateSelectedCount(); }
+          else { window.showError('批量删除失败' + (data && data.message ? (': '+data.message) : '')); }
+        }catch(e){ console.error('batchDelete error', e); window.showError('批量删除失败'); }
+      };
+
+      window.batchDownload = window.batchDownload || async function(){
+        try{
+          var ids = Array.from(window.selectedImages||[]);
+          if (!ids.length){ window.showError('请先选择图片'); return; }
+          var resp = await fetch('/api/image/gallery/batch-download', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ image_ids: ids }) });
+          if (!resp.ok) { window.showError('批量下载请求失败'); return; }
+          var blob = await resp.blob();
+          var url = window.URL.createObjectURL(blob);
+          var a=document.createElement('a'); a.href=url; a.download='images.zip'; a.click();
+          setTimeout(function(){ window.URL.revokeObjectURL(url); }, 1500);
+        }catch(e){ console.error('batchDownload error', e); window.showError('批量下载失败'); }
+      };
+
+      window.clearAllImages = window.clearAllImages || async function(){
+        try{
+          if (!confirm('确定要清空所有图片吗？此操作不可撤销。')) return;
+          var resp = await fetch('/api/image/gallery/clear-all', { method:'POST' });
+          var data = {}; try{ data = await resp.json(); }catch(_){ }
+          if (resp.ok && data && data.success){ window.showSuccess('已清空 ' + (data.deleted_count||0) + ' 张图片'); if (typeof window.refreshGallery==='function') window.refreshGallery(); window.selectedImages.clear(); window.updateSelectedCount(); }
+          else { window.showError('清空失败' + (data && data.message ? (': '+data.message) : '')); }
+        }catch(e){ console.error('clearAllImages error', e); window.showError('清空图床失败'); }
+      };
+
+      // 详情弹窗相关兜底
+      window.closeImageDetailModal = window.closeImageDetailModal || function(){
+        try{ var modal=document.getElementById('image-detail-modal'); if (modal) modal.style.display='none'; }catch(e){ console.error('closeImageDetailModal error', e); }
+      };
+      window.downloadImage = window.downloadImage || async function(){ try{ if (window.currentImageDetail) await window.downloadSingleImage(window.currentImageDetail.image_id || window.currentImageDetail.id); }catch(e){ console.error('downloadImage error', e); } };
+      window.copyImageUrl = window.copyImageUrl || async function(){
+        try{
+          if (!window.currentImageDetail) return;
+          var url=(window.location.origin||'')+'/api/image/view/'+(window.currentImageDetail.image_id||window.currentImageDetail.id);
+          try{ await navigator.clipboard.writeText(url); window.showSuccess('链接已复制'); }
+          catch(_){ var ta=document.createElement('textarea'); ta.value=url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); window.showSuccess('链接已复制'); }
+        }catch(e){ console.error('copyImageUrl error', e); }
+      };
+      window.deleteImage = window.deleteImage || async function(){ try{ if (window.currentImageDetail) { await window.deleteSingleImage(window.currentImageDetail.image_id||window.currentImageDetail.id); window.closeImageDetailModal(); } }catch(e){ console.error('deleteImage error', e); } };
+      window.toggleEditMode = window.toggleEditMode || function(){ try{ var display=document.getElementById('info-display-mode'); var edit=document.getElementById('info-edit-mode'); if (!display||!edit) return; if (edit.style.display==='none'||!edit.style.display){ edit.style.display='block'; display.style.display='none'; } else { edit.style.display='none'; display.style.display='block'; } }catch(e){ console.error('toggleEditMode error', e); } };
+
+
+      // 工具栏兜底：分类/搜索/排序/刷新
+      (function(){
+        try{
+          // 简单防抖
+          var _debTimer=null; function _debounce(fn){ clearTimeout(_debTimer); _debTimer=setTimeout(fn, 250); }
+          window.filterImages = window.filterImages || function(){ try{ window.loadImages(1); }catch(e){ console.error('filterImages error', e); } };
+          window.sortImages = window.sortImages || function(){ try{ window.loadImages(1); }catch(e){ console.error('sortImages error', e); } };
+          window.searchImages = window.searchImages || function(ev){ try{ var ok = !ev || ev.key==='Enter' || ev.type==='change' || ev.type==='input'; if (ok) _debounce(function(){ window.loadImages(1); }); }catch(e){ console.error('searchImages error', e); } };
+          // 主动绑定一次事件，防止内联失败
+          document.addEventListener('DOMContentLoaded', function(){
+            try{
+              var cat=document.getElementById('category-filter'); if (cat) cat.addEventListener('change', function(){ window.filterImages(); });
+              var s=document.getElementById('search-input'); if (s){ s.addEventListener('keyup', function(e){ window.searchImages(e); }); s.addEventListener('change', function(e){ window.searchImages(e); }); s.addEventListener('input', function(e){ window.searchImages(e); }); }
+              var sort=document.getElementById('sort-option'); if (sort) sort.addEventListener('change', function(){ window.sortImages(); });
+            }catch(e){ console.error('bind toolbar events error', e); }
+          });
+        }catch(e){ console.error('toolbar fallback init error', e); }
+      })();
+
+
+      // 编辑信息兜底：保存/取消
+      window.saveImageInfo = window.saveImageInfo || async function(){
+        try{
+          if (!window.currentImageDetail) { window.showError('未选择图片'); return; }
+          var id = window.currentImageDetail.image_id || window.currentImageDetail.id;
+          var title = (document.getElementById('edit-title')?.value || '').trim();
+          var description = (document.getElementById('edit-description')?.value || '').trim();
+          var tags = (document.getElementById('edit-tags')?.value || '').trim();
+          var category = document.getElementById('edit-category')?.value || '';
+          var body = { };
+          if (title !== '') body.title = title; else body.title = null;
+          if (description !== '') body.description = description; else body.description = null;
+          if (tags !== '') body.tags = tags; else body.tags = null;
+          if (category !== '') body.category = category; else body.category = null;
+          var resp = await fetch('/api/image/'+id+'/update', { method:'PUT', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+          var data = {}; try{ data = await resp.json(); }catch(_){ }
+          if (resp.ok && data && data.success){ window.showSuccess('图片信息已更新'); window.toggleEditMode && window.toggleEditMode(); if (typeof window.refreshGallery==='function') window.refreshGallery(); }
+          else { window.showError('更新失败' + (data && data.message ? (': '+data.message) : '')); }
+        }catch(e){ console.error('saveImageInfo error', e); window.showError('更新失败'); }
+      };
+
+      window.cancelEdit = window.cancelEdit || function(){ try{ window.toggleEditMode && window.toggleEditMode(); }catch(e){ console.error('cancelEdit error', e); } };
+
+          var data = await resp.json();
+          if (data && data.success){
+            window.currentImages = data.images || [];
+            window.filteredImages = window.currentImages;
+            window.renderImageGrid();
+          } else {
+            console.error('loadImages failed', data);
+          }
+        }catch(e){ console.error('fallback loadImages error', e); }
+      };
+
+      // 页面加载后自动拉取
+      document.addEventListener('DOMContentLoaded', function(){
+        try { window.loadImages(1); } catch(e){ console.error(e); }
+      });
+    }
+  } catch(e){ console.error('gallery fallback init error', e); }
+})();
+</script>
+
+
+
+
+<!-- 批量操作工具栏 -->
+<div id="batch-toolbar" class="batch-toolbar" style="display: none; margin-bottom: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 8px;">
+        <div>
+            <span id="selected-count">0</span> 张图片已选择
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button onclick="selectAll()" class="btn btn-info">全选</button>
+            <button onclick="clearSelection()" class="btn btn-warning">清除选择</button>
+            <button onclick="batchDelete()" class="btn btn-danger">删除选中</button>
+            <button onclick="batchDownload()" class="btn btn-success">下载选中</button>
+            <button onclick="clearAllImages()" class="btn btn-danger" style="margin-left: 20px; border: 2px solid #dc3545;">🗑️ 清空图床</button>
+        </div>
+    </div>
+</div>
+
+<!-- 图片网格 -->
+<div id="image-grid" class="image-grid">
+    <!-- 初始保持空白。真实占位由 loadImages 的延迟计时器控制，避免短暂闪烁 -->
+</div>
+
+<!-- 分页控件 -->
+<div id="pagination" class="pagination" style="display: none; margin-top: 30px; text-align: center;">
+    <!-- 分页按钮将通过JavaScript动态生成 -->
+</div>
+
+<!-- 上传模态框 -->
+<div id="upload-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>📤 上传图片</h3>
+            <button type="button" onclick="closeUploadModal()" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="upload-area" id="upload-area"
+                 ondrop="handleDrop(event)"
+                 ondragover="handleDragOver(event)"
+                 ondragleave="handleDragLeave(event)">
+                <div class="upload-content">
+                    <div style="font-size: 3em; margin-bottom: 15px; color: var(--primary-color);">📁</div>
+                    <p style="margin-bottom: 15px;">拖拽图片到此处或点击选择文件</p>
+                    <input type="file" id="file-input" multiple accept="image/*" onchange="handleFileSelect(event)" style="display: none;">
+                    <button type="button" onclick="document.getElementById('file-input').click()" class="btn btn-primary">选择文件</button>
+                </div>
+            </div>
+
+            <!-- 图片信息输入区域 -->
+            <div id="image-info-section" style="display: none; margin-top: 20px; padding: 20px; border: 1px solid var(--panel-border); border-radius: 8px; background: var(--panel-bg);">
+                <h4 style="margin-bottom: 15px; color: var(--text-primary);">📝 图片信息</h4>
+
+                <div style="margin-bottom: 15px;">
+                    <label for="image-title" style="display: block; margin-bottom: 5px; font-weight: bold;">标题：</label>
+              <input type="text" id="image-title" placeholder="请输入图片标题（可选）"
+                  style="width: 100%; padding: 8px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--text-primary); border-radius: 4px;">
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label for="image-description" style="display: block; margin-bottom: 5px; font-weight: bold;">描述：</label>
+                    <textarea id="image-description" placeholder="请输入图片描述，有助于AI搜索匹配（推荐填写）"
+                              rows="3" style="width: 100%; padding: 8px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--text-primary); border-radius: 4px; resize: vertical;"></textarea>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label for="image-tags" style="display: block; margin-bottom: 5px; font-weight: bold;">标签：</label>
+              <input type="text" id="image-tags" placeholder="请输入标签，用逗号分隔（如：商务,图表,数据分析）"
+                  style="width: 100%; padding: 8px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--text-primary); border-radius: 4px;">
+              <small style="color: var(--text-muted); font-size: 0.9em;">标签有助于AI智能匹配，建议添加相关关键词</small>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label for="image-category" style="display: block; margin-bottom: 5px; font-weight: bold;">分类：</label>
+                    <select id="image-category" style="width: 100%; padding: 8px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--text-primary); border-radius: 4px;">
+                        <option value="business">商务</option>
+                        <option value="technology">技术</option>
+                        <option value="education">教育</option>
+                        <option value="design">设计</option>
+                        <option value="nature">自然</option>
+                        <option value="people">人物</option>
+                        <option value="abstract">抽象</option>
+                        <option value="other">其他</option>
+                    </select>
+                </div>
+
+                <div style="text-align: right;">
+                    <button type="button" onclick="startUpload()" class="btn btn-success" id="start-upload-btn">
+                        🚀 开始上传
+                    </button>
+                </div>
+            </div>
+
+            <div id="upload-progress" style="display: none; margin-top: 20px;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <p id="upload-status">准备上传...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 图片详情模态框 -->
+<div id="image-detail-modal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 1200px;">
+        <div class="modal-header">
+            <h3 id="image-detail-title">图片详情</h3>
+            <button onclick="closeImageDetailModal()" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div style="display: grid; grid-template-columns: 1.4fr 420px; gap: 20px;">
+                <div class="image-preview">
+                    <img id="detail-image" style="width: 100%; height: auto; border-radius: 8px;">
+                </div>
+                <div class="image-info">
+                    <!-- 可编辑的图片信息 -->
+                    <div class="info-section">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h4>图片信息</h4>
+                            <button id="edit-toggle-btn" onclick="toggleEditMode()" class="btn btn-sm btn-outline">
+                                <i class="fas fa-edit"></i> 编辑
+                            </button>
+                        </div>
+
+                        <!-- 显示模式 -->
+                        <div id="info-display-mode">
+                            <div class="info-item">
+                                <label>标题:</label>
+                                <span id="display-title">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>描述:</label>
+                                <span id="display-description">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>标签:</label>
+                                <span id="display-tags">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>分类:</label>
+                                <span id="display-category">-</span>
+                            </div>
+                        </div>
+
+                        <!-- 编辑模式 -->
+                        <div id="info-edit-mode" style="display: none;">
+                            <div class="edit-item">
+                                <label for="edit-title">标题:</label>
+                                <input type="text" id="edit-title" class="form-input" placeholder="请输入图片标题">
+                            </div>
+                            <div class="edit-item">
+                                <label for="edit-description">描述:</label>
+                                <textarea id="edit-description" class="form-textarea" rows="3" placeholder="请输入图片描述"></textarea>
+                            </div>
+                            <div class="edit-item">
+                                <label for="edit-tags">标签:</label>
+                                <input type="text" id="edit-tags" class="form-input" placeholder="用逗号分隔多个标签">
+                                <small class="form-help">例如: 风景, 自然, 山水</small>
+                            </div>
+                            <div class="edit-item">
+                                <label for="edit-category">分类:</label>
+                                <select id="edit-category" class="form-select">
+                                    <option value="">请选择分类</option>
+                                    <option value="ai_generated">AI生成</option>
+                                    <option value="web_search">网络搜索</option>
+                                    <option value="local_storage">本地上传</option>
+                                </select>
+                            </div>
+                            <div class="edit-actions">
+                                <button onclick="saveImageInfo()" class="btn btn-success btn-sm">
+                                    <i class="fas fa-save"></i> 保存
+                                </button>
+                                <button onclick="cancelEdit()" class="btn btn-secondary btn-sm">
+                                    <i class="fas fa-times"></i> 取消
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="info-section">
+                        <h4>文件信息</h4>
+                        <div class="info-item">
+                            <label>文件名:</label>
+                            <span id="detail-filename">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>大小:</label>
+                            <span id="detail-size">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>尺寸:</label>
+                            <span id="detail-dimensions">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>格式:</label>
+                            <span id="detail-format">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>来源:</label>
+                            <span id="detail-source">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>创建时间:</label>
+                            <span id="detail-created">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>访问次数:</label>
+                            <span id="detail-access-count">-</span>
+                        </div>
+                    </div>
+
+                    <div class="info-section">
+                        <h4>操作</h4>
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <button onclick="downloadImage()" class="btn btn-primary">下载图片</button>
+                            <button onclick="copyImageUrl()" class="btn btn-info">复制链接</button>
+                            <button onclick="deleteImage()" class="btn btn-danger">删除图片</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 全局变量
+let currentImages = [];
+let filteredImages = [];
+let currentPage = 1;
+let itemsPerPage = 20;
+let batchMode = false;
+let selectedImages = new Set();
+let currentImageDetail = null;
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    loadImages();
+});
+
+// 加载图片列表
+async function loadImages(page = 1) {
+    try {
+        const category = document.getElementById('category-filter').value;
+        const search = document.getElementById('search-input').value;
+        const sort = document.getElementById('sort-option').value;
+
+        const params = new URLSearchParams({
+            page: page,
+            per_page: itemsPerPage,
+            category: category === 'all' ? '' : category,
+            search: search,
+            sort: sort
+        });
+
+        // 延迟显示loading占位（只有当请求较慢时才显示），避免短暂闪烁
+        let loadingTimer = setTimeout(function(){
+            const grid = document.getElementById('image-grid');
+            if (grid) grid.innerHTML = '<div class="loading-placeholder" style="text-align: center; padding: 60px; color: var(--text-secondary); grid-column: 1 / -1;">\n                <div style="font-size: 3em; margin-bottom: 20px;">⏳</div><p>正在加载图片库...</p></div>';
+        }, 150);
+
+        const response = await fetch(`/api/image/gallery/list?${params}`);
+        clearTimeout(loadingTimer);
+        const data = await response.json();
+
+        if (data.success) {
+            currentImages = data.images;
+            filteredImages = currentImages;
+            currentPage = page;
+
+            renderImageGrid();
+            renderPagination(data.pagination);
+        } else {
+            showError('加载图片失败: ' + data.message);
+        }
+    } catch (error) {
+        console.error('Failed to load images:', error);
+        showError('加载图片失败');
+    }
+}
+
+// 渲染图片网格
+function renderImageGrid() {
+    const grid = document.getElementById('image-grid');
+
+    if (filteredImages.length === 0) {
+        grid.innerHTML = `
+            <div class="loading-placeholder" style="text-align: center; padding: 60px; color: var(--text-secondary); grid-column: 1 / -1;">
+                <div style="font-size: 3em; margin-bottom: 20px;">📷</div>
+                <p>暂无图片</p>
+            </div>
+        `;
+        return;
+    }
+
+    grid.innerHTML = filteredImages.map(image => `
+        <div class="image-item ${selectedImages.has(image.image_id) ? 'selected' : ''}" data-image-id="${image.image_id}">
+            ${batchMode ? `<input type="checkbox" class="batch-checkbox" ${selectedImages.has(image.image_id) ? 'checked' : ''} onchange="toggleImageSelection('${image.image_id}')">` : ''}
+            <img src="${window.location.origin}/api/image/thumbnail/${image.image_id}"
+                 alt="${image.title || image.filename}"
+                 class="image-thumbnail"
+                 onclick="showImageDetail('${image.image_id}')"
+                 onerror="this.src='/static/images/placeholder.svg'">
+            <div class="image-info">
+                <div class="image-title">${image.title || image.filename}</div>
+                <div class="image-meta">
+                    <span class="image-source">${getSourceLabel(image.source_type)}</span>
+                    <span>${formatFileSize(image.file_size)}</span>
+                </div>
+                <div class="image-actions">
+                    <button onclick="downloadSingleImage('${image.image_id}')" class="btn btn-sm btn-primary">下载</button>
+                    <button onclick="deleteSingleImage('${image.image_id}')" class="btn btn-sm btn-danger">删除</button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// 渲染分页控件
+function renderPagination(pagination) {
+    const paginationDiv = document.getElementById('pagination');
+
+    if (pagination.total_pages <= 1) {
+        paginationDiv.style.display = 'none';
+        return;
+    }
+
+    paginationDiv.style.display = 'flex';
+
+    let paginationHTML = '';
+
+    // 上一页按钮
+    paginationHTML += `<button onclick="loadImages(${pagination.current_page - 1})" ${!pagination.has_prev ? 'disabled' : ''}>上一页</button>`;
+
+    // 页码按钮
+    const startPage = Math.max(1, pagination.current_page - 2);
+    const endPage = Math.min(pagination.total_pages, pagination.current_page + 2);
+
+    if (startPage > 1) {
+        paginationHTML += `<button onclick="loadImages(1)">1</button>`;
+        if (startPage > 2) {
+            paginationHTML += `<span>...</span>`;
+        }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHTML += `<button onclick="loadImages(${i})" ${i === pagination.current_page ? 'class="active"' : ''}>${i}</button>`;
+    }
+
+    if (endPage < pagination.total_pages) {
+        if (endPage < pagination.total_pages - 1) {
+            paginationHTML += `<span>...</span>`;
+        }
+        paginationHTML += `<button onclick="loadImages(${pagination.total_pages})">${pagination.total_pages}</button>`;
+    }
+
+    // 下一页按钮
+    paginationHTML += `<button onclick="loadImages(${pagination.current_page + 1})" ${!pagination.has_next ? 'disabled' : ''}>下一页</button>`;
+
+    paginationDiv.innerHTML = paginationHTML;
+}
+
+// 筛选图片
+function filterImages() {
+    loadImages(1);
+}
+
+// 搜索图片
+function searchImages(event) {
+    if (event.key === 'Enter' || event.type === 'input') {
+        loadImages(1);
+    }
+}
+
+// 排序图片
+function sortImages() {
+    loadImages(1);
+}
+
+// 刷新图库
+function refreshGallery() {
+    loadImages(currentPage);
+}
+
+// 获取来源标签
+function getSourceLabel(sourceType) {
+    const labels = {
+        'ai_generated': 'AI生成',
+        'web_search': '网络搜索',
+        'local_storage': '本地上传'
+    };
+    return labels[sourceType] || sourceType;
+}
+
+// 格式化文件大小
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+// 显示错误信息
+function showError(message) {
+    // 这里可以集成现有的通知系统
+    alert(message);
+}
+
+// 显示成功信息
+function showSuccess(message) {
+    // 这里可以集成现有的通知系统
+    alert(message);
+}
+
+// 批量选择相关功能
+function toggleBatchMode() {
+    batchMode = !batchMode;
+    const btn = document.getElementById('batch-mode-btn');
+    const toolbar = document.getElementById('batch-toolbar');
+
+    if (batchMode) {
+        btn.textContent = '❌ 退出批量';
+        btn.className = 'btn btn-warning';
+        toolbar.style.display = 'block';
+    } else {
+        btn.textContent = '☑️ 批量选择';
+        btn.className = 'btn btn-info';
+        toolbar.style.display = 'none';
+        selectedImages.clear();
+    }
+
+    renderImageGrid();
+    updateSelectedCount();
+}
+
+function toggleImageSelection(imageId) {
+    if (selectedImages.has(imageId)) {
+        selectedImages.delete(imageId);
+    } else {
+        selectedImages.add(imageId);
+    }
+
+    renderImageGrid();
+    updateSelectedCount();
+}
+
+function selectAll() {
+    filteredImages.forEach(image => selectedImages.add(image.image_id));
+    renderImageGrid();
+    updateSelectedCount();
+}
+
+function clearSelection() {
+    selectedImages.clear();
+    renderImageGrid();
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    document.getElementById('selected-count').textContent = selectedImages.size;
+}
+
+// 批量删除
+async function batchDelete() {
+    if (selectedImages.size === 0) {
+        showError('请先选择要删除的图片');
+        return;
+    }
+
+    if (!confirm(`确定要删除选中的 ${selectedImages.size} 张图片吗？此操作不可撤销。`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/image/gallery/batch-delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                image_ids: Array.from(selectedImages)
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showSuccess(`成功删除 ${data.deleted_count} 张图片`);
+            selectedImages.clear();
+            refreshGallery();
+        } else {
+            showError('批量删除失败: ' + data.message);
+        }
+    } catch (error) {
+        console.error('Batch delete failed:', error);
+        showError('批量删除失败');
+    }
+}
+
+// 批量下载
+async function batchDownload() {
+    if (selectedImages.size === 0) {
+        showError('请先选择要下载的图片');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/image/gallery/batch-download', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                image_ids: Array.from(selectedImages)
+            })
+        });
+
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `images_${new Date().getTime()}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            showSuccess(`成功下载 ${selectedImages.size} 张图片`);
+        } else {
+            showError('批量下载失败');
+        }
+    } catch (error) {
+        console.error('Batch download failed:', error);
+        showError('批量下载失败');
+    }
+}
+
+// 清空图床
+async function clearAllImages() {
+    // 第一次确认
+    if (!confirm('⚠️ 警告：此操作将删除图床中的所有图片！\n\n确定要继续吗？')) {
+        return;
+    }
+
+    // 第二次确认
+    if (!confirm('🚨 最后确认：删除后无法恢复！\n\n请再次确认是否要清空整个图床？')) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/image/gallery/clear-all', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showSuccess(`成功清空图床，删除了 ${data.deleted_count} 张图片`);
+
+            // 清除选择状态
+            selectedImages.clear();
+
+            // 退出批量模式
+            if (batchMode) {
+                toggleBatchMode();
+            }
+
+            // 刷新图库
+            refreshGallery();
+        } else {
+            showError('清空图床失败: ' + data.message);
+        }
+    } catch (error) {
+        console.error('Clear all images failed:', error);
+        showError('清空图床失败');
+    }
+}
+
+// 单张图片操作
+async function downloadSingleImage(imageId) {
+    try {
+        const response = await fetch(`/api/image/download/${imageId}`);
+
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+
+            // 从响应头获取文件名
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = 'image';
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+                if (filenameMatch) {
+                    filename = filenameMatch[1];
+                }
+            }
+
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } else {
+            showError('下载失败');
+        }
+    } catch (error) {
+        console.error('Download failed:', error);
+        showError('下载失败');
+    }
+}
+
+async function deleteSingleImage(imageId) {
+    if (!confirm('确定要删除这张图片吗？此操作不可撤销。')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/image/delete/${imageId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showSuccess('图片删除成功');
+            refreshGallery();
+        } else {
+            showError('删除失败: ' + data.message);
+        }
+    } catch (error) {
+        console.error('Delete failed:', error);
+        showError('删除失败');
+    }
+}
+
+// 上传相关功能
+function showUploadModal() {
+    // 与CSS中 .modal 的 display:flex 一致，避免某些浏览器不渲染
+    document.getElementById('upload-modal').style.display = 'flex';
+}
+
+function closeUploadModal() {
+    document.getElementById('upload-modal').style.display = 'none';
+    document.getElementById('upload-progress').style.display = 'none';
+    document.getElementById('image-info-section').style.display = 'none';
+    document.getElementById('progress-fill').style.width = '0%';
+    document.getElementById('file-input').value = '';
+
+    // 重置输入字段
+    document.getElementById('image-title').value = '';
+    document.getElementById('image-description').value = '';
+    document.getElementById('image-tags').value = '';
+    document.getElementById('image-category').value = 'business';
+
+    // 清空选中的文件
+    selectedFiles = [];
+}
+
+function handleDragOver(event) {
+    event.preventDefault();
+    event.currentTarget.classList.add('drag-over');
+}
+
+function handleDragLeave(event) {
+    event.preventDefault();
+    event.currentTarget.classList.remove('drag-over');
+}
+
+function handleDrop(event) {
+    event.preventDefault();
+    event.currentTarget.classList.remove('drag-over');
+
+    const files = event.dataTransfer.files;
+    handleFiles(files);
+}
+
+function handleFileSelect(event) {
+    const files = event.target.files;
+    handleFiles(files);
+}
+
+let selectedFiles = [];
+
+function handleFiles(files) {
+    if (files.length === 0) return;
+
+    // 验证文件类型
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    const validFiles = Array.from(files).filter(file => validTypes.includes(file.type));
+
+    if (validFiles.length === 0) {
+        showError('请选择有效的图片文件 (JPG, PNG, WebP, GIF)');
+        return;
+    }
+
+    if (validFiles.length !== files.length) {
+        showError(`已过滤掉 ${files.length - validFiles.length} 个无效文件`);
+    }
+
+    selectedFiles = validFiles;
+
+    // 显示图片信息输入区域
+    document.getElementById('image-info-section').style.display = 'block';
+
+    // 如果只有一个文件，自动填入文件名作为标题
+    if (validFiles.length === 1) {
+        document.getElementById('image-title').value = validFiles[0].name.split('.')[0];
+    } else {
+        document.getElementById('image-title').placeholder = `批量上传 ${validFiles.length} 个文件`;
+    }
+}
+
+async function startUpload() {
+    if (selectedFiles.length === 0) {
+        showError('请先选择文件');
+        return;
+    }
+
+    // 获取用户输入的信息
+    const title = document.getElementById('image-title').value.trim();
+    const description = document.getElementById('image-description').value.trim();
+    const tags = document.getElementById('image-tags').value.trim();
+    const category = document.getElementById('image-category').value;
+
+    // 隐藏信息输入区域，显示进度条
+    document.getElementById('image-info-section').style.display = 'none';
+    document.getElementById('upload-progress').style.display = 'block';
+
+    let uploadedCount = 0;
+    const totalFiles = selectedFiles.length;
+
+    for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+
+        try {
+            document.getElementById('upload-status').textContent = `正在上传 ${file.name} (${i + 1}/${totalFiles})`;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // 使用用户输入的信息，如果为空则使用默认值
+            const fileTitle = title || file.name.split('.')[0];
+            formData.append('title', fileTitle);
+            formData.append('description', description);
+            formData.append('tags', tags);
+            formData.append('category', category);
+
+            const response = await fetch('/api/image/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                uploadedCount++;
+            } else {
+                console.error(`Upload failed for ${file.name}:`, data.message);
+            }
+
+            // 更新进度条
+            const progress = ((i + 1) / totalFiles) * 100;
+            document.getElementById('progress-fill').style.width = `${progress}%`;
+
+        } catch (error) {
+            console.error(`Upload error for ${file.name}:`, error);
+        }
+    }
+
+    // 上传完成
+    document.getElementById('upload-status').textContent = `上传完成！成功上传 ${uploadedCount}/${totalFiles} 个文件`;
+
+    if (uploadedCount > 0) {
+        setTimeout(() => {
+            closeUploadModal();
+            refreshGallery();
+            showSuccess(`成功上传 ${uploadedCount} 张图片`);
+        }, 2000);
+    }
+}
+
+// 图片详情相关功能
+async function showImageDetail(imageId) {
+    try {
+        const response = await fetch(`/api/image/detail/${imageId}`);
+        const data = await response.json();
+
+        if (data.success) {
+            currentImageDetail = data.image;
+            console.log('当前图片详情:', currentImageDetail);
+
+            // 填充详情信息
+            document.getElementById('image-detail-title').textContent = data.image.title || data.image.filename;
+            document.getElementById('detail-image').src = `${window.location.origin}/api/image/view/${imageId}`;
+
+            // 填充可编辑的图片信息
+            document.getElementById('display-title').textContent = data.image.title || '未设置';
+            document.getElementById('display-description').textContent = data.image.description || '未设置';
+            document.getElementById('display-tags').textContent = data.image.tags || '未设置';
+            document.getElementById('display-category').textContent = getCategoryLabel(data.image.category) || '未设置';
+
+            // 填充文件信息
+            document.getElementById('detail-filename').textContent = data.image.filename;
+            document.getElementById('detail-size').textContent = formatFileSize(data.image.file_size);
+            document.getElementById('detail-dimensions').textContent = `${data.image.width} × ${data.image.height}`;
+            document.getElementById('detail-format').textContent = data.image.format.toUpperCase();
+            document.getElementById('detail-source').textContent = getSourceLabel(data.image.source_type);
+            document.getElementById('detail-created').textContent = new Date(data.image.created_at * 1000).toLocaleString();
+            document.getElementById('detail-access-count').textContent = data.image.access_count || 0;
+
+            // 重置编辑模式
+            exitEditMode();
+
+            // 显示模态框
+            document.getElementById('image-detail-modal').style.display = 'flex';
+        }
+    } catch (error) {
+        console.error('showImageDetail failed:', error);
+        try { window.open(`/api/image/view/${imageId}`, '_blank'); } catch(e) {}
+    }
+}
+
+
+async function downloadImage() {
+    try {
+        if (document.getElementById('image-detail-modal').style.display !== 'none' && currentImageDetail) {
+            await downloadSingleImage(currentImageDetail.image_id);
+        }
+    } catch (e) { console.error('downloadImage error', e); }
+}
+
+async function copyImageUrl() {
+    if (!currentImageDetail) return;
+    const url = `${window.location.origin}/api/image/view/${currentImageDetail.image_id}`;
+    try {
+        await navigator.clipboard.writeText(url);
+        showSuccess('图片链接已复制到剪贴板');
+    } catch (error) {
+        // 降级方案
+        const textArea = document.createElement('textarea');
+        textArea.value = url;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        showSuccess('图片链接已复制到剪贴板');
+    }
+}
+
+async function deleteImage() {
+    if (!currentImageDetail) return;
+    await deleteSingleImage(currentImageDetail.image_id);
+    closeImageDetailModal();
+}
+
+// 图片信息编辑功能
+function toggleEditMode() {
+    const displayMode = document.getElementById('info-display-mode');
+    const editMode = document.getElementById('info-edit-mode');
+    const toggleBtn = document.getElementById('edit-toggle-btn');
+
+    if (editMode.style.display === 'none') {
+        // 进入编辑模式
+        enterEditMode();
+    } else {
+        // 退出编辑模式
+        exitEditMode();
+    }
+}
+
+function enterEditMode() {
+    if (!currentImageDetail) return;
+
+    const displayMode = document.getElementById('info-display-mode');
+    const editMode = document.getElementById('info-edit-mode');
+    const toggleBtn = document.getElementById('edit-toggle-btn');
+
+    // 填充编辑表单
+    document.getElementById('edit-title').value = currentImageDetail.title || '';
+    document.getElementById('edit-description').value = currentImageDetail.description || '';
+    document.getElementById('edit-tags').value = currentImageDetail.tags || '';
+    document.getElementById('edit-category').value = currentImageDetail.category || '';
+
+    // 切换显示模式
+    displayMode.style.display = 'none';
+    editMode.style.display = 'block';
+    toggleBtn.innerHTML = '<i class="fas fa-eye"></i> 查看';
+}
+
+function exitEditMode() {
+    const displayMode = document.getElementById('info-display-mode');
+    const editMode = document.getElementById('info-edit-mode');
+    const toggleBtn = document.getElementById('edit-toggle-btn');
+
+    displayMode.style.display = 'block';
+    editMode.style.display = 'none';
+    toggleBtn.innerHTML = '<i class="fas fa-edit"></i> 编辑';
+}
+
+function cancelEdit() {
+    exitEditMode();
+}
+
+async function saveImageInfo() {
+    if (!currentImageDetail) return;
+
+    const title = document.getElementById('edit-title').value.trim();
+    const description = document.getElementById('edit-description').value.trim();
+    const tags = document.getElementById('edit-tags').value.trim();
+    const category = document.getElementById('edit-category').value;
+
+    try {
+        const response = await fetch(`/api/image/${currentImageDetail.image_id}/update`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                title: title,
+                description: description,
+                tags: tags,
+                category: category
+            })
+        });
+
+        console.log('API响应状态:', response.status);
+
+        if (!response.ok) {
+            let errorMessage = `HTTP ${response.status}`;
+            try {
+                const errorResult = await response.json();
+                errorMessage += ': ' + (errorResult.detail || errorResult.message || '未知错误');
+            } catch (e) {
+                errorMessage += ': ' + response.statusText;
+            }
+            throw new Error(errorMessage);
+        }
+
+        const result = await response.json();
+        console.log('API响应数据:', result);
+
+        if (result.success) {
+            // 更新当前图片详情数据
+            currentImageDetail.title = title;
+            currentImageDetail.description = description;
+            currentImageDetail.tags = tags;
+            currentImageDetail.category = category;
+
+            // 更新显示内容
+            document.getElementById('display-title').textContent = title || '未设置';
+            document.getElementById('display-description').textContent = description || '未设置';
+            document.getElementById('display-tags').textContent = tags || '未设置';
+            document.getElementById('display-category').textContent = getCategoryLabel(category) || '未设置';
+            document.getElementById('image-detail-title').textContent = title || currentImageDetail.filename;
+
+            // 退出编辑模式
+            exitEditMode();
+
+            // 刷新图片列表以显示更新后的信息
+            loadImages();
+
+            showSuccess('图片信息已更新');
+        } else {
+            showError('更新失败: ' + (result.message || '未知错误'));
+        }
+    } catch (error) {
+        console.error('Failed to update image info:', error);
+        if (error.message) {
+            showError('更新失败: ' + error.message);
+        } else {
+            showError('更新失败，请重试');
+        }
+    }
+}
+
+// 获取分类标签
+function getCategoryLabel(category) {
+    const categoryLabels = {
+        'ai_generated': 'AI生成',
+        'web_search': '网络搜索',
+        'local_storage': '本地上传'
+    };
+    return categoryLabels[category] || category;
+}
+
+// 键盘快捷键
+document.addEventListener('keydown', function(event) {
+    // ESC键关闭模态框
+    if (event.key === 'Escape') {
+        if (document.getElementById('upload-modal').style.display === 'flex') {
+            closeUploadModal();
+        }
+        if (document.getElementById('image-detail-modal').style.display === 'flex') {
+            closeImageDetailModal();
+        }
+    }
+
+    // Ctrl+A 全选（在批量模式下）
+    if (event.ctrlKey && event.key === 'a' && batchMode) {
+        event.preventDefault();
+        selectAll();
+    }
+
+    // Delete键删除选中项
+    if (event.key === 'Delete' && batchMode && selectedImages.size > 0) {
+        batchDelete();
+    }
+});
+</script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+/* 图片网格样式 */
+  .toolbar input#search-input{ width: 420px !important; }
+  .modal-content{ width: 95%; max-width: 1200px; }
+  .image-grid{ grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+
+.image-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.image-item {
+    background: var(--glass-bg);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    border-radius: 15px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.image-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 35px rgba(31, 38, 135, 0.4);
+}
+
+.image-item.selected {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+}
+
+.image-thumbnail {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    cursor: pointer;
+}
+
+.image-info {
+    padding: 15px;
+}
+
+.image-title {
+    font-weight: 600;
+    margin-bottom: 5px;
+    color: var(--text-primary);
+    font-size: 0.9em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.image-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8em;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+}
+
+.image-source {
+    background: var(--primary-color);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.7em;
+}
+
+.image-actions {
+    display: flex;
+    gap: 5px;
+    justify-content: center;
+}
+
+.image-actions button {
+    padding: 5px 10px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.8em;
+    transition: all 0.3s ease;
+}
+
+/* 批量选择复选框 */
+.batch-checkbox {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: 20px;
+    height: 20px;
+    z-index: 10;
+}
+
+/* 上传区域样式 */
+.upload-area {
+    border: 2px dashed var(--glass-border);
+    border-radius: 10px;
+    padding: 40px;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.upload-area:hover,
+.upload-area.drag-over {
+    border-color: var(--primary-color);
+    background: rgba(102, 126, 234, 0.1);
+}
+
+/* 进度条样式 */
+.progress-bar {
+    width: 100%;
+    height: 20px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--primary-gradient);
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+/* 模态框样式 */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 15px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 1.5em;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.close-btn:hover {
+    color: var(--text-primary);
+}
+
+/* 信息项样式 */
+.info-section {
+    margin-bottom: 20px;
+}
+
+.info-section h4 {
+    margin-bottom: 10px;
+    color: var(--primary-color);
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.info-item label {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+/* 编辑表单样式 */
+.edit-item {
+    margin-bottom: 15px;
+}
+
+.edit-item label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.form-input,
+.form-textarea,
+.form-select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--glass-border);
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    background: var(--glass-bg);
+    color: var(--text-primary);
+}
+
+.form-input:focus,
+.form-textarea:focus,
+.form-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.15);
+}
+
+.form-textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+.form-help {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.edit-actions {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 13px;
+}
+
+.btn-outline {
+    background: transparent;
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+}
+
+.btn-outline:hover {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-success {
+    background: #28a745;
+    border-color: #28a745;
+    color: white;
+}
+
+.btn-success:hover {
+    background: #218838;
+    border-color: #1e7e34;
+}
+
+.btn-secondary {
+    background: #6c757d;
+    border-color: #6c757d;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #5a6268;
+    border-color: #545b62;
+}
+
+/* 分页样式 */
+.pagination {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+.pagination button {
+    padding: 8px 12px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.pagination button:hover {
+    background: var(--primary-color);
+    color: white;
+}
+
+.pagination button.active {
+    background: var(--primary-color);
+    color: white;
+}
+
+.pagination button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .image-grid {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 15px;
+    }
+
+    .toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .modal-content {
+        width: 95%;
+        margin: 10px;
+    }
+}
+</style>
+{% endblock %}
+
+
+<script>
+// 兜底：确保“上传图片”按钮可用，即使上方脚本某段报错导致函数未注册
+(function(){
+  function ensureUploadModal(){
+    var modal = document.getElementById('upload-modal');
+    if (!window.showUploadModal) {
+      window.showUploadModal = function(){
+        if (modal) {
+          modal.style.display = 'flex';
+          try { console.log('[image-gallery] open upload modal'); } catch(e){}
+        }
+      }
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindOpenBtn);
+  } else {
+    bindOpenBtn();
+  }
+  function bindOpenBtn(){
+    ensureUploadModal();
+    var btn = document.getElementById('open-upload-modal-btn');
+    if (btn) {
+      btn.addEventListener('click', function(ev){
+        try { ev.preventDefault(); } catch(e){}
+        if (typeof window.showUploadModal === 'function') window.showUploadModal();
+      });
+    }
+  }
+})();
+</script>
+
+<!-- 开发环境自测脚本：仅在访问 /?devselftest=1 时运行，不影响生产 -->
+<script>
+(function(){
+  try{
+    var params = new URLSearchParams(location.search||'');
+    if (params.get('devselftest') !== '1') return;
+    var logs = [];
+    function log(msg){ logs.push(msg); try{ console.log('[SelfTest]', msg); }catch(e){} }
+
+    // 1) 工具栏事件绑定与触发
+    function testToolbar(){
+      try{
+        var cat=document.getElementById('category-filter');
+        var s=document.getElementById('search-input');
+        var sort=document.getElementById('sort-option');
+        if (!cat || !s || !sort) { log('toolbar elements missing'); return; }
+        var called=0; var _orig=window.loadImages; window.loadImages=function(p){ called++; if (_orig) return _orig.call(this,p); };
+        cat.dispatchEvent(new Event('change')); s.value='abc'; s.dispatchEvent(new Event('input')); sort.dispatchEvent(new Event('change'));
+        setTimeout(function(){ log('toolbar triggers loadImages count='+called); window.loadImages=_orig; }, 300);
+      }catch(e){ log('testToolbar error '+e); }
+    }
+
+    // 2) 详情弹窗打开流程（使用一张当前网格中的图片）
+    async function testDetail(){
+      try{
+        var card=document.querySelector('.image-item');
+        if (!card){ log('no image card to test'); return; }
+        var id=card.getAttribute('data-image-id');
+        await (window.showImageDetail && window.showImageDetail(id));
+        setTimeout(function(){
+          var opened = (document.getElementById('image-detail-modal')||{}).style?.display==='flex';
+          log('detail modal opened='+opened+', currentImageDetail set='+(!!window.currentImageDetail));
+        }, 300);
+      }catch(e){ log('testDetail error '+e); }
+    }
+
+    // 3) 按钮函数存在性
+    function testButtons(){
+      try{
+        var ok = [window.downloadImage, window.copyImageUrl, window.deleteImage].every(function(f){ return typeof f==='function'; });
+        log('detail buttons functions exist='+ok);
+      }catch(e){ log('testButtons error '+e); }
+    }
+
+    // 顺序执行
+    document.addEventListener('DOMContentLoaded', function(){
+      testToolbar();
+      setTimeout(testDetail, 500);
+      setTimeout(testButtons, 700);
+      setTimeout(function(){ alert('[SelfTest] 完成，详见控制台输出'); }, 1000);
+    });
+  }catch(e){ console.error('selftest error', e); }
+})();
+</script>
+

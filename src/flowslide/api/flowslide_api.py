@@ -2,9 +2,7 @@
 FlowSlide specific API endpoints
 """
 
-import json
 import logging
-import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
@@ -13,27 +11,27 @@ from ..core.config import ai_config
 from ..services.deep_research_service import DEEPResearchService
 from ..services.file_processor import FileProcessor
 from ..services.research_report_generator import ResearchReportGenerator
-from ..services.service_instances import ppt_service
+from ..services.service_instances import get_ppt_service
 from .models import (
     FileOutlineGenerationRequest,
     FileOutlineGenerationResponse,
     FileUploadResponse,
     PPTGenerationRequest,
-    PPTGenerationResponse,
     PPTOutline,
     PPTProject,
     PPTScenario,
     ProjectListResponse,
-    SlideContent,
+    
     TemplateSelectionRequest,
     TemplateSelectionResponse,
     TodoBoard,
 )
-
 router = APIRouter()
 logger = logging.getLogger(__name__)
 file_processor = FileProcessor()
-
+# Use getter to avoid circular import resolution issues
+def _ppt_service():
+    return get_ppt_service()
 # Research services (lazy initialization)
 _research_service = None
 _report_generator = None
@@ -119,6 +117,17 @@ def get_enhanced_report_generator():
     return _enhanced_report_generator
 
 
+# Local helper: safe join of base_url and parts (mirrors web.routes.build_api_url)
+def build_api_url(base_url: str, *parts: str, ensure_v1: bool = False) -> str:
+    if not base_url:
+        return "/" + "/".join(p.strip("/") for p in parts)
+    base = base_url.rstrip("/")
+    if ensure_v1 and not base.endswith("/v1"):
+        base = base + "/v1"
+    suffix = "/".join(p.strip("/") for p in parts if p)
+    return f"{base}/{suffix}" if suffix else base
+
+
 @router.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -150,16 +159,14 @@ async def get_ai_providers():
 async def test_ai_provider(provider_name: str, request: Request):
     """Test a specific AI provider - uses frontend provided config if available"""
     try:
-        import json
-
         import aiohttp
 
         # Try to get configuration from request body (if provided by frontend)
         body = None
         try:
             body = await request.json()
-        except:
-            pass  # No JSON body, use backend config
+        except Exception:
+            body = None  # No JSON body, use backend config
 
         # Special handling for OpenAI provider with frontend config
         if provider_name == "openai" and body:
@@ -171,11 +178,8 @@ async def test_ai_provider(provider_name: str, request: Request):
                 # Use frontend provided config for OpenAI
                 logger.info(f"Testing OpenAI with frontend config: {base_url}")
 
-                # Ensure base URL ends with /v1
-                if not base_url.endswith("/v1"):
-                    base_url = base_url.rstrip("/") + "/v1"
-
-                chat_url = f"{base_url}/chat/completions"
+                # Build chat URL safely (ensure /v1)
+                chat_url = build_api_url(base_url, "chat/completions", ensure_v1=True)
 
                 async with aiohttp.ClientSession() as session:
                     headers = {
@@ -196,7 +200,10 @@ async def test_ai_provider(provider_name: str, request: Request):
                     }
 
                     async with session.post(
-                        chat_url, headers=headers, json=payload, timeout=30
+                        chat_url,
+                        headers=headers,
+                        json=payload,
+                        timeout=aiohttp.ClientTimeout(total=30),
                     ) as response:
                         if response.status == 200:
                             data = await response.json()
@@ -338,38 +345,7 @@ async def get_scenarios():
 # Use POST /projects to create a new project instead
 
 
-@router.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    """Upload document for PPT generation"""
-    try:
-        # Validate file type
-        allowed_types = [".docx", ".pdf", ".txt", ".md"]
-        file_extension = "." + file.filename.split(".")[-1].lower()
-
-        if file_extension not in allowed_types:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported file type. Allowed types: {', '.join(allowed_types)}",
-            )
-
-        # Read file content
-        content = await file.read()
-
-        # Process file based on type
-        processed_content = await ppt_service.process_uploaded_file(
-            filename=file.filename, content=content, file_type=file_extension
-        )
-
-        return {
-            "filename": file.filename,
-            "size": len(content),
-            "type": file_extension,
-            "processed_content": processed_content,
-            "message": "File uploaded and processed successfully",
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+# Legacy single-file upload endpoint removed (use /upload with response_model below)
 
 
 # Legacy task management endpoints removed - now using project-based workflow
@@ -380,7 +356,7 @@ async def upload_file(file: UploadFile = File(...)):
 async def generate_outline(request: PPTGenerationRequest):
     """Generate PPT outline only"""
     try:
-        outline = await ppt_service.generate_outline(request)
+        outline = await _ppt_service().generate_outline(request)
         return {"outline": outline, "status": "success"}
 
     except Exception as e:
@@ -394,7 +370,7 @@ async def generate_outline(request: PPTGenerationRequest):
 async def create_project(request: PPTGenerationRequest):
     """Create a new PPT project with TODO workflow"""
     try:
-        project = await ppt_service.create_project_with_workflow(request)
+        project = await _ppt_service().create_project_with_workflow(request)
         return project
 
     except Exception as e:
@@ -405,7 +381,7 @@ async def create_project(request: PPTGenerationRequest):
 async def list_projects(page: int = 1, page_size: int = 10, status: Optional[str] = None):
     """List projects with pagination"""
     try:
-        return await ppt_service.project_manager.list_projects(page, page_size, status)
+        return await _ppt_service().project_manager.list_projects(page, page_size, status)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error listing projects: {str(e)}")
@@ -415,7 +391,7 @@ async def list_projects(page: int = 1, page_size: int = 10, status: Optional[str
 async def get_project(project_id: str):
     """Get project details"""
     try:
-        project = await ppt_service.project_manager.get_project(project_id)
+        project = await _ppt_service().project_manager.get_project(project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         return project
@@ -430,7 +406,7 @@ async def get_project(project_id: str):
 async def get_project_todo_board(project_id: str):
     """Get TODO board for a project"""
     try:
-        todo_board = await ppt_service.get_project_todo_board(project_id)
+        todo_board = await _ppt_service().get_project_todo_board(project_id)
         if not todo_board:
             raise HTTPException(status_code=404, detail="TODO board not found")
         return todo_board
@@ -453,7 +429,7 @@ async def update_project_stage(project_id: str, stage_id: str, request: Request)
         if not status:
             raise HTTPException(status_code=422, detail="Status is required")
 
-        success = await ppt_service.update_project_stage(project_id, stage_id, status, progress)
+        success = await _ppt_service().update_project_stage(project_id, stage_id, status, progress)
         if not success:
             raise HTTPException(status_code=404, detail="Project or stage not found")
         return {"status": "success", "message": "Stage updated successfully"}
@@ -476,17 +452,17 @@ async def continue_from_stage(project_id: str, request: Request):
             raise HTTPException(status_code=422, detail="Stage ID is required")
 
         # Get project
-        project = await ppt_service.project_manager.get_project(project_id)
+        project = await _ppt_service().project_manager.get_project(project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
         # Reset stages from the specified stage onwards
-        success = await ppt_service.reset_stages_from(project_id, stage_id)
+        success = await _ppt_service().reset_stages_from(project_id, stage_id)
         if not success:
             raise HTTPException(status_code=400, detail="Failed to reset stages")
 
         # Start workflow from the specified stage
-        await ppt_service.start_workflow_from_stage(project_id, stage_id)
+        await _ppt_service().start_workflow_from_stage(project_id, stage_id)
 
         return {
             "status": "success",
@@ -505,7 +481,7 @@ async def continue_from_stage(project_id: str, request: Request):
 async def lock_slide(project_id: str, slide_index: int):
     """Lock a slide to prevent regeneration"""
     try:
-        success = await ppt_service.lock_slide(project_id, slide_index)
+        success = await _ppt_service().lock_slide(project_id, slide_index)
         if not success:
             raise HTTPException(status_code=404, detail="Slide not found")
         return {"status": "success", "message": "Slide locked successfully"}
@@ -520,7 +496,7 @@ async def lock_slide(project_id: str, slide_index: int):
 async def unlock_slide(project_id: str, slide_index: int):
     """Unlock a slide to allow regeneration"""
     try:
-        success = await ppt_service.unlock_slide(project_id, slide_index)
+        success = await _ppt_service().unlock_slide(project_id, slide_index)
         if not success:
             raise HTTPException(status_code=404, detail="Slide not found")
         return {"status": "success", "message": "Slide unlocked successfully"}
@@ -535,7 +511,7 @@ async def unlock_slide(project_id: str, slide_index: int):
 async def get_project_versions(project_id: str):
     """Get all versions of a project"""
     try:
-        versions = await ppt_service.project_manager.get_project_versions(project_id)
+        versions = await _ppt_service().project_manager.get_project_versions(project_id)
         return {"versions": versions, "status": "success"}
 
     except Exception as e:
@@ -546,7 +522,18 @@ async def get_project_versions(project_id: str):
 async def restore_project_version(project_id: str, version: int):
     """Restore project to a specific version"""
     try:
-        success = await ppt_service.project_manager.restore_project_version(project_id, version)
+        mgr = _ppt_service().project_manager
+        restore_fn = getattr(mgr, "restore_project_version", None)
+        if not callable(restore_fn):
+            raise HTTPException(status_code=500, detail="Project manager does not support restore_project_version")
+        import asyncio
+
+        result = restore_fn(project_id, version)
+        # support sync or async implementations
+        if asyncio.iscoroutine(result):
+            success = await result
+        else:
+            success = result
         if not success:
             raise HTTPException(status_code=404, detail="Project or version not found")
         return {"status": "success", "message": "Project restored successfully"}
@@ -561,7 +548,7 @@ async def restore_project_version(project_id: str, version: int):
 async def delete_project(project_id: str):
     """Delete a project"""
     try:
-        success = await ppt_service.project_manager.delete_project(project_id)
+        success = await _ppt_service().project_manager.delete_project(project_id)
         if not success:
             raise HTTPException(status_code=404, detail="Project not found")
         return {"status": "success", "message": "Project deleted successfully"}
@@ -576,7 +563,7 @@ async def delete_project(project_id: str):
 async def archive_project(project_id: str):
     """Archive a project"""
     try:
-        success = await ppt_service.project_manager.archive_project(project_id)
+        success = await _ppt_service().project_manager.archive_project(project_id)
         if not success:
             raise HTTPException(status_code=404, detail="Project not found")
         return {"status": "success", "message": "Project archived successfully"}
@@ -595,6 +582,8 @@ async def upload_file(file: UploadFile = File(...)):
     """Upload and process document file"""
     try:
         # Validate file
+        if file.filename is None or file.size is None:
+            raise HTTPException(status_code=400, detail="Uploaded file is missing filename or size")
         is_valid, message = file_processor.validate_file(file.filename, file.size)
         if not is_valid:
             raise HTTPException(status_code=400, detail=message)
@@ -652,6 +641,8 @@ async def create_project_from_upload(
     """Upload file and create project directly"""
     try:
         # Validate and process file
+        if file.filename is None or file.size is None:
+            raise HTTPException(status_code=400, detail="Uploaded file is missing filename or size")
         is_valid, message = file_processor.validate_file(file.filename, file.size)
         if not is_valid:
             raise HTTPException(status_code=400, detail=message)
@@ -672,8 +663,9 @@ async def create_project_from_upload(
             file_result = await file_processor.process_file(temp_file_path, file.filename)
 
             # Create PPT request from content
+            # Ensure topic is a string for the underlying API
             ppt_data = await file_processor.create_ppt_from_content(
-                file_result.processed_content, topic
+                file_result.processed_content, topic or ""
             )
 
             # Override with user inputs if provided
@@ -688,7 +680,7 @@ async def create_project_from_upload(
             project_request = PPTGenerationRequest(**ppt_data)
 
             # Create project with workflow
-            project = await ppt_service.create_project_with_workflow(project_request)
+            project = await _ppt_service().create_project_with_workflow(project_request)
 
             return project
 
@@ -708,6 +700,8 @@ async def analyze_uploaded_content(file: UploadFile = File(...)):
     """Analyze uploaded file and suggest PPT structure"""
     try:
         # Validate file
+        if file.filename is None or file.size is None:
+            raise HTTPException(status_code=400, detail="Uploaded file is missing filename or size")
         is_valid, message = file_processor.validate_file(file.filename, file.size)
         if not is_valid:
             raise HTTPException(status_code=400, detail=message)
@@ -753,7 +747,7 @@ async def analyze_uploaded_content(file: UploadFile = File(...)):
 async def generate_slides(outline: PPTOutline, scenario: str = "general"):
     """Generate slides from outline"""
     try:
-        slides_html = await ppt_service.generate_slides_from_outline(outline, scenario)
+        slides_html = await _ppt_service().generate_slides_from_outline(outline, scenario)
         return {"slides_html": slides_html, "status": "success"}
 
     except Exception as e:
@@ -765,7 +759,7 @@ async def generate_outline_from_file(request: FileOutlineGenerationRequest):
     """使用summeryanyfile从文件生成PPT大纲"""
     try:
         # 调用增强的PPT服务来生成大纲
-        result = await ppt_service.generate_outline_from_file(request)
+        result = await _ppt_service().generate_outline_from_file(request)
         return result
 
     except Exception as e:
@@ -794,7 +788,9 @@ async def upload_file_and_generate_outline(
 ):
     """上传文件并直接生成PPT大纲"""
     try:
-        # 验证文件
+        # Validate file
+        if file.filename is None or file.size is None:
+            raise HTTPException(status_code=400, detail="Uploaded file is missing filename or size")
         is_valid, message = file_processor.validate_file(file.filename, file.size)
         if not is_valid:
             raise HTTPException(status_code=400, detail=message)
@@ -803,9 +799,8 @@ async def upload_file_and_generate_outline(
         import os
         import tempfile
 
-        with tempfile.NamedTemporaryFile(
-            delete=False, suffix=os.path.splitext(file.filename)[1]
-        ) as temp_file:
+        suffix = os.path.splitext(file.filename or "")[1] or ""
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
             content = await file.read()
             temp_file.write(content)
             temp_file_path = temp_file.name
@@ -821,6 +816,7 @@ async def upload_file_and_generate_outline(
                 filename=file.filename,
                 topic=topic,
                 scenario=scenario,
+                language="zh",
                 requirements="",  # API调用暂时没有requirements参数
                 page_count_mode=page_count_mode,
                 min_pages=min_pages,
@@ -834,7 +830,7 @@ async def upload_file_and_generate_outline(
             )
 
             # 生成大纲
-            result = await ppt_service.generate_outline_from_file(outline_request)
+            result = await _ppt_service().generate_outline_from_file(outline_request)
             return result
 
         finally:
@@ -860,7 +856,7 @@ async def select_global_template_for_project(project_id: str, request: TemplateS
             raise HTTPException(status_code=400, detail="Project ID mismatch")
 
         # 选择模板
-        result = await ppt_service.select_global_template_for_project(
+        result = await _ppt_service().select_global_template_for_project(
             project_id, request.selected_template_id
         )
 
@@ -879,7 +875,7 @@ async def select_global_template_for_project(project_id: str, request: TemplateS
 async def get_selected_global_template(project_id: str):
     """获取项目选择的全局母版模板"""
     try:
-        template = await ppt_service.get_selected_global_template(project_id)
+        template = await _ppt_service().get_selected_global_template(project_id)
 
         if not template:
             return {"selected_template": None, "message": "No template selected"}
@@ -895,7 +891,7 @@ async def get_selected_global_template(project_id: str):
 async def get_file_cache_stats():
     """获取文件缓存统计信息"""
     try:
-        stats = ppt_service.get_cache_stats()
+        stats = _ppt_service().get_cache_stats()
         return {"success": True, "stats": stats}
     except Exception as e:
         logger.error(f"Error getting cache stats: {e}")
@@ -906,7 +902,7 @@ async def get_file_cache_stats():
 async def cleanup_file_cache():
     """清理过期的文件缓存条目"""
     try:
-        ppt_service.cleanup_cache()
+        _ppt_service().cleanup_cache()
         return {"success": True, "message": "文件缓存清理完成"}
     except Exception as e:
         logger.error(f"Error cleaning up cache: {e}")
@@ -1135,7 +1131,7 @@ async def get_available_research_providers():
                     providers[provider] = True
 
             # Check content extraction
-            from ...core.config import ai_config
+            from ..core.config import ai_config
 
             providers["content_extraction"] = ai_config.research_enable_content_extraction
 

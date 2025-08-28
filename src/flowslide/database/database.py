@@ -3,14 +3,12 @@ Database configuration and session management
 """
 
 import logging
-import os
 
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-from ..core.simple_config import ASYNC_DATABASE_URL, DATABASE_URL, app_config
+from ..core.simple_config import ASYNC_DATABASE_URL, DATABASE_URL
 
 logger = logging.getLogger(__name__)
 

@@ -3,11 +3,10 @@ DALL-E 图片生成提供者
 """
 
 import asyncio
-import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import aiohttp
 

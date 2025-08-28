@@ -2958,43 +2958,45 @@ async function testAzureOpenAIProvider(config) {
 // 测试 Ollama 提供者
 async function testOllamaProvider(config) {
     try {
-        let baseUrl = config.ollama_base_url || 'http://localhost:11434';
+        let baseUrl = (config.ollama_base_url || 'http://localhost:11434').trim();
         let model = config.ollama_model || 'llama2';
 
-        // 调用 Ollama API 进行测试
-        const response = await fetch(`${baseUrl}/api/generate`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                model: model,
-                prompt: 'Say "Hello, I am working!" in exactly 5 words.',
-                stream: false,
-                options: {
-                    num_predict: 20,
-                    temperature: 0
-                }
-            })
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(errorText || `HTTP ${response.status}`);
+        // Basic validation: only allow http/https schemes
+        try {
+            const u = new URL(baseUrl);
+            if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+                throw new Error('Invalid URL scheme');
+            }
+        } catch (e) {
+            return { success: false, provider: 'ollama', error: '无效的 base URL' };
         }
 
-        const data = await response.json();
+        // Call backend proxy which validates and performs the request server-side
+        const proxyResp = await fetch('/api/ai/providers/ollama/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ base_url: baseUrl, model: model })
+        });
+
+        if (!proxyResp.ok) {
+            let errMsg = `HTTP ${proxyResp.status}`;
+            try {
+                const errJson = await proxyResp.json();
+                errMsg = errJson.error || errJson.detail || errMsg;
+            } catch (e) {}
+            throw new Error(errMsg);
+        }
+
+        const proxyResult = await proxyResp.json();
+        if (!proxyResult.success) {
+            throw new Error(proxyResult.error || proxyResult.detail || '测试失败');
+        }
 
         return {
             success: true,
             provider: 'ollama',
             model: model,
-            response_preview: data.response,
-            usage: {
-                prompt_tokens: data.prompt_eval_count || 0,
-                completion_tokens: data.eval_count || 0,
-                total_tokens: (data.prompt_eval_count || 0) + (data.eval_count || 0)
-            }
+            response_preview: proxyResult.response_preview || '',
         };
     } catch (error) {
         // Ollama 可能未运行或无法连接

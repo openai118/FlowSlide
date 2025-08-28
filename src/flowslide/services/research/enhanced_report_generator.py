@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .enhanced_research_service import EnhancedResearchReport, EnhancedResearchStep
+from .enhanced_research_service import EnhancedResearchReport
 
 logger = logging.getLogger(__name__)
 

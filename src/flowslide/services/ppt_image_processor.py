@@ -7,7 +7,6 @@ PPT图片处理器
 import asyncio
 import json
 import logging
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import aiohttp

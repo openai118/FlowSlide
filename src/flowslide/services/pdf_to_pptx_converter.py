@@ -6,7 +6,6 @@ Uses Apryse SDK to convert PDF files to PowerPoint presentations
 import logging
 import os
 import platform
-import sys
 import tarfile
 import tempfile
 import zipfile

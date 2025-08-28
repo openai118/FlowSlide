@@ -3,13 +3,12 @@ Research Report Generator - Generate and save Markdown research reports
 """
 
 import logging
-import os
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from .deep_research_service import ResearchReport, ResearchStep
+from .deep_research_service import ResearchReport
 
 logger = logging.getLogger(__name__)
 

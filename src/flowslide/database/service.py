@@ -15,8 +15,6 @@ from ..api.models import PPTGenerationRequest, PPTProject, ProjectListResponse, 
 from .models import GlobalMasterTemplate as DBGlobalMasterTemplate
 from .models import PPTTemplate as DBPPTTemplate
 from .models import Project as DBProject
-from .models import TodoBoard as DBTodoBoard
-from .models import TodoStage as DBTodoStage
 from .repositories import (
     GlobalMasterTemplateRepository,
     PPTTemplateRepository,

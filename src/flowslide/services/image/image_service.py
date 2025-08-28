@@ -6,7 +6,7 @@ import asyncio
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from .adapters.ppt_prompt_adapter import PPTPromptAdapter, PPTSlideContext
 from .cache.image_cache import ImageCacheManager
@@ -19,14 +19,11 @@ from .models import (
     ImageProvider,
     ImageSearchRequest,
     ImageSearchResult,
-    ImageSourceType,
     ImageUploadRequest,
 )
 from .processors.image_processor import ImageProcessor
 from .providers.base import (
-    ImageGenerationProvider,
     ImageSearchProvider,
-    LocalStorageProvider,
     provider_registry,
 )
 

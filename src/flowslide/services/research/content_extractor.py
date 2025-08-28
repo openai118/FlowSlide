@@ -9,8 +9,8 @@ import asyncio
 import logging
 import re
 import time
-from typing import Any, Dict, List, Optional, Set
-from urllib.parse import urljoin, urlparse
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 import aiohttp
 from bs4 import BeautifulSoup, Comment

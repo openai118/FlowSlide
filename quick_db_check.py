@@ -17,18 +17,18 @@ async def check_database():
     """Check database connectivity and basic health"""
     try:
         from flowslide.database.database import init_db, get_database
-        
+
         print("🔍 Checking database connectivity...")
-        
+
         # Initialize database
         await init_db()
         print("✅ Database initialization successful")
-        
+
         # Get database instance
         db = get_database()
         if db:
             print("✅ Database connection established")
-            
+
             # Try a simple query
             try:
                 # This will work with both SQLite and PostgreSQL
@@ -39,13 +39,13 @@ async def check_database():
                     print("⚠️ Database query returned no results")
             except Exception as e:
                 print(f"⚠️ Database query test failed: {e}")
-                
+
         else:
             print("❌ Failed to get database connection")
             return False
-            
+
         return True
-        
+
     except ImportError as e:
         print(f"❌ Failed to import database modules: {e}")
         return False
@@ -57,10 +57,10 @@ async def main():
     """Main function"""
     print("🚀 FlowSlide Quick Database Check")
     print("=" * 40)
-    
+
     try:
         success = await check_database()
-        
+
         if success:
             print("=" * 40)
             print("✅ Database check completed successfully")
@@ -69,7 +69,7 @@ async def main():
             print("=" * 40)
             print("❌ Database check failed")
             sys.exit(1)
-            
+
     except Exception as e:
         print(f"❌ Unexpected error: {e}")
         sys.exit(1)
@@ -77,6 +77,6 @@ async def main():
 if __name__ == "__main__":
     # Set up basic logging
     logging.basicConfig(level=logging.WARNING)
-    
+
     # Run the check
     asyncio.run(main())

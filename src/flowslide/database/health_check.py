@@ -6,11 +6,10 @@ import logging
 import time
 from typing import Any, Dict, List
 
-from sqlalchemy import func, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database import AsyncSessionLocal
-from .models import Project, ProjectVersion, SlideData, TodoBoard, TodoStage
 
 logger = logging.getLogger(__name__)
 
@@ -127,8 +126,8 @@ class DatabaseHealthChecker:
             result = await session.execute(
                 text(
                     """
-                SELECT COUNT(*) FROM todo_boards tb 
-                LEFT JOIN projects p ON tb.project_id = p.project_id 
+                SELECT COUNT(*) FROM todo_boards tb
+                LEFT JOIN projects p ON tb.project_id = p.project_id
                 WHERE p.project_id IS NULL
             """
                 )
@@ -141,8 +140,8 @@ class DatabaseHealthChecker:
             result = await session.execute(
                 text(
                     """
-                SELECT COUNT(*) FROM todo_stages ts 
-                LEFT JOIN todo_boards tb ON ts.todo_board_id = tb.id 
+                SELECT COUNT(*) FROM todo_stages ts
+                LEFT JOIN todo_boards tb ON ts.todo_board_id = tb.id
                 WHERE tb.id IS NULL
             """
                 )
@@ -155,8 +154,8 @@ class DatabaseHealthChecker:
             result = await session.execute(
                 text(
                     """
-                SELECT COUNT(*) FROM slide_data sd 
-                LEFT JOIN projects p ON sd.project_id = p.project_id 
+                SELECT COUNT(*) FROM slide_data sd
+                LEFT JOIN projects p ON sd.project_id = p.project_id
                 WHERE p.project_id IS NULL
             """
                 )
@@ -169,8 +168,8 @@ class DatabaseHealthChecker:
             result = await session.execute(
                 text(
                     """
-                SELECT COUNT(*) FROM project_versions pv 
-                LEFT JOIN projects p ON pv.project_id = p.project_id 
+                SELECT COUNT(*) FROM project_versions pv
+                LEFT JOIN projects p ON pv.project_id = p.project_id
                 WHERE p.project_id IS NULL
             """
                 )

@@ -12,7 +12,6 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from loguru import logger as loguru_logger
 
 logger = logging.getLogger(__name__)
 

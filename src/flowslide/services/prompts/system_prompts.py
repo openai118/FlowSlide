@@ -3,7 +3,6 @@ PPT系统提示词和默认配置
 包含所有系统级别的提示词和默认配置
 """
 
-import os
 from pathlib import Path
 
 

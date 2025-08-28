@@ -3,13 +3,10 @@ Global Master Template Service for managing reusable master templates
 """
 
 import base64
-import json
 import logging
-import time
-from io import BytesIO
 from typing import Any, Dict, List, Optional
 
-from ..ai import AIMessage, MessageRole, get_ai_provider
+from ..ai import get_ai_provider
 from ..core.config import ai_config
 from ..database.database import AsyncSessionLocal
 from ..database.service import DatabaseService
@@ -325,7 +322,6 @@ class GlobalMasterTemplateService:
     ):
         """Generate a new template using AI with streaming response"""
         import asyncio
-        import json
 
         # 构建AI提示词
         ai_prompt = f"""

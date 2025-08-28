@@ -1,31 +1,23 @@
-"""
-Configuration management API for FlowSlide
+"""Configuration management API for FlowSlide.
+
+Admin-only endpoints to inspect/update application configuration. Secrets
+are redacted in responses.
 """
 
-import asyncio
 import logging
-import os
-import signal
-import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ..auth.middleware import (
-    get_current_admin_user,
-    get_current_user_optional,
-    get_current_user_required,
-)
+from ..auth.middleware import get_current_admin_user
 from ..database.models import User
 from ..services.config_service import ConfigService, get_config_service
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
 
-# Pydantic models
 class ConfigUpdateRequest(BaseModel):
     config: Dict[str, Any]
 
@@ -34,15 +26,12 @@ class DefaultProviderRequest(BaseModel):
     provider: str
 
 
-# --- Helpers to redact secrets in API responses ---
 def _redact_with_schema(values: Dict[str, Any], schema: Dict[str, Any]) -> Dict[str, Any]:
-    """Return a copy of values with password-type fields removed (empty)."""
-    redacted = {}
-    for k, v in values.items():
+    redacted: Dict[str, Any] = {}
+    for k, v in (values or {}).items():
         try:
             field = schema.get(k, {})
             if field.get("type") == "password":
-                # Do not return actual value
                 redacted[k] = ""
             else:
                 redacted[k] = v
@@ -52,10 +41,9 @@ def _redact_with_schema(values: Dict[str, Any], schema: Dict[str, Any]) -> Dict[
 
 
 def _heuristic_redact(values: Dict[str, Any]) -> Dict[str, Any]:
-    """Heuristically redact secrets (for objects without schema)."""
     sensitive_keywords = ("api_key", "apikey", "token", "secret", "password", "key")
-    redacted = {}
-    for k, v in values.items():
+    redacted: Dict[str, Any] = {}
+    for k, v in (values or {}).items():
         if any(kw in k.lower() for kw in sensitive_keywords):
             redacted[k] = ""
         else:
@@ -63,49 +51,28 @@ def _heuristic_redact(values: Dict[str, Any]) -> Dict[str, Any]:
     return redacted
 
 
-# Specific routes first (before generic {category} route)
 @router.get("/api/config/current-provider")
 async def get_current_provider(
     config_service: ConfigService = Depends(get_config_service),
-    user: Optional[User] = Depends(get_current_user_optional),
+    user: User = Depends(get_current_admin_user),
 ):
-    """Get current default AI provider (provider config redacted)."""
     try:
-        # Get current provider from config service instead of ai_config
-        config = config_service.get_config_by_category("ai_providers")
-        provider = config.get("default_ai_provider", "openai")
-        
-        logger.info(f"Current provider from config service: {provider} (type: {type(provider)})")
-
-        # 确保provider不为None或空字符串
-        if not provider:
-            logger.warning("Provider is None or empty, using default 'openai'")
-            provider = "openai"
-
-        # Get provider config - simplified to avoid ai_config issues
+        cfg = config_service.get_config_by_category("ai_providers") or {}
+        provider = cfg.get("default_ai_provider") or "openai"
         provider_config = {}
         try:
             from ..core.config import ai_config
+
             if hasattr(ai_config, "get_provider_config"):
-                provider_config_raw = ai_config.get_provider_config(provider)
-                provider_config = _heuristic_redact(
-                    provider_config_raw if isinstance(provider_config_raw, dict) else {}
-                )
-        except Exception as e:
-            logger.warning(f"Could not get provider config: {e}")
+                prov_raw = ai_config.get_provider_config(provider)
+                if isinstance(prov_raw, dict):
+                    provider_config = _heuristic_redact(prov_raw)
+        except Exception:
             provider_config = {}
 
-        result = {
-            "success": True,
-            "current_provider": provider,
-            "provider_config": provider_config,
-        }
-        logger.info(f"Returning current provider result: {result}")
-        return result
+        return {"success": True, "current_provider": provider, "provider_config": provider_config}
     except Exception as e:
-        logger.error(f"Failed to get current provider: {e}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.error("Failed to get current provider: %s", e)
         raise HTTPException(status_code=500, detail="Failed to get current provider")
 
 
@@ -115,27 +82,26 @@ async def set_default_provider(
     config_service: ConfigService = Depends(get_config_service),
     user: User = Depends(get_current_admin_user),
 ):
-    """Set default AI provider"""
     try:
-        success = config_service.update_config({"default_ai_provider": request.provider})
-
-        if success:
-            # Verify the configuration was applied
+        ok = config_service.update_config({"default_ai_provider": request.provider})
+        if not ok:
+            raise HTTPException(status_code=500, detail="Failed to set default provider")
+        try:
             from ..core.config import ai_config
 
-            current_provider = ai_config.default_ai_provider
-
-            return {
-                "success": True,
-                "message": f"Default provider set to {request.provider}",
-                "current_provider": current_provider,
-                "config_applied": current_provider == request.provider,
-            }
-        else:
-            raise HTTPException(status_code=500, detail="Failed to set default provider")
-
+            current_provider = getattr(ai_config, "default_ai_provider", None)
+        except Exception:
+            current_provider = None
+        return {
+            "success": True,
+            "message": f"Default provider set to {request.provider}",
+            "current_provider": current_provider,
+            "config_applied": current_provider == request.provider,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to set default provider: {e}")
+        logger.error("Failed to set default provider: %s", e)
         raise HTTPException(status_code=500, detail="Failed to set default provider")
 
 
@@ -144,12 +110,11 @@ async def get_config_schema(
     config_service: ConfigService = Depends(get_config_service),
     user: User = Depends(get_current_admin_user),
 ):
-    """Get configuration schema"""
     try:
         schema = config_service.get_config_schema()
         return {"success": True, "schema": schema}
     except Exception as e:
-        logger.error(f"Failed to get configuration schema: {e}")
+        logger.error("Failed to get configuration schema: %s", e)
         raise HTTPException(status_code=500, detail="Failed to get configuration schema")
 
 
@@ -159,12 +124,11 @@ async def validate_config(
     config_service: ConfigService = Depends(get_config_service),
     user: User = Depends(get_current_admin_user),
 ):
-    """Validate configuration values"""
     try:
         errors = config_service.validate_config(request.config)
         return {"success": len(errors) == 0, "errors": errors}
     except Exception as e:
-        logger.error(f"Failed to validate configuration: {e}")
+        logger.error("Failed to validate configuration: %s", e)
         raise HTTPException(status_code=500, detail="Failed to validate configuration")
 
 
@@ -174,22 +138,15 @@ async def reset_config_category(
     config_service: ConfigService = Depends(get_config_service),
     user: User = Depends(get_current_admin_user),
 ):
-    """Reset configuration category to defaults"""
     try:
-        success = config_service.reset_to_defaults(category)
-
-        if success:
-            return {
-                "success": True,
-                "message": f"Configuration for {category} reset to defaults",
-            }
-        else:
-            raise HTTPException(
-                status_code=500, detail=f"Failed to reset configuration for {category}"
-            )
-
+        ok = config_service.reset_to_defaults(category)
+        if ok:
+            return {"success": True, "message": f"Configuration for {category} reset to defaults"}
+        raise HTTPException(status_code=500, detail=f"Failed to reset configuration for {category}")
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to reset configuration for category {category}: {e}")
+        logger.error("Failed to reset configuration for category %s: %s", category, e)
         raise HTTPException(status_code=500, detail=f"Failed to reset configuration for {category}")
 
 
@@ -198,33 +155,29 @@ async def reset_all_config(
     config_service: ConfigService = Depends(get_config_service),
     user: User = Depends(get_current_admin_user),
 ):
-    """Reset all configuration to defaults"""
     try:
-        success = config_service.reset_to_defaults()
-
-        if success:
+        ok = config_service.reset_to_defaults()
+        if ok:
             return {"success": True, "message": "All configuration reset to defaults"}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to reset configuration")
-
+        raise HTTPException(status_code=500, detail="Failed to reset configuration")
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to reset configuration: {e}")
+        logger.error("Failed to reset configuration: %s", e)
         raise HTTPException(status_code=500, detail="Failed to reset configuration")
 
 
-# Generic routes last
 @router.get("/api/config/all")
 async def get_all_config(
     config_service: ConfigService = Depends(get_config_service),
     user: User = Depends(get_current_admin_user),
 ):
-    """Get all configuration values (secrets redacted)."""
     try:
-        config = config_service.get_all_config()
-        schema = config_service.get_config_schema()
-        return {"success": True, "config": _redact_with_schema(config, schema)}
+        cfg = config_service.get_all_config() or {}
+        schema = config_service.get_config_schema() or {}
+        return {"success": True, "config": _redact_with_schema(cfg, schema)}
     except Exception as e:
-        logger.error(f"Failed to get configuration: {e}")
+        logger.error("Failed to get configuration: %s", e)
         raise HTTPException(status_code=500, detail="Failed to get configuration")
 
 
@@ -234,23 +187,19 @@ async def get_config_by_category(
     config_service: ConfigService = Depends(get_config_service),
     user: User = Depends(get_current_admin_user),
 ):
-    """Get configuration values by category (secrets redacted)."""
     try:
-        config = config_service.get_config_by_category(category)
-        schema = config_service.get_config_schema()
-        # Build a sub-schema for the category
+        cfg = config_service.get_config_by_category(category) or {}
+        schema = config_service.get_config_schema() or {}
         sub_schema = {k: v for k, v in schema.items() if v.get("category") == category}
         return {
             "success": True,
-            "config": _redact_with_schema(config, sub_schema),
+            "config": _redact_with_schema(cfg, sub_schema),
             "category": category,
         }
     except Exception as e:
-        logger.error(f"Failed to get configuration for category {category}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get configuration for category {category}",
-        )
+        logger.error("Failed to get configuration for category %s: %s", category, e)
+        detail_msg = f"Failed to get configuration for category {category}"
+    raise HTTPException(status_code=500, detail=detail_msg)
 
 
 @router.post("/api/config/all")
@@ -259,23 +208,18 @@ async def update_all_config(
     config_service: ConfigService = Depends(get_config_service),
     user: User = Depends(get_current_admin_user),
 ):
-    """Update all configuration values"""
     try:
-        # Validate configuration
         errors = config_service.validate_config(request.config)
         if errors:
             return {"success": False, "errors": errors}
-
-        # Update configuration
-        success = config_service.update_config(request.config)
-
-        if success:
+        ok = config_service.update_config(request.config)
+        if ok:
             return {"success": True, "message": "Configuration updated successfully"}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to update configuration")
-
+        raise HTTPException(status_code=500, detail="Failed to update configuration")
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to update configuration: {e}")
+        logger.error("Failed to update configuration: %s", e)
         raise HTTPException(status_code=500, detail="Failed to update configuration")
 
 
@@ -286,28 +230,22 @@ async def update_config_by_category(
     config_service: ConfigService = Depends(get_config_service),
     user: User = Depends(get_current_admin_user),
 ):
-    """Update configuration values for a specific category"""
     try:
-        # Validate configuration
         errors = config_service.validate_config(request.config)
         if errors:
             return {"success": False, "errors": errors}
-
-        # Update configuration
-        success = config_service.update_config_by_category(category, request.config)
-
-        if success:
+        ok = config_service.update_config_by_category(category, request.config)
+        if ok:
             return {
                 "success": True,
                 "message": f"Configuration for {category} updated successfully",
             }
-        else:
-            raise HTTPException(
-                status_code=500, detail=f"Failed to update configuration for {category}"
-            )
+        detail_msg = f"Failed to update configuration for {category}"
+        raise HTTPException(status_code=500, detail=detail_msg)
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to update configuration for category {category}: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to update configuration for {category}"
-        )
+        logger.error("Failed to update configuration for category %s: %s", category, e)
+        detail_msg = f"Failed to update configuration for {category}"
+        raise HTTPException(status_code=500, detail=detail_msg)

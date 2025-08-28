@@ -3,7 +3,6 @@ Project and TODO Board Management Service
 Implements the comprehensive project lifecycle management as specified in requires.md
 """
 
-import json
 import logging
 import time
 import uuid
@@ -11,7 +10,6 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from ..api.models import (
-    EnhancedPPTOutline,
     PPTGenerationRequest,
     PPTOutline,
     PPTProject,

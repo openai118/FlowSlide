@@ -10,7 +10,7 @@ from ..core.llm_manager import LLMManager
 from ..core.models import ChunkStrategy, PPTOutline, PPTState, ProcessingConfig, SlideInfo
 from ..generators.chains import ChainManager
 from ..graph.workflow import WorkflowExecutor, WorkflowManager
-from ..utils.logger import LoggerMixin, ProgressLogger
+from ..utils.logger import LoggerMixin
 
 logger = logging.getLogger(__name__)
 
