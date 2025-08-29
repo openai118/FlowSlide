@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中国泼墨风</title>
+    <!-- 移除了 Tailwind 和 Font Awesome, 因为样式是完全自定义的 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* 引入具有书法韵味的在线字体 (可选，但效果更佳) */
+        @import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=ZCOOL+KuaiLe&display=swap');
+
+        html {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* 使用深色背景衬托宣纸效果 */
+            background-color: #1a1a1a; 
+        }
+
+        body {
+            width: 1280px;
+            height: 720px;
+            margin: 0;
+            padding: 0;
+            position: relative;
+            overflow: hidden;
+            /* 宣纸纹理背景 */
+            background-color: #f7f3e9;
+            background-image: url('data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><filter id="n" x="0" y="0"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="6" stitchTiles="stitch"/></filter><rect width="100" height="100" filter="url(%23n)" opacity="0.1"/></svg>');
+            /* 字体设定，优先使用有书法感的字体 */
+            font-family: 'KaiTi', 'STKaiti', 'SimSun', serif;
+            flex-shrink: 0; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        
+        .slide-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            color: #333; /* 墨色 */
+            position: relative;
+        }
+
+        /* 左上角的墨迹装饰 */
+        .slide-container::before {
+            content: '';
+            position: absolute;
+            top: -20px;
+            left: -30px;
+            width: 200px;
+            height: 200px;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M 50,0 C 20,10 10,40 0,50 C 10,80 40,90 50,100 C 80,90 90,60 100,50 C 90,20 60,10 50,0 Z" fill="rgba(0,0,0,0.08)" transform="rotate(45 50 50) scale(1.2)" /></svg>');
+            background-repeat: no-repeat;
+            background-size: contain;
+            opacity: 0.5;
+            z-index: 0;
+        }
+        
+        .slide-header {
+            padding: 50px 70px 20px 70px;
+            position: relative;
+        }
+        
+        .slide-title {
+            /* 标题使用更具设计感的书法字体 */
+            font-family: 'Ma Shan Zheng', 'STKaiti', 'KaiTi', cursive;
+            font-size: clamp(3rem, 5vw, 4.5rem);
+            font-weight: normal; /* 书法字体不需加粗 */
+            color: #1a1a1a;
+            margin: 0;
+            line-height: 1.2;
+            max-height: 100px;
+            overflow: hidden;
+            z-index: 1;
+            position: relative;
+        }
+
+        /* 标题下的毛笔笔触分割线 */
+        .slide-header::after {
+            content: '';
+            position: absolute;
+            left: 70px;
+            bottom: 5px;
+            width: 300px;
+            height: 15px;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 10"><path d="M 0,5 C 30,2 70,8 100,5 C 130,2 170,8 200,5" stroke="%23990000" stroke-width="3" fill="none" stroke-linecap="round" /></svg>');
+            background-repeat: no-repeat;
+            background-size: 100% 100%;
+            opacity: 0.7;
+        }
+        
+        .slide-content {
+            flex: 1;
+            padding: 20px 70px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            max-height: 550px;
+            overflow: auto; /* 内容多时可滚动 */
+        }
+        
+        .content-main {
+            font-size: clamp(1.2rem, 2.5vw, 1.6rem);
+            line-height: 2; /* 增加行距，更具古籍感 */
+            color: #3d3d3d; /* 深墨色 */
+        }
+        
+        .content-points {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .content-points li {
+            margin-bottom: 20px;
+            padding-left: 35px;
+            position: relative;
+            font-size: clamp(1.1rem, 2.5vw, 1.5rem);
+            line-height: 1.8;
+        }
+        
+        /* 列表项标记替换为朱红色圆点，如朱批 */
+        .content-points li:before {
+            content: "●";
+            position: absolute;
+            left: 0;
+            top: 0.1em;
+            color: #a91e22; /* 朱红色 */
+            font-size: 0.8em;
+        }
+        
+        /* 仿印章效果的页脚 */
+        .slide-footer {
+            position: absolute;
+            bottom: 30px;
+            right: 40px;
+            width: 80px;
+            height: 30px;
+            background: #c0392b; /* 印泥红 */
+            color: #f7f3e9; /* 纸白色，阴文效果 */
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #a91e22;
+            border-radius: 2px;
+            /* 使用篆体感的字体，若无则用楷体 */
+            font-family: 'ZCOOL KuaiLe', 'KaiTi', sans-serif; 
+            box-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+        }
+        
+        .chart-container {
+            max-height: 300px;
+            margin: 20px 0;
+            border: 1px solid rgba(0,0,0,0.1);
+            padding: 10px;
+            background: rgba(0,0,0,0.02);
+        }
+        
+        /* 重点内容框：仿传统竖批样式 */
+        .highlight-box {
+            background: rgba(153,0,0, 0.03); /* 极淡的朱砂背景 */
+            border-right: 3px solid #c0392b; /* 右侧朱红竖线 */
+            border-left: none;
+            padding: 20px 30px 20px 20px;
+            margin: 20px 0;
+            border-radius: 0;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 30px;
+            margin: 20px 0;
+        }
+        
+        /* 数据卡片：淡墨描边效果 */
+        .stat-card {
+            background: transparent;
+            padding: 20px;
+            border-radius: 4px;
+            text-align: center;
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            border-style: dashed;
+        }
+        
+        .stat-number {
+            font-size: 2.8rem;
+            font-weight: bold;
+            color: #c0392b; /* 朱红色突出数字 */
+            display: block;
+            font-family: 'Microsoft YaHei', sans-serif; /* 数字用清晰字体 */
+        }
+        
+        .stat-label {
+            font-size: 1.1rem;
+            color: #555; /* 墨色 */
+            margin-top: 5px;
+        }
+        
+        @media (max-width: 1280px) {
+            body {
+                width: 100vw;
+                height: 56.25vw;
+                max-height: 100vh;
+            }
+        }
+
+        /* Chart.js 图表颜色适配，需要在 JS 中配置 */
+        /* 这是一个示例，实际颜色需要在创建图表的 JS 代码中设置 */
+        /*
+        const options = {
+            scales: { ... },
+            plugins: { ... },
+            elements: {
+                bar: {
+                    backgroundColor: 'rgba(192, 57, 43, 0.6)',
+                    borderColor: '#c0392b',
+                    borderWidth: 1
+                },
+                point: {
+                    backgroundColor: '#c0392b',
+                    borderColor: '#a91e22'
+                },
+                line: {
+                    borderColor: 'rgba(61, 61, 61, 0.7)'
+                }
+            }
+        };
+        */
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="slide-header">
+            <h1 class="slide-title">中国泼墨风</h1>
+        </div>
+        
+        <div class="slide-content">
+            <div class="content-main">
+                <!-- 这里是您的页面内容，可以是文本、列表、图表等 -->
+                <!-- 示例：普通文本 -->
+                <p>夫天地者，万物之逆旅也；光阴者，百代之过客也。而浮生若梦，为欢几何？</p>
+
+                <!-- 示例：高亮框 -->
+                <div class="highlight-box">
+                    此为重点内容，以朱笔批注之。引经据典，发人深省。
+                </div>
+
+                <!-- 示例：列表 -->
+                <ul class="content-points">
+                    <li>其一：格物致知，诚意正心。</li>
+                    <li>其二：修身齐家，治国平天下。</li>
+                    <li>其三：道法自然，天人合一。</li>
+                </ul>
+
+                <!-- 示例：数据统计 -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-number">三千</span>
+                        <span class="stat-label">弟子</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">七十二</span>
+                        <span class="stat-label">贤人</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">一部</span>
+                        <span class="stat-label">论语</span>
+                    </div>
+                </div>
+
+                 <!-- 
+                    您可以取消这里的注释来展示一个图表
+                    <div class="chart-container">
+                        <canvas id="myChart"></canvas>
+                    </div> 
+                -->
+
+            </div>
+        </div>
+        
+        <div class="slide-footer">
+            1 / 1
+        </div>
+    </div>
+
+    <!-- 
+    <script>
+        // 如果您使用图表，请在这里初始化
+        const ctx = document.getElementById('myChart');
+        if (ctx) {
+            new Chart(ctx, {
+                type: 'bar', // or 'line', 'pie', etc.
+                data: {
+                    labels: ['甲', '乙', '丙', '丁', '戊', '己'],
+                    datasets: [{
+                        label: '数据展示',
+                        data: [12, 19, 3, 5, 2, 3],
+                        backgroundColor: 'rgba(169, 30, 34, 0.4)', // 朱红，半透明
+                        borderColor: 'rgba(169, 30, 34, 1)', // 朱红，不透明
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.08)' // 淡墨色网格线
+                            },
+                            ticks: {
+                                color: '#555' // 墨色刻度
+                            }
+                        },
+                        x: {
+                           grid: {
+                                display: false // 隐藏X轴网格线
+                            },
+                            ticks: {
+                                color: '#555'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#333' // 图例文字颜色
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+    -->
+</body>
+</html>
