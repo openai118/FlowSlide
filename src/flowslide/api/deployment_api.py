@@ -7,22 +7,25 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+import logging
 
-from .deployment_mode_manager import (
+logger = logging.getLogger(__name__)
+
+from ..core.deployment_mode_manager import (
     mode_manager,
     DeploymentMode,
     ModeTransition,
     get_current_deployment_mode,
     is_mode_switch_in_progress
 )
-from .deployment_config_manager import (
+from ..core.deployment_config_manager import (
     config_manager,
     ModeSwitchConfig,
-    get_deployment_config,
-    save_deployment_config
+    get_deployment_config as core_get_deployment_config,
+    save_deployment_config as core_save_deployment_config
 )
 
-router = APIRouter(prefix="/api/deployment", tags=["deployment"])
+router = APIRouter(tags=["deployment"])
 
 
 class ModeSwitchRequest(BaseModel):
@@ -85,10 +88,79 @@ async def get_available_modes():
     }
 
 
+@router.get("/available-modes")
+async def get_available_modes_based_on_config():
+    """根据环境变量配置获取可用的部署模式"""
+    import os
+
+    # 检查环境变量配置
+    has_external_db = bool(os.getenv("DATABASE_URL"))
+    has_r2 = bool(os.getenv("R2_ACCESS_KEY_ID"))
+
+    # 根据配置情况确定可用的模式
+    available_modes = []
+
+    # 始终可以选择本地模式
+    available_modes.append({
+        "mode": "local_only",
+        "name": "仅本地存储",
+        "description": "数据仅存储在本地数据库中",
+        "available": True,
+        "recommended": not has_external_db and not has_r2
+    })
+
+    # 如果有外部数据库，可以选择本地+外部模式
+    if has_external_db:
+        available_modes.append({
+            "mode": "local_external",
+            "name": "本地 + 外部数据库",
+            "description": "本地数据与外部数据库同步",
+            "available": True,
+            "recommended": has_external_db and not has_r2
+        })
+
+    # 如果有R2配置，可以选择本地+R2模式
+    if has_r2:
+        available_modes.append({
+            "mode": "local_r2",
+            "name": "本地 + R2云存储",
+            "description": "本地数据备份到R2云存储",
+            "available": True,
+            "recommended": not has_external_db and has_r2
+        })
+
+    # 如果既有外部数据库又有R2，可以选择全功能模式
+    if has_external_db and has_r2:
+        available_modes.append({
+            "mode": "local_external_r2",
+            "name": "本地 + 外部数据库 + R2云存储",
+            "description": "完整的数据同步和备份方案",
+            "available": True,
+            "recommended": True
+        })
+
+    # 获取当前模式
+    current_mode = get_current_deployment_mode().value
+
+    return {
+        "success": True,
+        "available_modes": available_modes,
+        "current_mode": current_mode,
+        "config_status": {
+            "has_external_db": has_external_db,
+            "has_r2": has_r2
+        }
+    }
+
+
 @router.post("/switch")
 async def switch_deployment_mode(request: ModeSwitchRequest, background_tasks: BackgroundTasks):
     """切换部署模式"""
     try:
+        # 验证目标模式参数
+        if not request.target_mode or not request.target_mode.strip():
+            raise HTTPException(status_code=400, detail="目标模式不能为空")
+
         # 验证目标模式
         try:
             target_mode = DeploymentMode(request.target_mode.lower())
@@ -101,24 +173,44 @@ async def switch_deployment_mode(request: ModeSwitchRequest, background_tasks: B
 
         # 检查模式兼容性
         current_mode = get_current_deployment_mode()
+        
+        # 检查目标模式是否已经是当前模式
+        if current_mode == target_mode:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"目标模式 {target_mode.value} 已经是当前激活模式"
+            )
+        
         if not mode_manager._is_mode_compatible(current_mode, target_mode):
             raise HTTPException(
                 status_code=400,
                 detail=f"无法从 {current_mode.value} 切换到 {target_mode.value}"
             )
 
-        # 在后台执行模式切换
-        background_tasks.add_task(
-            mode_manager.switch_mode,
+        # 执行模式切换（同步等待完成）
+        logger.info(f"开始模式切换: {current_mode.value} -> {target_mode.value}")
+        switch_success = await mode_manager.switch_mode(
             target_mode,
             request.reason or "API请求切换"
         )
 
+        if not switch_success:
+            raise HTTPException(status_code=500, detail="模式切换执行失败")
+
+        # 验证切换结果
+        new_current_mode = get_current_deployment_mode()
+        if new_current_mode != target_mode:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"模式切换验证失败，当前模式仍为 {new_current_mode.value}"
+            )
+
         return {
-            "message": "模式切换已启动",
+            "message": "模式切换已完成",
             "from_mode": current_mode.value,
             "to_mode": target_mode.value,
-            "status": "in_progress"
+            "status": "completed",
+            "verified": True
         }
 
     except HTTPException:
@@ -161,7 +253,7 @@ async def get_mode_switch_history():
 async def get_deployment_config():
     """获取部署配置"""
     try:
-        config = get_deployment_config()
+        config = core_get_deployment_config()
 
         return {
             "enabled": config.enabled,
@@ -190,7 +282,7 @@ async def get_deployment_config():
 async def update_deployment_config(config_update: ModeSwitchConfigUpdate):
     """更新部署配置"""
     try:
-        current_config = get_deployment_config()
+        current_config = core_get_deployment_config()
 
         # 更新配置
         update_data = config_update.dict(exclude_unset=True)
@@ -199,7 +291,7 @@ async def update_deployment_config(config_update: ModeSwitchConfigUpdate):
                 setattr(current_config, key, value)
 
         # 保存配置
-        if save_deployment_config(current_config):
+        if core_save_deployment_config(current_config):
             return {
                 "message": "部署配置已更新",
                 "config": {
@@ -253,10 +345,10 @@ async def check_mode_compatibility():
 async def set_maintenance_mode(enable: bool):
     """设置维护模式"""
     try:
-        config = get_deployment_config()
+        config = core_get_deployment_config()
         config.maintenance_mode = enable
 
-        if save_deployment_config(config):
+        if core_save_deployment_config(config):
             return {
                 "message": f"维护模式已{'启用' if enable else '禁用'}",
                 "maintenance_mode": enable
@@ -276,7 +368,7 @@ async def get_deployment_health():
     try:
         current_mode = get_current_deployment_mode()
         switch_in_progress = is_mode_switch_in_progress()
-        config = get_deployment_config()
+        config = core_get_deployment_config()
 
         health_status = "healthy"
         issues = []

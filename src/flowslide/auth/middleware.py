@@ -50,6 +50,9 @@ class AuthMiddleware:
             "/temp/",  # 添加temp目录用于图片缓存访问
             "/api/image/view/",  # 图床图片访问无需认证
             "/api/image/thumbnail/",  # 图片缩略图访问无需认证
+            "/api/backup/",  # 备份API无需认证（用于自动化备份）
+            "/api/system/",  # 系统监控API无需认证
+            "/api/deployment/",  # 部署模式API无需认证
             "/home/",  # 允许 /home/ 形式
             "/scenarios/",  # 允许 /scenarios/ 形式
             "/docs",

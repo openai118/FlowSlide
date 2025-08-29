@@ -90,6 +90,9 @@ dependencies = [
     # Monitoring and metrics
     "prometheus-client>=0.17.0",
     "prometheus-fastapi-instrumentator>=6.1.0",
+
+    # Cloud storage
+    "boto3>=1.34.0",
 ]
 
 [project.optional-dependencies]

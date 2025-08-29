@@ -10,6 +10,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+import boto3
+from botocore.exceptions import ClientError
+from dotenv import load_dotenv
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,6 +21,9 @@ class BackupService:
     """备份服务"""
 
     def __init__(self):
+        # 加载环境变量
+        load_dotenv()
+        
         self.backup_dir = Path("./backups")
         self.backup_dir.mkdir(exist_ok=True)
 
@@ -143,16 +150,43 @@ class BackupService:
     async def _upload_to_r2(self, backup_path: Path):
         """上传备份到R2"""
         if not self._is_r2_configured():
+            logger.info("ℹ️ R2 not configured, skipping cloud backup")
             return
 
         try:
-            # 这里可以实现R2上传逻辑
-            # 或者调用现有的R2备份脚本
-            logger.info(f"☁️ Uploading to R2: {backup_path.name}")
+            logger.info(f"☁️ Starting R2 upload: {backup_path.name}")
 
-            # 示例：调用备份脚本
-            # await self._run_r2_backup_script(backup_path)
+            # 创建S3客户端，配置为R2
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=self.r2_config['access_key'],
+                aws_secret_access_key=self.r2_config['secret_key'],
+                endpoint_url=self.r2_config['endpoint'],
+                region_name='auto'  # R2使用auto region
+            )
 
+            # 生成备份日期目录
+            backup_date = datetime.now().strftime("%Y-%m-%d")
+            s3_key = f"backups/{backup_date}/{backup_path.name}"
+
+            # 上传文件
+            logger.info(f"Uploading to R2: {self.r2_config['bucket']}/{s3_key}")
+
+            # 使用asyncio.to_thread在后台线程中运行同步的boto3操作
+            await asyncio.to_thread(
+                s3_client.upload_file,
+                str(backup_path),
+                self.r2_config['bucket'],
+                s3_key
+            )
+
+            logger.info(f"✅ R2 upload completed successfully: {backup_path.name}")
+
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_msg = e.response['Error']['Message']
+            logger.error(f"❌ R2 upload failed (AWS Error {error_code}): {error_msg}")
+            raise Exception(f"R2 upload failed: {error_msg}")
         except Exception as e:
             logger.error(f"❌ R2 upload failed: {e}")
             # 不抛出异常，因为本地备份已经成功
@@ -160,15 +194,6 @@ class BackupService:
     def _is_r2_configured(self) -> bool:
         """检查R2是否配置"""
         return all(self.r2_config.values())
-
-    async def _run_r2_backup_script(self, backup_path: Path):
-        """运行R2备份脚本"""
-        import subprocess
-
-        script_path = Path("./backup_to_r2_enhanced.sh")
-        if script_path.exists():
-            # 这里可以调用bash脚本或实现Python版本的R2上传
-            pass
 
     async def _cleanup_old_backups(self):
         """清理旧备份"""
@@ -183,7 +208,7 @@ class BackupService:
         except Exception as e:
             logger.error(f"❌ Cleanup failed: {e}")
 
-    async def _send_notification(self, backup_name: str, status: str, error: str = None):
+    async def _send_notification(self, backup_name: str, status: str, error: Optional[str] = None):
         """发送备份通知"""
         if not self.webhook_url:
             return
@@ -204,7 +229,50 @@ class BackupService:
         except Exception as e:
             logger.error(f"❌ Notification failed: {e}")
 
-    async def list_backups(self) -> list:
+    async def sync_to_r2(self, backup_path: Optional[Path] = None) -> Dict[str, Any]:
+        """同步备份到R2云存储
+
+        Args:
+            backup_path: 指定的备份文件路径，如果为None则使用最新的备份
+
+        Returns:
+            同步结果信息
+        """
+        if not self._is_r2_configured():
+            raise Exception("R2云存储未配置")
+
+        try:
+            # 如果没有指定备份路径，使用最新的备份
+            if backup_path is None:
+                backups = await list_backups()
+                if not backups:
+                    raise Exception("没有找到备份文件进行同步")
+                backup_path = Path(backups[0]["path"])
+
+            # 确保备份文件存在
+            if not backup_path.exists():
+                raise FileNotFoundError(f"备份文件不存在: {backup_path}")
+
+            logger.info(f"☁️ Starting R2 sync: {backup_path.name}")
+
+            # 上传到R2
+            await self._upload_to_r2(backup_path)
+
+            sync_info = {
+                "filename": backup_path.name,
+                "size": backup_path.stat().st_size,
+                "timestamp": datetime.now().isoformat(),
+                "success": True
+            }
+
+            logger.info(f"✅ R2 sync completed: {backup_path.name}")
+            return sync_info
+
+        except Exception as e:
+            logger.error(f"❌ R2 sync failed: {e}")
+            raise
+
+    def list_backups(self) -> list:
         """列出所有备份"""
         backups = []
         for backup_file in self.backup_dir.glob("*.zip"):
@@ -253,7 +321,7 @@ async def create_backup(backup_type: str = "full") -> str:
 
 async def list_backups() -> list:
     """列出备份"""
-    return await backup_service.list_backups()
+    return backup_service.list_backups()
 
 
 async def restore_backup(backup_name: str) -> bool:

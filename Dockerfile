@@ -105,9 +105,6 @@ RUN apt-get update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install rclone for backup functionality (optional, can be skipped for faster builds)
-RUN curl -fsSL https://rclone.org/install.sh | bash || echo "Warning: rclone installation failed"
-
 # Create non-root user (for compatibility, but run as root)
 RUN groupadd -r flowslide && \
     useradd -r -g flowslide -m -d /home/flowslide flowslide && \
@@ -134,9 +131,6 @@ COPY .env.example ./.env
 # Copy standard scripts first (always available)
 COPY docker-healthcheck.sh docker-entrypoint.sh ./
 
-# Copy backup scripts
-COPY backup_to_r2_enhanced.sh ./
-
 # Create tools directory and placeholder for database health check tools
 RUN mkdir -p tools && \
     echo "#!/usr/bin/env python3\nprint('Database tools not available')" > tools/placeholder.py && \
@@ -147,7 +141,7 @@ RUN cp docker-healthcheck.sh docker-healthcheck-enhanced.sh && \
     cp docker-entrypoint.sh docker-entrypoint-enhanced.sh
 
 # Create directories and set permissions in one layer
-RUN chmod +x docker-healthcheck*.sh docker-entrypoint*.sh backup_to_r2*.sh 2>/dev/null || true && \
+RUN chmod +x docker-healthcheck*.sh docker-entrypoint*.sh 2>/dev/null || true && \
     find tools -name "*.py" -exec chmod +x {} \; 2>/dev/null || true && \
     mkdir -p temp/ai_responses_cache temp/style_genes_cache temp/summeryanyfile_cache temp/templates_cache \
              research_reports lib/Linux lib/MacOS lib/Windows uploads data tools logs db && \
@@ -171,14 +165,9 @@ RUN chmod +x docker-healthcheck*.sh docker-entrypoint*.sh backup_to_r2*.sh 2>/de
         ln -sf docker-entrypoint.sh docker-entrypoint-active.sh; \
     fi && \
     # Create backup script selection
-    if [ -f "backup_to_r2_enhanced.sh" ]; then \
-        echo "Using enhanced backup script" && \
-        ln -sf backup_to_r2_enhanced.sh backup-active.sh; \
-    else \
-        echo "No backup script available" && \
-        echo "#!/bin/bash\necho 'No backup script configured'" > backup-active.sh && \
-        chmod +x backup-active.sh; \
-    fi
+    echo "Backup handled by Python service (boto3)" && \
+    echo "#!/bin/bash\necho 'Backup handled by Python service using boto3'" > backup-active.sh && \
+    chmod +x backup-active.sh
 
 # Copy the venv created during the build stage into the production image so runtime
 # has all Python dependencies available.

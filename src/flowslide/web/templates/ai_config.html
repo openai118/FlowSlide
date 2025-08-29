@@ -25,6 +25,9 @@
         <button class="tab-btn" onclick="switchTab('image-service')" data-tab="image-service">
             🎨 图片服务
         </button>
+        <button class="tab-btn" onclick="switchTab('data-backup')" data-tab="data-backup">
+            💾 数据备份
+        </button>
     </div>
 </div>
 
@@ -1012,6 +1015,282 @@
                     <div id="save-image-service-progress" class="progress-overlay">
                         <div class="progress-spinner"></div>
                     </div>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- 数据备份配置标签页 -->
+<div id="data-backup" class="tab-content" style="display: none;">
+    <div class="card">
+        <h3 style="color: #8e44ad; margin-bottom: 20px;">💾 数据备份与系统监控</h3>
+
+        <!-- 系统运行模式状态 -->
+        <div style="background: var(--panel-bg); padding: 25px; border-radius: 12px; margin-bottom: 25px; border: 1px solid var(--panel-border); box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <h4 style="color: #8e44ad; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                <span>🚀</span> 系统运行模式
+            </h4>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                <div style="background: var(--glass-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                    <h5 style="color: #495057; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                        <span>📊</span> 当前模式
+                    </h5>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <span id="current-deployment-mode" style="background: #95a5a6; color: white; padding: 8px 16px; border-radius: 20px; font-size: 0.9em; font-weight: 600;">
+                            检测中...
+                        </span>
+                        <button onclick="autoDetectMode()" style="padding: 8px 16px; background: var(--accent-gradient); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em;">
+                            � 自动检测模式
+                        </button>
+                    </div>
+
+                    <!-- 当前模式详细信息 -->
+                    <div id="current-mode-details" style="margin-top: 15px; padding: 12px; background: rgba(52, 152, 219, 0.1); border-radius: 6px; display: none;">
+                        <!-- 当前模式的详细信息将在这里显示 -->
+                    </div>
+
+                    <p style="margin-top: 10px; color: #6c757d; font-size: 0.85em;">
+                        系统根据环境变量自动检测并选择最适合的部署模式
+                    </p>
+                </div>
+
+                <div style="background: var(--glass-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                    <h5 style="color: #495057; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                        <span>🎯</span> 模式选择
+                    </h5>
+
+                    <!-- 配置状态显示 -->
+                    <div id="config-status-display" style="background: rgba(52, 152, 219, 0.1); padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+                        <!-- 配置状态将在这里动态显示 -->
+                    </div>
+
+                    <!-- 模式选择下拉框 -->
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; font-weight: 600; color: #495057; margin-bottom: 8px; font-size: 0.9em;">
+                            选择部署模式:
+                        </label>
+                        <select id="deployment-mode-select" onchange="onModeSelectionChange(this.value)" style="width: 100%; padding: 10px; border: 1px solid var(--glass-border); border-radius: 6px; background: var(--glass-bg); color: #495057; font-size: 0.9em;">
+                            <option value="">请选择模式...</option>
+                            <!-- 模式选项将在这里动态生成 -->
+                        </select>
+                    </div>
+
+                    <!-- 模式信息显示 -->
+                    <div id="selected-mode-info" style="background: rgba(39, 174, 96, 0.1); padding: 12px; border-radius: 6px; margin-bottom: 15px; display: none;">
+                        <!-- 选中模式的详细信息将在这里显示 -->
+                    </div>
+
+                    <!-- 操作按钮 -->
+                    <div style="display: flex; gap: 10px;">
+                        <button id="switch-mode-btn" onclick="switchToSelectedMode()" disabled style="flex: 1; padding: 10px; background: var(--accent-gradient); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em;">
+                            切换到此模式
+                        </button>
+                        <button onclick="loadAvailableModes()" style="padding: 10px 15px; background: var(--secondary-gradient); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em;">
+                            🔄 刷新
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数据同步与备份 -->
+        <div style="background: var(--panel-bg); padding: 25px; border-radius: 12px; margin-bottom: 25px; border: 1px solid var(--panel-border); box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <h4 style="color: #27ae60; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                <span>🔄</span> 数据同步与备份
+            </h4>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px;">
+                <!-- 数据库同步 -->
+                <div style="background: var(--glass-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                    <h5 style="color: #27ae60; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                        <span>�</span> 数据库同步
+                    </h5>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 500; color: #495057;">最后同步时间:</span>
+                            <span id="last-db-backup" style="color: #6c757d; font-size: 0.9em;">未知</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 500; color: #495057;">同步文件大小:</span>
+                            <span id="db-backup-size" style="color: #6c757d; font-size: 0.9em;">未知</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px;">
+                            <button onclick="syncToExternal()" class="btn btn-success" style="padding: 8px 6px; font-size: 0.85em;">
+                                📤 同步到外部
+                            </button>
+                            <button onclick="syncFromExternal()" class="btn btn-warning" style="padding: 8px 6px; font-size: 0.85em;">
+                                � 从外部恢复
+                            </button>
+                            <button onclick="downloadLatestBackup()" class="btn btn-info" style="padding: 8px 6px; font-size: 0.85em;">
+                                � 下载备份
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- R2 云存储同步 -->
+                <div style="background: var(--glass-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                    <h5 style="color: #17a2b8; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                        <span>☁️</span> R2 云存储同步
+                    </h5>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 500; color: #495057;">同步状态:</span>
+                            <span id="r2-sync-status" style="background: #95a5a6; color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.8em;">
+                                未配置
+                            </span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 500; color: #495057;">最后同步:</span>
+                            <span id="last-r2-sync" style="color: #6c757d; font-size: 0.9em;">从未同步</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px;">
+                            <button onclick="syncToR2()" class="btn btn-primary" style="padding: 8px 6px; font-size: 0.85em;">
+                                🔄 同步到R2
+                            </button>
+                            <button onclick="restoreFromR2()" class="btn btn-warning" style="padding: 8px 6px; font-size: 0.85em;">
+                                📤 从R2恢复
+                            </button>
+                            <button onclick="downloadFromR2()" class="btn btn-info" style="padding: 8px 6px; font-size: 0.85em;">
+                                � 下载数据
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 系统状态监控 -->
+        <div style="background: var(--panel-bg); padding: 25px; border-radius: 12px; margin-bottom: 25px; border: 1px solid var(--panel-border); box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <h4 style="color: #f39c12; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                <span>📈</span> 系统状态监控
+            </h4>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+                <!-- 数据库连接状态 -->
+                <div style="background: var(--glass-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                    <h5 style="color: #f39c12; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                        <span>🗄️</span> 数据库连接
+                    </h5>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <span id="db-connection-status" style="background: #95a5a6; color: white; padding: 6px 14px; border-radius: 20px; font-size: 0.85em; font-weight: 500;">
+                            检查中...
+                        </span>
+                        <span id="db-response-time" style="color: #6c757d; font-size: 0.85em;">
+                            --
+                        </span>
+                        <button onclick="testDatabaseConnection()" style="padding: 6px 12px; background: var(--accent-gradient); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85em;">
+                            🔍 测试
+                        </button>
+                    </div>
+                    <p style="margin-top: 10px; color: #6c757d; font-size: 0.85em;">
+                        检查数据库连接状态和响应时间
+                    </p>
+                </div>
+
+                <!-- 系统资源使用 -->
+                <div style="background: var(--glass-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                    <h5 style="color: #f39c12; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                        <span>💻</span> 系统资源
+                    </h5>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="font-weight: 500; color: #495057;">内存使用:</span>
+                            <span id="memory-usage" style="color: #6c757d;">加载中...</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="font-weight: 500; color: #495057;">磁盘空间:</span>
+                            <span id="disk-usage" style="color: #6c757d;">加载中...</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="font-weight: 500; color: #495057;">运行时间:</span>
+                            <span id="uptime" style="color: #6c757d;">加载中...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 同步历史记录 -->
+                <div style="background: var(--glass-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                    <h5 style="color: #f39c12; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                        <span>📋</span> 同步历史
+                    </h5>
+                    <div id="backup-history" style="max-height: 120px; overflow-y: auto; color: #6c757d; font-size: 0.85em;">
+                        加载同步历史...
+                    </div>
+                    <button onclick="refreshBackupHistory()" style="margin-top: 10px; padding: 6px 12px; background: var(--secondary-gradient); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85em; width: 100%;">
+                        🔄 刷新历史
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 配置管理 -->
+        <div style="background: var(--panel-bg); padding: 25px; border-radius: 12px; border: 1px solid var(--panel-border); box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <h4 style="color: #e74c3c; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                <span>⚙️</span> 配置管理
+            </h4>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                <!-- 自动备份设置 -->
+                <div style="background: var(--glass-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                    <h5 style="color: #e74c3c; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                        <span>⏰</span> 自动备份设置
+                    </h5>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <label class="toggle-label">
+                            <div class="toggle-switch">
+                                <input type="checkbox" name="auto_backup_enabled" onchange="toggleAutoBackup()">
+                                <span class="toggle-slider"></span>
+                            </div>
+                            <div>
+                                <div style="font-weight: 600; color: #495057; margin-bottom: 4px;">启用自动备份</div>
+                                <small style="color: #6c757d; font-weight: 400;">定期自动备份数据库和配置文件</small>
+                            </div>
+                        </label>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <label style="font-weight: 500; color: #495057;">备份间隔:</label>
+                            <select name="backup_interval" style="padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); color: var(--text-color);">
+                                <option value="daily">每日</option>
+                                <option value="weekly">每周</option>
+                                <option value="monthly">每月</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 备份存储设置 -->
+                <div style="background: var(--glass-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                    <h5 style="color: #e74c3c; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                        <span>📁</span> 备份存储设置
+                    </h5>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 500; color: #495057;">本地存储路径:</span>
+                            <span style="color: #6c757d; font-size: 0.9em;">./backups/</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 500; color: #495057;">保留备份数量:</span>
+                            <input type="number" name="max_backups" value="10" min="1" max="50" style="width: 60px; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); color: var(--text-color);">
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 500; color: #495057;">保留天数:</span>
+                            <input type="number" id="retentionDays" name="retention_days" value="30" min="1" max="365" style="width: 60px; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); color: var(--text-color);">
+                        </div>
+                        <button onclick="cleanupOldBackups()" class="btn btn-danger" style="padding: 8px 12px; font-size: 0.9em;">
+                            🗑️ 清理旧备份
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div style="text-align: center; margin-top: 25px; padding: 20px; background: var(--glass-bg); border-radius: 12px; border: 1px solid var(--glass-border);">
+                <button onclick="saveBackupConfig()" class="btn btn-success" style="padding: 12px 30px; font-weight: 600; font-size: 1.05em;">
+                    💾 保存备份配置
                 </button>
             </div>
         </div>
@@ -2213,7 +2492,7 @@ async function initCurrentProviderSelect() {
         });
 
         // 恢复之前的选择（如果仍然可用）
-            if (currentSelection && availableProviders.includes(currentSelection)) {
+        if (currentSelection && availableProviders.includes(currentSelection)) {
             selectElement.value = currentSelection;
             window.__ai_log.info('恢复提供者选择:', currentSelection);
         } else if (availableProviders.length > 0) {
@@ -2232,7 +2511,7 @@ async function initCurrentProviderSelect() {
             }
         }
 
-    window.__ai_log.info('可用提供者:', availableProviders);
+        window.__ai_log.info('可用提供者:', availableProviders);
 
         // 更新页面显示的可用提供者数量
         updateAvailableProvidersCount(availableProviders.length);
@@ -3023,29 +3302,29 @@ async function testCurrentProvider() {
 
     try {
         // 1) 优先从顶部下拉读取
-    const selectEl = document.getElementById('current-provider-select');
-    let currentProvider = (selectEl && selectEl.value) ? selectEl.value.trim() : '';
+        const selectEl = document.getElementById('current-provider-select');
+        let currentProvider = (selectEl && selectEl.value) ? selectEl.value.trim() : '';
 
-    // 2) 再尝试调用API（若已登录）
-    if (!currentProvider) {
-        try {
-            const response = await fetch('/api/config/current-provider');
-            if (response.ok) {
-                const result = await response.json();
-                if (result.success && result.current_provider) {
-                    currentProvider = result.current_provider;
+        // 2) 再尝试调用API（若已登录）
+        if (!currentProvider) {
+            try {
+                const response = await fetch('/api/config/current-provider');
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success && result.current_provider) {
+                        currentProvider = result.current_provider;
+                    }
                 }
+            } catch (error) {
+                console.warn('获取当前提供者失败:', error);
             }
-        } catch (error) {
-            console.warn('获取当前提供者失败:', error);
         }
-    }
 
-    // 3) 最后回退到模板默认
-    if (!currentProvider) {
-        const fallback = (typeof defaultProviderTemplate === 'string' && defaultProviderTemplate) ? defaultProviderTemplate : '';
-        if (fallback) currentProvider = fallback;
-    }
+        // 3) 最后回退到模板默认
+        if (!currentProvider) {
+            const fallback = (typeof defaultProviderTemplate === 'string' && defaultProviderTemplate) ? defaultProviderTemplate : '';
+            if (fallback) currentProvider = fallback;
+        }
 
     if (!currentProvider) {
         showNotification('请先在上方下拉框选择一个“当前提供者”', 'error');
@@ -3058,7 +3337,7 @@ async function testCurrentProvider() {
 
     // 如果选择了模型，先保存配置再测试
     if (selectedModel) {
-    window.__ai_log.info(`使用提供者 ${currentProvider} 和模型 ${selectedModel} 进行测试`);
+        window.__ai_log.info(`使用提供者 ${currentProvider} 和模型 ${selectedModel} 进行测试`);
 
         // 构建配置对象
         const config = {};
@@ -5469,5 +5748,1135 @@ function showLicenseStatus(message, type) {
         if(modeEl){ onPageCountModeChange(modeEl.value); }
     }
 })();
+
+// 数据备份相关功能
+// 自动检测并切换到推荐的部署模式
+async function autoDetectMode() {
+    try {
+        showNotification('正在检测环境配置...', 'info');
+
+        // 获取可用模式列表，包含推荐信息
+        const response = await fetch('/api/deployment/available-modes');
+        if (!response.ok) {
+            throw new Error('获取模式信息失败');
+        }
+
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.error || '获取模式信息失败');
+        }
+
+        // 找到推荐的模式
+        const recommendedMode = result.available_modes.find(mode => mode.recommended);
+        if (!recommendedMode) {
+            showNotification('未找到推荐的部署模式', 'warning');
+            return;
+        }
+
+        const currentMode = result.current_mode;
+        console.log('当前模式:', currentMode);
+        console.log('推荐模式:', recommendedMode.mode);
+
+        // 如果当前已经是推荐的模式
+        if (currentMode === recommendedMode.mode) {
+            showNotification(`当前已经是推荐模式: ${recommendedMode.name}`, 'success');
+            // 仍然刷新显示以确保信息是最新的
+            await refreshDeploymentMode();
+            return;
+        }
+
+        // 显示检测结果并准备切换
+        showNotification(`检测到推荐模式: ${recommendedMode.name} (${recommendedMode.description})`, 'info');
+
+        // 自动切换到推荐的模式
+        await switchToMode(recommendedMode.mode);
+
+    } catch (error) {
+        console.error('自动检测模式失败:', error);
+        showNotification('自动检测模式失败: ' + error.message, 'error');
+    }
+}
+
+// 刷新部署模式信息
+async function refreshDeploymentMode() {
+    try {
+        const response = await fetch('/api/deployment/mode');
+        if (response.ok) {
+            const result = await response.json();
+            // API直接返回数据，不需要检查success字段
+            updateDeploymentModeDisplay(result);
+        } else {
+            const errorData = await response.json().catch(() => ({}));
+            const errorMessage = errorData.detail || '获取部署模式失败';
+            showNotification(errorMessage, 'error');
+        }
+    } catch (error) {
+        console.error('刷新部署模式失败:', error);
+        showNotification('刷新部署模式失败: ' + error.message, 'error');
+    }
+}
+
+// 更新部署模式显示
+function updateDeploymentModeDisplay(result) {
+    const modeElement = document.getElementById('current-deployment-mode');
+    const detailsElement = document.getElementById('deployment-mode-details');
+    const currentModeDetailsElement = document.getElementById('current-mode-details');
+
+    if (modeElement) {
+        let modeText = result.current_mode || '未知';
+        let bgColor = '#95a5a6'; // 默认灰色
+
+        // 根据模式设置不同的颜色
+        switch (result.current_mode) {
+            case 'local_only':
+                bgColor = '#e74c3c'; // 红色
+                modeText = 'LOCAL_ONLY';
+                break;
+            case 'local_external':
+                bgColor = '#f39c12'; // 橙色
+                modeText = 'LOCAL_EXTERNAL';
+                break;
+            case 'local_r2':
+                bgColor = '#27ae60'; // 绿色
+                modeText = 'LOCAL_R2';
+                break;
+            case 'local_external_r2':
+                bgColor = '#8e44ad'; // 紫色
+                modeText = 'LOCAL_EXTERNAL_R2';
+                break;
+        }
+
+        modeElement.textContent = modeText;
+        modeElement.style.background = bgColor;
+    }
+
+    if (detailsElement) {
+        let details = '';
+        details += `<strong>当前模式:</strong> ${result.current_mode || '未知'}<br>`;
+        details += `<strong>检测模式:</strong> ${result.detected_mode || '未知'}<br>`;
+        if (result.switch_in_progress) {
+            details += `<strong>状态:</strong> <span style="color: #f39c12;">模式切换中...</span><br>`;
+        } else {
+            details += `<strong>状态:</strong> <span style="color: #27ae60;">正常</span><br>`;
+        }
+        if (result.last_check) {
+            // API返回的是ISO格式字符串，直接使用new Date()解析
+            const lastCheckDate = new Date(result.last_check);
+            details += `<strong>最后检查:</strong> ${lastCheckDate.toLocaleString()}<br>`;
+        }
+        detailsElement.innerHTML = details || '暂无详细信息';
+    }
+
+    // 显示当前模式的详细信息
+    if (currentModeDetailsElement) {
+        displayCurrentModeDetails(result.current_mode);
+    }
+
+    // 检查当前模式是否与下拉框中选中的模式相同，如果相同则隐藏右侧详细信息
+    const select = document.getElementById('deployment-mode-select');
+    const selectedModeInfo = document.getElementById('selected-mode-info');
+    if (select && selectedModeInfo && select.value === result.current_mode) {
+        // 当前模式与选中的模式相同，隐藏右侧详细信息
+        selectedModeInfo.style.display = 'none';
+        select.value = ''; // 清空选择
+
+        // 禁用切换按钮
+        const switchBtn = document.getElementById('switch-mode-btn');
+        if (switchBtn) {
+            switchBtn.disabled = true;
+            switchBtn.textContent = '切换到此模式';
+            switchBtn.style.background = 'var(--accent-gradient)';
+        }
+    }
+}
+
+// 加载可用的部署模式
+async function loadAvailableModes(preserveSelection = false) {
+    try {
+        const response = await fetch('/api/deployment/available-modes');
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                // 如果需要保持选择，传递当前选中的值
+                if (preserveSelection) {
+                    const select = document.getElementById('deployment-mode-select');
+                    const currentSelectedValue = select ? select.value : null;
+                    displayAvailableModes(result, currentSelectedValue);
+                } else {
+                    displayAvailableModes(result);
+                }
+            } else {
+                console.error('获取可用模式失败:', result.error);
+            }
+        }
+    } catch (error) {
+        console.error('加载可用模式失败:', error);
+    }
+}
+
+// 显示可用的部署模式选项
+function displayAvailableModes(data, selectedMode = null) {
+    // 更新配置状态显示
+    updateConfigStatusDisplay(data.config_status);
+
+    // 更新下拉选择框
+    updateModeSelectOptions(data.available_modes, data.current_mode, selectedMode);
+
+    // 如果有当前模式，显示其信息
+    if (data.current_mode) {
+        showCurrentModeInfo(data.available_modes.find(m => m.mode === data.current_mode));
+    }
+}
+
+// 更新配置状态显示
+function updateConfigStatusDisplay(config) {
+    const container = document.getElementById('config-status-display');
+    if (!container) return;
+
+    let html = '<div style="font-size: 0.85em; color: #6c757d; margin-bottom: 8px;">当前配置状态:</div>';
+    html += '<div style="display: flex; gap: 15px; font-size: 0.85em;">';
+    html += `<span style="color: ${config.has_external_db ? '#27ae60' : '#e74c3c'}">`;
+    html += `${config.has_external_db ? '✅' : '❌'} 外部数据库`;
+    html += '</span>';
+    html += `<span style="color: ${config.has_r2 ? '#27ae60' : '#e74c3c'}">`;
+    html += `${config.has_r2 ? '✅' : '❌'} R2云存储`;
+    html += '</span>';
+    html += '</div>';
+
+    container.innerHTML = html;
+}
+
+// 更新模式选择下拉框
+function updateModeSelectOptions(modes, currentMode, selectedMode = null) {
+    const select = document.getElementById('deployment-mode-select');
+    if (!select) {
+        console.error('找不到部署模式选择下拉框元素');
+        return;
+    }
+
+    // 保存当前选中的值（如果没有指定selectedMode）
+    const currentSelectedValue = selectedMode || select.value;
+
+    // 记住当前选中的值
+    const previousSelection = select.value;
+
+    // 清空现有选项（保留默认选项）
+    select.innerHTML = '<option value="">请选择模式...</option>';
+
+    // 添加模式选项
+    modes.forEach(mode => {
+        const option = document.createElement('option');
+        option.value = mode.mode;
+        option.textContent = mode.name;
+
+        // 如果是推荐模式，添加标记
+        if (mode.recommended) {
+            option.textContent += ' (推荐)';
+            option.style.fontWeight = 'bold';
+        }
+
+        // 如果是用户当前选中的模式，选中它
+        // 优先使用用户选择，其次使用当前模式（当没有用户选择时）
+        if (mode.mode === currentSelectedValue && currentSelectedValue) {
+            option.selected = true;
+        } else if (mode.mode === currentMode && !currentSelectedValue) {
+            option.selected = true;
+        }
+
+        select.appendChild(option);
+    });
+
+    // 确保至少有一个选项被选中
+    if (!select.value && modes.length > 0) {
+        // 如果没有选中项，默认选中当前模式
+        const currentModeOption = select.querySelector(`option[value="${currentMode}"]`);
+        if (currentModeOption) {
+            currentModeOption.selected = true;
+        } else if (select.options.length > 1) {
+            // 如果找不到当前模式，选择第一个可用模式
+            select.options[1].selected = true;
+        }
+    }
+
+    // 如果最终选中的是当前激活的模式，隐藏右侧详细信息
+    if (select.value === currentMode) {
+        const modeInfo = document.getElementById('selected-mode-info');
+        const switchBtn = document.getElementById('switch-mode-btn');
+        if (modeInfo) {
+            modeInfo.style.display = 'none';
+        }
+        if (switchBtn) {
+            switchBtn.textContent = '✓ 已激活';
+            switchBtn.disabled = true;
+            switchBtn.style.background = '#27ae60';
+        }
+    }
+}
+
+// 处理模式选择变化
+function onModeSelectionChange(selectedMode) {
+    const switchBtn = document.getElementById('switch-mode-btn');
+    const modeInfo = document.getElementById('selected-mode-info');
+
+    if (!selectedMode) {
+        // 没有选择模式
+        switchBtn.disabled = true;
+        modeInfo.style.display = 'none';
+        return;
+    }
+
+    // 显示选中模式的详细信息（不刷新整个模式列表，保持用户选择）
+    fetch('/api/deployment/available-modes')
+        .then(response => response.json())
+        .then(data => {
+            const selectedModeData = data.available_modes.find(m => m.mode === selectedMode);
+            if (selectedModeData) {
+                const isCurrent = selectedModeData.mode === data.current_mode;
+                if (isCurrent) {
+                    // 如果选择的是当前激活的模式，不显示详细信息
+                    modeInfo.style.display = 'none';
+                    if (switchBtn) {
+                        switchBtn.textContent = '✓ 已激活';
+                        switchBtn.disabled = true;
+                        switchBtn.style.background = '#27ae60';
+                    }
+                } else {
+                    // 显示选中模式的详细信息
+                    showSelectedModeInfo(selectedModeData, data.current_mode);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('获取模式详细信息失败:', error);
+        });
+}
+
+// 显示选中模式的详细信息
+function showSelectedModeInfo(mode, currentMode) {
+    const container = document.getElementById('selected-mode-info');
+    if (!container) return;
+
+    const isCurrent = mode.mode === currentMode;
+
+    let html = '<div style="font-size: 0.85em; color: #6c757d;">';
+    html += `<strong>模式:</strong> ${mode.name}<br>`;
+    html += `<strong>描述:</strong> ${mode.description}<br>`;
+
+    if (mode.recommended) {
+        html += '<strong>状态:</strong> <span style="color: #f39c12;">⭐ 推荐模式</span><br>';
+    }
+
+    if (isCurrent) {
+        html += '<strong>状态:</strong> <span style="color: #27ae60;">✓ 当前激活</span><br>';
+    }
+
+    html += '</div>';
+
+    container.innerHTML = html;
+    container.style.display = 'block';
+
+    // 更新切换按钮状态
+    const switchBtn = document.getElementById('switch-mode-btn');
+    if (switchBtn) {
+        if (isCurrent) {
+            switchBtn.textContent = '✓ 已激活';
+            switchBtn.disabled = true;
+            switchBtn.style.background = '#27ae60';
+        } else {
+            switchBtn.textContent = '切换到此模式';
+            switchBtn.disabled = false;
+            switchBtn.style.background = 'var(--accent-gradient)';
+        }
+    }
+}
+
+// 显示当前模式的详细信息
+async function displayCurrentModeDetails(currentMode) {
+    const container = document.getElementById('current-mode-details');
+    if (!container || !currentMode) {
+        if (container) {
+            container.style.display = 'none';
+        }
+        return;
+    }
+
+    try {
+        // 获取可用模式列表来找到当前模式的详细信息
+        const response = await fetch('/api/deployment/available-modes');
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                const currentModeData = result.available_modes.find(m => m.mode === currentMode);
+                if (currentModeData) {
+                    let html = '<div style="font-size: 0.85em; color: #6c757d;">';
+                    html += `<strong>模式:</strong> ${currentModeData.name}<br>`;
+                    html += `<strong>描述:</strong> ${currentModeData.description}<br>`;
+
+                    if (currentModeData.recommended) {
+                        html += '<strong>状态:</strong> <span style="color: #f39c12;">⭐ 推荐模式</span><br>';
+                    }
+
+                    html += '<strong>状态:</strong> <span style="color: #27ae60;">✓ 当前激活</span><br>';
+
+                    html += '</div>';
+
+                    container.innerHTML = html;
+                    container.style.display = 'block';
+                } else {
+                    // 如果找不到当前模式的详细信息，显示基本信息
+                    let html = '<div style="font-size: 0.85em; color: #6c757d;">';
+                    html += `<strong>模式:</strong> ${currentMode}<br>`;
+                    html += '<strong>状态:</strong> <span style="color: #27ae60;">✓ 当前激活</span><br>';
+                    html += '</div>';
+
+                    container.innerHTML = html;
+                    container.style.display = 'block';
+                }
+            } else {
+                container.style.display = 'none';
+            }
+        } else {
+            container.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('获取当前模式详细信息失败:', error);
+        container.style.display = 'none';
+    }
+}
+
+// 切换到选中的模式
+async function switchToSelectedMode() {
+    const select = document.getElementById('deployment-mode-select');
+    if (!select) {
+        showNotification('找不到模式选择控件', 'error');
+        console.error('deployment-mode-select 元素不存在');
+        return;
+    }
+
+    const targetMode = select.value;
+    console.log('切换模式 - 选中值:', targetMode);
+
+    if (!targetMode) {
+        showNotification('请先选择一个模式', 'warning');
+        console.warn('目标模式为空，当前选项值:', select.value, '可用选项数量:', select.options.length);
+        return;
+    }
+
+    // 检查是否是有效的模式值
+    if (targetMode === '') {
+        showNotification('请选择一个有效的模式', 'warning');
+        return;
+    }
+
+    await switchToMode(targetMode);
+}
+
+// 切换到指定模式
+async function switchToMode(targetMode) {
+    try {
+        // 验证目标模式参数
+        if (!targetMode || targetMode.trim() === '') {
+            showNotification('目标模式无效', 'error');
+            console.error('switchToMode: 目标模式为空或无效', targetMode);
+            return;
+        }
+
+        console.log('开始切换模式:', targetMode);
+
+        // 首先检查当前模式，避免切换到相同模式
+        const modeResponse = await fetch('/api/deployment/mode');
+        if (modeResponse.ok) {
+            const modeInfo = await modeResponse.json();
+            const currentMode = modeInfo.current_mode;
+
+            console.log('当前模式:', currentMode, '目标模式:', targetMode);
+
+            if (currentMode === targetMode) {
+                showNotification('该模式已经是当前激活模式', 'info');
+                return;
+            }
+        }
+
+        showNotification('正在切换部署模式...', 'info');
+
+        const response = await fetch('/api/deployment/switch', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                target_mode: targetMode,
+                reason: '用户手动选择'
+            })
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.status === 'completed' || result.verified) {
+                showNotification(`模式切换成功: ${result.from_mode} → ${result.to_mode}`, 'success');
+
+                // 隐藏右侧选中模式的详细信息（因为已经切换成功）
+                const selectedModeInfo = document.getElementById('selected-mode-info');
+                if (selectedModeInfo) {
+                    selectedModeInfo.style.display = 'none';
+                }
+
+                // 重置模式选择下拉框
+                const select = document.getElementById('deployment-mode-select');
+                if (select) {
+                    select.value = '';
+                }
+
+                // 禁用切换按钮
+                const switchBtn = document.getElementById('switch-mode-btn');
+                if (switchBtn) {
+                    switchBtn.disabled = true;
+                    switchBtn.textContent = '切换到此模式';
+                    switchBtn.style.background = 'var(--accent-gradient)';
+                }
+
+                // 立即刷新模式显示和重新加载可用模式
+                await refreshDeploymentMode();
+                await loadAvailableModes(true); // 传递 true 来保持选择
+            } else if (result.status === 'in_progress') {
+                showNotification(`模式切换已启动: ${result.from_mode} → ${result.to_mode}`, 'success');
+
+                // 禁用切换按钮，显示切换中状态
+                const switchBtn = document.getElementById('switch-mode-btn');
+                if (switchBtn) {
+                    switchBtn.disabled = true;
+                    switchBtn.textContent = '切换中...';
+                    switchBtn.style.background = '#f39c12';
+                }
+
+                // 等待一会儿后刷新模式显示和重新加载可用模式
+                setTimeout(() => {
+                    refreshDeploymentMode();
+                    loadAvailableModes();
+                }, 2000);
+            } else {
+                showNotification('模式切换启动失败', 'error');
+            }
+        } else {
+            const errorData = await response.json();
+            showNotification('模式切换失败: ' + (errorData.detail || '未知错误'), 'error');
+        }
+    } catch (error) {
+        console.error('切换模式失败:', error);
+        showNotification('切换失败: ' + error.message, 'error');
+    }
+}
+
+// 同步到外部数据库
+async function syncToExternal() {
+    try {
+        showNotification('正在同步到外部数据库...', 'info');
+
+        const response = await fetch('/api/database/sync/to-external', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                showNotification('同步到外部数据库成功！', 'success');
+                // 刷新同步状态
+                await refreshBackupHistory();
+            } else {
+                showNotification('同步失败: ' + (result.detail || '未知错误'), 'error');
+            }
+        } else {
+            const errorData = await response.json();
+            showNotification('同步失败: ' + (errorData.detail || '未知错误'), 'error');
+        }
+    } catch (error) {
+        console.error('同步到外部数据库失败:', error);
+        showNotification('同步失败: ' + error.message, 'error');
+    }
+}
+
+// 从外部数据库恢复
+async function syncFromExternal() {
+    if (!confirm('确定要从外部数据库恢复数据吗？这将覆盖本地数据！')) {
+        return;
+    }
+
+    try {
+        showNotification('正在从外部数据库恢复...', 'info');
+
+        const response = await fetch('/api/database/sync/from-external', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                showNotification('从外部数据库恢复成功！', 'success');
+                // 刷新同步状态
+                await refreshBackupHistory();
+            } else {
+                showNotification('恢复失败: ' + (result.detail || '未知错误'), 'error');
+            }
+        } else {
+            const errorData = await response.json();
+            showNotification('恢复失败: ' + (errorData.detail || '未知错误'), 'error');
+        }
+    } catch (error) {
+        console.error('从外部数据库恢复失败:', error);
+        showNotification('恢复失败: ' + error.message, 'error');
+    }
+}
+
+// 下载最新备份
+async function downloadLatestBackup() {
+    try {
+        const response = await fetch('/api/backup/download/latest');
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `flowslide_backup_${new Date().toISOString().split('T')[0]}.sql`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            showNotification('备份文件下载成功！', 'success');
+        } else {
+            showNotification('下载备份失败', 'error');
+        }
+    } catch (error) {
+        console.error('下载备份失败:', error);
+        showNotification('下载备份失败: ' + error.message, 'error');
+    }
+}
+
+// 同步到R2
+async function syncToR2() {
+    try {
+        showNotification('正在同步到R2云存储...', 'info');
+
+        const response = await fetch('/api/backup/sync/r2', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                showNotification('同步到R2成功！', 'success');
+                updateR2SyncStatus(result.sync_info);
+                // 刷新R2状态以获取最新的同步时间
+                await checkR2Status();
+            } else {
+                showNotification('同步失败: ' + (result.error || '未知错误'), 'error');
+            }
+        } else {
+            showNotification('同步到R2失败', 'error');
+        }
+    } catch (error) {
+        console.error('同步到R2失败:', error);
+        showNotification('同步失败: ' + error.message, 'error');
+    }
+}
+
+// 从R2恢复
+async function restoreFromR2() {
+    if (!confirm('确定要从R2云存储恢复数据吗？这将覆盖当前数据！')) {
+        return;
+    }
+
+    try {
+        showNotification('正在从R2恢复数据...', 'info');
+
+        const response = await fetch('/api/backup/restore/r2', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                showNotification('数据恢复成功！请刷新页面查看最新数据。', 'success');
+                updateR2SyncStatus(result.restore_info);
+            } else {
+                showNotification('恢复失败: ' + (result.error || '未知错误'), 'error');
+            }
+        } else {
+            showNotification('从R2恢复失败', 'error');
+        }
+    } catch (error) {
+        console.error('从R2恢复失败:', error);
+        showNotification('恢复失败: ' + error.message, 'error');
+    }
+}
+
+// 从R2下载数据
+async function downloadFromR2() {
+    try {
+        showNotification('正在从R2下载数据...', 'info');
+
+        // 创建一个临时的下载链接
+        const downloadUrl = '/api/backup/download/latest';
+
+        // 创建一个隐藏的a标签来触发下载
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showNotification('数据下载已开始，请查看浏览器下载。', 'success');
+    } catch (error) {
+        console.error('从R2下载失败:', error);
+        showNotification('下载失败: ' + error.message, 'error');
+    }
+}
+async function testDatabaseConnection() {
+    const statusElement = document.getElementById('db-connection-status');
+    const timeElement = document.getElementById('db-response-time');
+
+    if (statusElement) {
+        statusElement.textContent = '测试中...';
+        statusElement.style.background = '#f39c12'; // 橙色
+    }
+
+    if (timeElement) {
+        timeElement.textContent = '--';
+    }
+
+    try {
+        const response = await fetch('/api/system/db-test');
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                if (statusElement) {
+                    statusElement.textContent = '✅ 正常';
+                    statusElement.style.background = '#27ae60'; // 绿色
+                }
+                if (timeElement && result.response_time_ms) {
+                    timeElement.textContent = `${result.response_time_ms}ms`;
+                }
+                showNotification('数据库连接正常！', 'success');
+            } else {
+                if (statusElement) {
+                    statusElement.textContent = '❌ 异常';
+                    statusElement.style.background = '#e74c3c'; // 红色
+                }
+                if (timeElement) {
+                    timeElement.textContent = '--';
+                }
+                showNotification('数据库连接异常: ' + (result.message || '未知错误'), 'error');
+            }
+        } else {
+            if (statusElement) {
+                statusElement.textContent = '❌ 失败';
+                statusElement.style.background = '#e74c3c'; // 红色
+            }
+            if (timeElement) {
+                timeElement.textContent = '--';
+            }
+            showNotification('数据库连接测试失败', 'error');
+        }
+    } catch (error) {
+        console.error('测试数据库连接失败:', error);
+        if (statusElement) {
+            statusElement.textContent = '❌ 错误';
+            statusElement.style.background = '#e74c3c'; // 红色
+        }
+        if (timeElement) {
+            timeElement.textContent = '--';
+        }
+        showNotification('测试失败: ' + error.message, 'error');
+    }
+}
+
+// 刷新同步历史
+async function refreshBackupHistory() {
+    try {
+        const response = await fetch('/api/backup/history');
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                const backups = result.backups || [];
+                updateBackupHistory(backups);
+
+                // 更新最后同步信息
+                if (backups.length > 0) {
+                    const latestBackup = backups[0]; // 最新的同步
+                    updateLastBackupInfo({
+                        created_at: latestBackup.created_at,
+                        size: latestBackup.size
+                    });
+                }
+            } else {
+                console.error('获取同步历史失败:', result.error);
+            }
+        }
+    } catch (error) {
+        console.error('刷新同步历史失败:', error);
+    }
+}
+
+// 更新同步历史显示
+function updateBackupHistory(backups) {
+    const historyElement = document.getElementById('backup-history');
+    if (!historyElement) return;
+
+    if (backups.length === 0) {
+        historyElement.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 20px;">暂无同步记录</div>';
+        return;
+    }
+
+    let html = '';
+    backups.slice(0, 10).forEach(backup => { // 只显示最近10个
+        const date = new Date(backup.created_at).toLocaleString();
+        const size = backup.size ? formatFileSize(backup.size) : '未知';
+        html += `
+            <div style="padding: 8px 0; border-bottom: 1px solid var(--glass-border);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 500;">${date}</span>
+                    <span style="font-size: 0.8em; color: #6c757d;">${size}</span>
+                </div>
+                <div style="font-size: 0.8em; color: #6c757d; margin-top: 2px;">
+                    ${backup.filename || '未知文件名'}
+                </div>
+            </div>
+        `;
+    });
+
+    historyElement.innerHTML = html;
+}
+
+// 更新最后同步信息
+function updateLastBackupInfo(backupInfo) {
+    const timeElement = document.getElementById('last-db-backup');
+    const sizeElement = document.getElementById('db-backup-size');
+
+    if (timeElement && backupInfo.created_at) {
+        timeElement.textContent = new Date(backupInfo.created_at).toLocaleString();
+    }
+
+    if (sizeElement && backupInfo.size) {
+        sizeElement.textContent = formatFileSize(backupInfo.size);
+    }
+}
+
+// 更新R2同步状态
+function updateR2SyncStatus(syncInfo) {
+    const statusElement = document.getElementById('r2-sync-status');
+    const timeElement = document.getElementById('last-r2-sync');
+
+    if (statusElement) {
+        if (syncInfo && syncInfo.configured) {
+            statusElement.textContent = '✅ 已配置';
+            statusElement.style.background = '#27ae60'; // 绿色
+        } else {
+            statusElement.textContent = '❌ 未配置';
+            statusElement.style.background = '#e74c3c'; // 红色
+        }
+    }
+
+    if (timeElement) {
+        if (syncInfo && syncInfo.last_sync) {
+            timeElement.textContent = new Date(syncInfo.last_sync).toLocaleString();
+        } else if (syncInfo && syncInfo.timestamp) {
+            timeElement.textContent = new Date(syncInfo.timestamp).toLocaleString();
+        } else {
+            timeElement.textContent = '从未同步';
+        }
+    }
+}
+
+// 切换自动备份
+function toggleAutoBackup() {
+    const checkbox = document.querySelector('input[name="auto_backup_enabled"]');
+    const isEnabled = checkbox.checked;
+
+    showNotification(isEnabled ? '自动备份已启用' : '自动备份已禁用', 'info');
+}
+
+// 清理旧备份
+async function cleanupOldBackups() {
+    if (!confirm('确定要清理旧备份文件吗？此操作不可恢复！')) {
+        return;
+    }
+
+    try {
+        showNotification('正在清理旧备份...', 'info');
+
+        const response = await fetch('/api/backup/cleanup', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                showNotification(`清理完成！删除了 ${result.deleted_count || 0} 个旧备份文件`, 'success');
+                refreshBackupHistory();
+            } else {
+                showNotification('清理失败: ' + (result.error || '未知错误'), 'error');
+            }
+        } else {
+            showNotification('清理旧备份失败', 'error');
+        }
+    } catch (error) {
+        console.error('清理旧备份失败:', error);
+        showNotification('清理失败: ' + error.message, 'error');
+    }
+}
+
+// 保存备份配置
+async function saveBackupConfig() {
+    try {
+        const config = {};
+
+        // 收集自动备份设置
+        const autoBackupEnabled = document.querySelector('input[name="auto_backup_enabled"]');
+        if (autoBackupEnabled) {
+            config.auto_backup_enabled = autoBackupEnabled.checked;
+        }
+
+        // 收集备份间隔
+        const backupInterval = document.querySelector('select[name="backup_interval"]');
+        if (backupInterval) {
+            // 将字符串值转换为小时数
+            const intervalMap = {
+                'daily': 24,
+                'weekly': 168,
+                'monthly': 720
+            };
+            config.backup_interval = intervalMap[backupInterval.value] || 24;
+        }
+
+        // 收集最大备份数量
+        const maxBackups = document.querySelector('input[name="max_backups"]');
+        if (maxBackups) {
+            config.max_backups = parseInt(maxBackups.value) || 10;
+        }
+
+        // 收集保留天数
+        const retentionDays = document.querySelector('input[name="retention_days"]');
+        if (retentionDays) {
+            config.retention_days = parseInt(retentionDays.value) || 30;
+        }
+
+        const response = await fetch('/api/backup/config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(config)
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                showNotification('备份配置保存成功！', 'success');
+            } else {
+                showNotification('保存失败: ' + (result.error || '未知错误'), 'error');
+            }
+        } else {
+            showNotification('备份配置保存失败', 'error');
+        }
+    } catch (error) {
+        console.error('保存备份配置失败:', error);
+        showNotification('保存失败: ' + error.message, 'error');
+    }
+}
+
+// 格式化文件大小
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// 初始化数据备份页面
+async function initDataBackupPage() {
+    try {
+        // 刷新部署模式信息
+        await refreshDeploymentMode();
+
+        // 加载可用的部署模式选项
+        await loadAvailableModes();
+
+        // 加载备份配置
+        await loadBackupConfig();
+
+        // 刷新同步历史
+        await refreshBackupHistory();
+
+        // 加载系统资源信息
+        await loadSystemResources();
+
+        // 检查R2同步状态
+        await checkR2Status();
+
+        // 自动检查数据库连接状态
+        await testDatabaseConnection();
+
+    } catch (error) {
+        console.error('初始化数据备份页面失败:', error);
+    }
+}
+
+// 加载备份配置
+async function loadBackupConfig() {
+    try {
+        const response = await fetch('/api/backup/config');
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                const config = result.config;
+
+                // 更新表单值
+                const autoBackupEnabled = document.querySelector('input[name="auto_backup_enabled"]');
+                const backupInterval = document.querySelector('select[name="backup_interval"]');
+                const maxBackups = document.querySelector('input[name="max_backups"]');
+                const retentionDays = document.querySelector('input[name="retention_days"]');
+
+                if (autoBackupEnabled) autoBackupEnabled.checked = config.auto_backup_enabled;
+                if (backupInterval) {
+                    // 将小时数转换为字符串值
+                    const intervalReverseMap = {
+                        24: 'daily',
+                        168: 'weekly',
+                        720: 'monthly'
+                    };
+                    backupInterval.value = intervalReverseMap[config.backup_interval] || 'daily';
+                }
+                if (maxBackups) maxBackups.value = config.max_backups;
+                if (retentionDays) retentionDays.value = config.retention_days;
+
+                // 备份配置加载完成
+            }
+        } else {
+            console.error('加载备份配置失败:', response.status);
+        }
+    } catch (error) {
+        console.error('加载备份配置出错:', error);
+    }
+}
+
+// 加载系统资源信息
+async function loadSystemResources() {
+    try {
+        const response = await fetch('/api/system/resources');
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                updateSystemResources(result.resources);
+            }
+        }
+    } catch (error) {
+        console.error('加载系统资源信息失败:', error);
+    }
+}
+
+// 更新系统资源显示
+function updateSystemResources(resources) {
+    const memoryElement = document.getElementById('memory-usage');
+    const diskElement = document.getElementById('disk-usage');
+    const uptimeElement = document.getElementById('uptime');
+
+    if (memoryElement && resources.memory) {
+        memoryElement.textContent = `${resources.memory.used} / ${resources.memory.total}`;
+    }
+
+    if (diskElement && resources.disk) {
+        diskElement.textContent = `${resources.disk.used} / ${resources.disk.total}`;
+    }
+
+    if (uptimeElement && resources.uptime) {
+        uptimeElement.textContent = formatUptime(resources.uptime);
+    }
+}
+
+// 检查R2状态
+async function checkR2Status() {
+    try {
+        const response = await fetch('/api/system/r2-status');
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                updateR2SyncStatus(result.r2_status);
+            }
+        }
+    } catch (error) {
+        console.error('检查R2状态失败:', error);
+    }
+}
+
+// 格式化运行时间
+function formatUptime(seconds) {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+
+    if (days > 0) {
+        return `${days}天 ${hours}小时 ${minutes}分钟`;
+    } else if (hours > 0) {
+        return `${hours}小时 ${minutes}分钟`;
+    } else {
+        return `${minutes}分钟`;
+    }
+}
+
+// 页面加载时初始化数据备份功能
+document.addEventListener('DOMContentLoaded', function() {
+    // 检查当前是否在数据备份标签页，如果是则初始化
+    const dataBackupTab = document.getElementById('data-backup');
+    if (dataBackupTab && !dataBackupTab.classList.contains('active')) {
+        // 标签页未激活，不初始化
+        return;
+    }
+
+    // 延迟初始化，确保DOM完全加载
+    setTimeout(() => {
+        initDataBackupPage();
+    }, 500);
+});
+
+// 监听标签页切换事件
+document.addEventListener('click', function(e) {
+    if (e.target.closest('[data-tab="data-backup"]')) {
+        // 切换到数据备份标签页时初始化
+        setTimeout(() => {
+        initDataBackupPage();
+    }, 100);
+    }
+});
+
+// 监听页面可见性变化，当用户回到页面时重新检查数据库连接
+document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+        // 页面变为可见时，重新检查数据库连接状态
+        const dataBackupTab = document.getElementById('data-backup');
+        if (dataBackupTab && dataBackupTab.classList.contains('active')) {
+            // 只有在数据备份标签页激活时才检查
+            setTimeout(() => {
+                testDatabaseConnection();
+            }, 500);
+        }
+    }
+});
 </script>
 {% endblock %}

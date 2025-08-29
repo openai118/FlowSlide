@@ -2,6 +2,8 @@
 Database management API endpoints
 """
 
+import logging
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -12,6 +14,7 @@ from ..database.migrations import migration_manager
 from ..services.db_project_manager import DatabaseProjectManager
 
 router = APIRouter(prefix="/api/database", tags=["database"])
+logger = logging.getLogger(__name__)
 
 
 class HealthCheckResponse(BaseModel):
@@ -363,6 +366,58 @@ async def trigger_manual_sync():
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to trigger sync: {str(e)}")
+
+
+@router.post("/sync/to-external")
+async def sync_to_external():
+    """同步本地数据到外部数据库"""
+    try:
+        from ..database import db_manager
+        from ..services.data_sync_service import sync_service
+
+        if not db_manager.external_engine:
+            raise HTTPException(status_code=400, detail="外部数据库未配置")
+
+        logger.info("🔄 Starting manual sync to external database...")
+
+        # 执行本地到外部的同步
+        await sync_service._sync_local_to_external()
+
+        return {
+            "success": True,
+            "message": "数据同步到外部数据库成功",
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Sync to external failed: {e}")
+        raise HTTPException(status_code=500, detail=f"同步到外部数据库失败: {str(e)}")
+
+
+@router.post("/sync/from-external")
+async def sync_from_external():
+    """从外部数据库恢复数据到本地"""
+    try:
+        from ..database import db_manager
+        from ..services.data_sync_service import sync_service
+
+        if not db_manager.external_engine:
+            raise HTTPException(status_code=400, detail="外部数据库未配置")
+
+        logger.info("🔄 Starting manual sync from external database...")
+
+        # 执行外部到本地的同步
+        await sync_service._sync_external_to_local()
+
+        return {
+            "success": True,
+            "message": "从外部数据库恢复数据成功",
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Sync from external failed: {e}")
+        raise HTTPException(status_code=500, detail=f"从外部数据库恢复失败: {str(e)}")
 
 
 @router.get("/sync/config")

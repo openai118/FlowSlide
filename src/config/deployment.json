@@ -1,0 +1,27 @@
+{
+  "enabled": true,
+  "auto_switch": true,
+  "check_interval": 60,
+  "max_switch_attempts": 3,
+  "switch_timeout": 1800,
+  "rollback_enabled": true,
+  "data_backup_before_switch": true,
+  "notify_on_switch": true,
+  "maintenance_mode": false,
+  "force_mode": "local_external_r2",
+  "preferred_modes": [
+    "local_external_r2",
+    "local_external",
+    "local_r2",
+    "local_only"
+  ],
+  "restricted_modes": [],
+  "switch_triggers": [
+    "auto",
+    "manual"
+  ],
+  "load_threshold": 0.8,
+  "error_rate_threshold": 0.1,
+  "notification_webhook": null,
+  "notification_email": null
+}

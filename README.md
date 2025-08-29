@@ -299,22 +299,30 @@ python security/security_scan.py
 
 ### 📦 自动备份到 Cloudflare R2
 
-```bash
-# 配置 R2 环境变量
-export R2_ACCESS_KEY_ID=your_access_key
-export R2_SECRET_ACCESS_KEY=your_secret_key
-export R2_ENDPOINT=https://your-account.r2.cloudflarestorage.com
-export R2_BUCKET_NAME=your-backup-bucket
+系统会自动将备份文件上传到配置的 Cloudflare R2 存储桶中，无需手动操作。
 
-# 运行备份
-./backup_to_r2_enhanced.sh
-```
+**配置要求：**
+- 设置以下环境变量：
+  ```bash
+  R2_ACCESS_KEY_ID=your_access_key
+  R2_SECRET_ACCESS_KEY=your_secret_key
+  R2_ENDPOINT=https://your-account.r2.cloudflarestorage.com
+  R2_BUCKET_NAME=your-backup-bucket
+  ```
+
+**备份流程：**
+1. 系统自动创建数据库和文件备份
+2. 使用 boto3 将备份文件上传到 R2
+3. 自动清理过期备份（默认30天）
 
 ### 🔄 从备份恢复
 
+目前恢复功能需要手动从R2存储桶下载备份文件。如需恢复功能，可以使用R2控制台或AWS CLI工具。
+
+**临时恢复方法：**
 ```bash
-# 从 R2 恢复数据库
-./restore_from_r2.sh backup_filename.sql.gz
+# 使用AWS CLI从R2下载备份（需要配置AWS CLI使用R2端点）
+aws s3 cp s3://your-bucket/backups/YYYY-MM-DD/ ./restore/ --endpoint-url https://your-account.r2.cloudflarestorage.com
 ```
 
 ## 🏗️ 架构设计

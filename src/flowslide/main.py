@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__ as FS_VERSION
+from .api.backup_api import router as backup_router
 from .api.config_api import router as config_router
 from .api.database_api import router as database_router
 from .api.deployment_api import router as deployment_router
@@ -21,6 +22,7 @@ from .api.flowslide_api import router as flowslide_router
 from .api.global_master_template_api import router as template_api_router
 from .api.image_api import router as image_router
 from .api.openai_compat import router as openai_router
+from .api.system_api import router as system_router
 from .auth import auth_router, create_auth_middleware
 from .database.create_default_template import ensure_default_templates_exist_first_time
 from .database.database import init_db
@@ -209,9 +211,12 @@ app.middleware("http")(auth_middleware)
 
 # Include routers
 app.include_router(auth_router, prefix="", tags=["Authentication"])
+app.include_router(backup_router, tags=["Backup Management"])
 app.include_router(config_router, prefix="", tags=["Configuration Management"])
+app.include_router(database_router, prefix="", tags=["Database Management"])
 app.include_router(deployment_router, prefix="/api/deployment", tags=["Deployment Mode Management"])
 app.include_router(image_router, prefix="", tags=["Image Service"])
+app.include_router(system_router, tags=["System Monitoring"])
 
 app.include_router(openai_router, prefix="/v1", tags=["OpenAI Compatible"])
 app.include_router(flowslide_router, prefix="/api", tags=["FlowSlide API"])

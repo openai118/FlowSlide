@@ -67,7 +67,7 @@ class DeploymentModeManager:
     def _build_compatibility_matrix(self) -> Dict[str, List[str]]:
         """构建模式兼容性矩阵"""
         return {
-            "local_only": ["local_external", "local_r2"],
+            "local_only": ["local_external", "local_r2", "local_external_r2"],
             "local_external": ["local_only", "local_external_r2"],
             "local_r2": ["local_only", "local_external_r2"],
             "local_external_r2": ["local_external", "local_r2"]
@@ -91,6 +91,14 @@ class DeploymentModeManager:
                 "estimated_duration": 600,  # 10分钟
                 "rollback_supported": True,
                 "pre_switch_checks": ["r2_connection", "data_backup"],
+                "post_switch_actions": ["sync_initial_data", "update_config"]
+            },
+            "local_only->local_external_r2": {
+                "transition_type": ModeTransition.UPGRADE,
+                "data_migration_required": True,
+                "estimated_duration": 900,  # 15分钟
+                "rollback_supported": True,
+                "pre_switch_checks": ["external_db_connection", "r2_connection", "data_backup"],
                 "post_switch_actions": ["sync_initial_data", "update_config"]
             },
 
@@ -151,6 +159,27 @@ class DeploymentModeManager:
 
     def detect_current_mode(self) -> DeploymentMode:
         """检测当前部署模式"""
+        # 首先检查配置文件中是否有用户保存的模式选择
+        try:
+            from .deployment_config_manager import config_manager
+            config = config_manager.load_config()
+            if config.force_mode:
+                try:
+                    return DeploymentMode(config.force_mode.lower())
+                except ValueError:
+                    logger.warning(f"配置文件中的无效模式: {config.force_mode}")
+        except Exception as e:
+            logger.warning(f"加载配置文件失败: {e}")
+
+        # 检查环境变量中的强制模式
+        forced_mode = os.getenv("FORCE_DEPLOYMENT_MODE")
+        if forced_mode:
+            try:
+                return DeploymentMode(forced_mode.lower())
+            except ValueError:
+                logger.warning(f"环境变量中的无效强制模式: {forced_mode}")
+
+        # 自动检测模式（基于环境变量）
         database_url = os.getenv("DATABASE_URL", "")
         has_r2 = bool(os.getenv("R2_ACCESS_KEY_ID"))
 
@@ -166,14 +195,6 @@ class DeploymentModeManager:
             else:
                 # 其他情况默认为外部数据库
                 has_external_db = True
-
-        # 强制模式覆盖（如果设置了FORCE_DEPLOYMENT_MODE）
-        forced_mode = os.getenv("FORCE_DEPLOYMENT_MODE")
-        if forced_mode:
-            try:
-                return DeploymentMode(forced_mode.lower())
-            except ValueError:
-                logger.warning(f"无效的强制模式: {forced_mode}")
 
         # 自动检测模式
         if has_external_db and has_r2:
@@ -355,6 +376,8 @@ class DeploymentModeManager:
                 await self._migrate_local_to_external()
             elif self.switch_context.to_mode == DeploymentMode.LOCAL_R2:
                 await self._migrate_local_to_r2()
+            elif self.switch_context.to_mode == DeploymentMode.LOCAL_EXTERNAL_R2:
+                await self._migrate_local_to_external_r2()
 
         elif self.switch_context.from_mode == DeploymentMode.LOCAL_EXTERNAL:
             if self.switch_context.to_mode == DeploymentMode.LOCAL_EXTERNAL_R2:
@@ -372,6 +395,18 @@ class DeploymentModeManager:
 
         # 更新当前模式
         self.current_mode = target_mode
+
+        # 保存用户选择的模式到配置文件
+        try:
+            from .deployment_config_manager import config_manager
+            config = config_manager.load_config()
+            config.force_mode = target_mode.value
+            if config_manager.save_config(config):
+                logger.info(f"用户选择的模式已保存到配置文件: {target_mode.value}")
+            else:
+                logger.error("保存用户选择的模式到配置文件失败")
+        except Exception as e:
+            logger.error(f"保存用户选择的模式失败: {e}")
 
         # 重新加载同步策略
         # 这里可以触发配置重新加载
@@ -478,6 +513,12 @@ class DeploymentModeManager:
     async def _migrate_local_to_r2(self) -> None:
         """从本地迁移到R2"""
         logger.info("执行本地到R2的数据迁移")
+
+    async def _migrate_local_to_external_r2(self) -> None:
+        """从本地迁移到外部数据库+R2"""
+        logger.info("执行本地到外部数据库+R2的数据迁移")
+        # 这个迁移需要同时设置外部数据库和R2连接
+        # 可以结合现有的迁移逻辑
 
     async def _migrate_external_to_external_r2(self) -> None:
         """从外部数据库迁移到外部数据库+R2"""
