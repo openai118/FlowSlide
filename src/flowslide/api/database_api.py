@@ -322,3 +322,78 @@ async def get_backup_info():
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get backup info: {str(e)}")
+
+
+# 同步相关API端点
+class SyncStatusResponse(BaseModel):
+    """同步状态响应模型"""
+    enabled: bool
+    running: bool
+    last_sync: Optional[str]
+    mode: str
+    interval: int
+    directions: List[str]
+    external_db_type: Optional[str]
+    external_db_configured: bool
+
+
+class SyncTriggerResponse(BaseModel):
+    """同步触发响应模型"""
+    status: str
+    message: str
+
+
+@router.get("/sync/status", response_model=SyncStatusResponse)
+async def get_sync_status():
+    """获取数据同步状态"""
+    try:
+        from ..services.data_sync_service import get_sync_status
+        status = await get_sync_status()
+        return status
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get sync status: {str(e)}")
+
+
+@router.post("/sync/trigger", response_model=SyncTriggerResponse)
+async def trigger_manual_sync():
+    """手动触发数据同步"""
+    try:
+        from ..services.data_sync_service import trigger_manual_sync
+        result = await trigger_manual_sync()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to trigger sync: {str(e)}")
+
+
+@router.get("/sync/config")
+async def get_sync_config():
+    """获取同步配置信息"""
+    try:
+        import os
+        from ..database import db_manager
+
+        config = {
+            "sync_interval_seconds": int(os.getenv("SYNC_INTERVAL", "300")),
+            "sync_mode": os.getenv("SYNC_MODE", "incremental"),
+            "database_mode": os.getenv("DATABASE_MODE", "local"),
+            "external_database_configured": bool(db_manager.external_url),
+            "external_database_type": db_manager.database_type if db_manager.external_engine else None,
+            "sync_enabled": db_manager.sync_enabled,
+            "sync_directions": [],
+            "recommendations": []
+        }
+
+        # 根据配置给出建议
+        if not db_manager.external_url:
+            config["recommendations"].append("未配置外部数据库，数据同步已禁用")
+        elif db_manager.sync_enabled:
+            config["sync_directions"] = ["local_to_external", "external_to_local"]
+            config["recommendations"].append("双向同步已启用：本地 ↔ 外部数据库")
+        elif db_manager.database_type == "postgresql":
+            config["sync_directions"] = ["external_to_local"]
+            config["recommendations"].append("单向同步已启用：外部数据库 → 本地数据库")
+
+        return config
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get sync config: {str(e)}")

@@ -5,8 +5,33 @@
 import os
 from typing import Optional
 
-# 数据库配置 - 本地开发使用相对路径
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/flowslide.db")
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("Environment variables loaded from .env file")
+except ImportError:
+    print("⚠️ python-dotenv not installed, using system environment variables")
+
+# 数据库配置策略：
+# 1. 优先使用本地SQLite数据库（快速启动）
+# 2. 如果配置了外部数据库，将其作为备份/同步目标
+# 3. 支持R2云备份作为最终保障
+
+# 本地数据库（始终优先使用）
+LOCAL_DATABASE_URL = "sqlite:///./data/flowslide.db"
+
+# 外部数据库（可选，用于备份/同步）
+EXTERNAL_DATABASE_URL = os.getenv("DATABASE_URL", "")
+
+# 数据库模式选择
+DATABASE_MODE = os.getenv("DATABASE_MODE", "local")  # local, external, hybrid
+
+# 最终使用的数据库URL
+if DATABASE_MODE == "external" and EXTERNAL_DATABASE_URL:
+    DATABASE_URL = EXTERNAL_DATABASE_URL
+else:
+    DATABASE_URL = LOCAL_DATABASE_URL
 
 
 # 异步数据库URL配置

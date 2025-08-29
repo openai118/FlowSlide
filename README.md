@@ -20,18 +20,129 @@
 - **多格式导出**: HTML, PDF, PPTX 等多种格式
 - **丰富模板系统**: 内置多种专业演示模板
 
-### 🛡️ 通用数据库监控 (新增)
-- **通用 PostgreSQL 支持**: 兼容原生 PostgreSQL、Supabase、Neon、AWS RDS、Google Cloud SQL、Azure Database 等
-- **实时健康检查**: 连接、权限、性能、索引使用情况全面监控
-- **智能诊断工具**: 慢查询分析、性能瓶颈识别、优化建议生成
-- **自动化报告**: JSON 格式详细报告，支持持续集成
-- **灵活配置**: 支持 DATABASE_URL 和分离环境变量两种配置方式
+### 🔄 智能数据库架构
 
-### 💾 自动化备份系统 (新增)
-- **Cloudflare R2 集成**: 企业级对象存储备份
-- **定时备份调度**: 可配置的自动备份策略
-- **增量备份支持**: 高效的存储空间利用
-- **一键恢复功能**: 快速灾难恢复能力
+FlowSlide 采用智能数据库架构，优先保证运行速度和可靠性：
+
+#### 数据库模式选择
+
+**1. 本地优先模式 (DATABASE_MODE=local)** - 推荐用于开发和个人使用
+- ✅ **快速启动**：使用本地SQLite数据库，无需外部依赖
+- 🔄 **可选同步**：可配置外部数据库作为备份/同步目标
+- ☁️ **云备份**：支持R2自动备份
+- 🎯 **最佳实践**：开发环境默认选择
+
+**2. 外部数据库模式 (DATABASE_MODE=external)** - 推荐用于生产环境
+- 🏢 **企业级**：直接使用PostgreSQL等企业数据库
+- ⚡ **高性能**：连接池和性能优化
+- 🔧 **运维友好**：完整的监控和维护工具
+
+**3. 混合模式 (DATABASE_MODE=hybrid)** - 推荐用于分布式部署
+- 🔄 **实时同步**：本地和外部数据库双写
+- 🛡️ **高可用**：任意一端故障自动切换
+- 📊 **负载均衡**：智能读写分离
+
+#### 配置示例
+
+```bash
+# 开发环境 - 本地优先
+DATABASE_MODE=local
+DATABASE_URL=postgresql://user:pass@host:port/db  # 可选，用于备份
+
+# 生产环境 - 外部数据库
+DATABASE_MODE=external
+DATABASE_URL=postgresql://user:pass@host:port/db
+
+# 分布式 - 混合模式
+DATABASE_MODE=hybrid
+DATABASE_URL=postgresql://user:pass@host:port/db
+ENABLE_DATA_SYNC=true
+SYNC_INTERVAL=300
+```
+
+#### 🛡️ 三层备份保障
+
+##### 1. 本地自动备份
+- 📁 定时本地快照
+- 🔧 自动清理过期备份
+- 📊 备份状态监控
+
+##### 2. 外部数据库同步
+- 🔄 实时/定时数据同步
+- ⚡ 增量同步优化
+- 🛡️ 冲突解决机制
+
+##### 3. 云端R2备份
+- ☁️ Cloudflare R2对象存储
+- 🌐 全球CDN加速
+- 🔒 企业级安全性
+- 💰 成本优化存储
+
+### 🔄 智能双向同步系统
+
+FlowSlide 集成了先进的智能双向同步系统，支持本地SQLite与外部PostgreSQL数据库之间的无缝数据同步：
+
+#### 同步特性
+
+##### 🔄 双向自动同步
+- 📤 **本地→外部**: 新建用户和数据自动同步到云端
+- 📥 **外部→本地**: 云端数据自动同步到本地SQLite
+- ⏰ **定时同步**: 每5分钟自动执行增量同步
+- 🔍 **智能检测**: 自动检测数据库配置并启用相应同步策略
+
+##### 🛡️ 冲突解决机制
+- 🔄 **版本控制**: 基于时间戳的冲突检测和解决
+- 📊 **数据合并**: 智能合并重复记录，避免数据丢失
+- 📝 **操作日志**: 完整的同步操作记录和状态跟踪
+
+##### ⚡ 性能优化
+- 🚀 **增量同步**: 只同步变更数据，减少网络传输
+- 🏗️ **批量处理**: 批量操作提高同步效率
+- 💾 **本地缓存**: 本地SQLite保证快速访问
+
+#### 同步配置
+
+```bash
+# 启用数据同步
+ENABLE_DATA_SYNC=true
+
+# 同步间隔（秒）
+SYNC_INTERVAL=300
+
+# 同步方向（可组合）
+SYNC_DIRECTIONS=local_to_external,external_to_local
+
+# 同步模式
+SYNC_MODE=incremental  # incremental 或 full
+```
+
+#### 同步管理API
+
+```bash
+# 获取同步状态
+GET /api/database/sync/status
+
+# 手动触发同步
+POST /api/database/sync/trigger
+
+# 获取同步配置
+GET /api/database/sync/config
+```
+
+#### 同步演示
+
+运行同步功能演示：
+
+```bash
+# 运行演示脚本
+python sync_demo.py
+
+# 启动应用程序
+python -m src.flowslide.main
+
+# 访问同步状态页面
+# http://localhost:8000/api/database/sync/status
+```
 
 ### 🐳 容器化部署
 - **Docker 多阶段构建**: 优化的镜像大小和安全性
@@ -269,7 +380,7 @@ SELECT schema_name FROM information_schema.schemata;
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
 -- 检查慢查询
-SELECT query, mean_time FROM pg_stat_statements ORDER BY mean_time DESC LIMIT 10;
+SELECT query, mean_time FROM pg_stat_statements ORDER BY_mean_time DESC LIMIT 10;
 ```
 
 ## 📚 文档
@@ -307,7 +418,7 @@ SELECT query, mean_time FROM pg_stat_statements ORDER BY mean_time DESC LIMIT 10
   - 初始化数据库、安全、上传、缓存、默认管理员与验证码配置更健壮。
 - AI 提供商配置：
   - 新增 Anthropic `base_url`（默认 `https://api.anthropic.com`）；
-  - 新增 Google Generative AI `base_url`（默认 `https://generativelanguage.googleapis.com`）；
+  - 新增 Google Generative AI `base_url`（默认 `https://generativelanguage.googleapis`）；
   - 前端测试与后端运行均尊重自定义 Base URL。
 - 鉴权与体验：
   - `/home` 保持公共页面，登录后导航栏状态正确；
@@ -315,7 +426,7 @@ SELECT query, mean_time FROM pg_stat_statements ORDER BY mean_time DESC LIMIT 10
 - 仓库与文档：
   - 将 `docs/_site/` 加入 `.gitignore`；清理临时产物，移除本地 SQLite 数据库文件出仓；
   - 元数据指向 `openai118/FlowSlide`，完善部署/集成文档链接。
-  
+
 作为首个公开版本（Initial Release），聚合了近期全部改动并完成基础功能与部署路径的打磨。
 
 ## 📄 许可证

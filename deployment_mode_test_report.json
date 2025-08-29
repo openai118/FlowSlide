@@ -1,0 +1,82 @@
+{
+  "summary": {
+    "total_tests": 12,
+    "passed": 12,
+    "failed": 0,
+    "success_rate": "100.0%"
+  },
+  "results": [
+    {
+      "test": "模式检测 - LOCAL_ONLY模式",
+      "expected": "local_only",
+      "actual": "local_only",
+      "success": true
+    },
+    {
+      "test": "模式检测 - LOCAL_EXTERNAL模式",
+      "expected": "local_external",
+      "actual": "local_external",
+      "success": true
+    },
+    {
+      "test": "模式检测 - LOCAL_R2模式",
+      "expected": "local_r2",
+      "actual": "local_r2",
+      "success": true
+    },
+    {
+      "test": "模式检测 - LOCAL_EXTERNAL_R2模式",
+      "expected": "local_external_r2",
+      "actual": "local_external_r2",
+      "success": true
+    },
+    {
+      "test": "模式切换 - LOCAL_ONLY → LOCAL_R2",
+      "expected": true,
+      "actual": true,
+      "success": true
+    },
+    {
+      "test": "模式切换 - LOCAL_R2 → LOCAL_EXTERNAL_R2",
+      "expected": true,
+      "actual": true,
+      "success": true
+    },
+    {
+      "test": "模式切换 - LOCAL_EXTERNAL_R2 → LOCAL_EXTERNAL",
+      "expected": true,
+      "actual": true,
+      "success": true
+    },
+    {
+      "test": "模式切换 - LOCAL_EXTERNAL → LOCAL_ONLY",
+      "expected": true,
+      "actual": true,
+      "success": true
+    },
+    {
+      "test": "配置验证 - LOCAL_ONLY",
+      "expected": true,
+      "actual": true,
+      "success": true
+    },
+    {
+      "test": "配置验证 - LOCAL_EXTERNAL",
+      "expected": true,
+      "actual": true,
+      "success": true
+    },
+    {
+      "test": "配置验证 - LOCAL_R2",
+      "expected": true,
+      "actual": true,
+      "success": true
+    },
+    {
+      "test": "配置验证 - LOCAL_EXTERNAL_R2",
+      "expected": true,
+      "actual": true,
+      "success": true
+    }
+  ]
+}

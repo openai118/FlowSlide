@@ -2,7 +2,7 @@
 Database package for FlowSlide
 """
 
-from .database import SessionLocal, engine, get_async_db, get_db, init_db
+from .database import SessionLocal, engine, get_async_db, get_db, init_db, db_manager
 from .health_check import health_checker
 from .migrations import migration_manager
 from .models import PPTTemplate, Project, ProjectVersion, SlideData, TodoBoard, TodoStage
@@ -22,6 +22,7 @@ __all__ = [
     "get_db",
     "get_async_db",
     "init_db",
+    "db_manager",
     "Project",
     "TodoBoard",
     "TodoStage",

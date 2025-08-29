@@ -26,6 +26,7 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
     last_login: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     def set_password(self, password: str):
@@ -254,3 +255,67 @@ class GlobalMasterTemplate(Base):
     created_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # 创建者
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
     updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
+
+
+class SystemConfig(Base):
+    """System configuration model for storing key system settings"""
+
+    __tablename__ = "system_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    config_key: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    config_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    config_type: Mapped[str] = mapped_column(String(50), nullable=False)  # text, password, url, number, boolean, json
+    category: Mapped[str] = mapped_column(String(100), nullable=False, index=True)  # ai_providers, database, security, etc.
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_sensitive: Mapped[bool] = mapped_column(Boolean, default=False)  # 是否为敏感信息
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)  # 是否为系统级配置
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        return {
+            "id": self.id,
+            "config_key": self.config_key,
+            "config_value": self.config_value,
+            "config_type": self.config_type,
+            "category": self.category,
+            "description": self.description,
+            "is_sensitive": self.is_sensitive,
+            "is_system": self.is_system,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+
+class AIProviderConfig(Base):
+    """AI provider configuration model for storing AI provider settings"""
+
+    __tablename__ = "ai_provider_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    provider_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)  # openai, anthropic, google, etc.
+    config_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    config_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    config_type: Mapped[str] = mapped_column(String(50), nullable=False)  # text, password, url, number, boolean
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    priority: Mapped[int] = mapped_column(Integer, default=0)  # 配置优先级
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        return {
+            "id": self.id,
+            "provider_name": self.provider_name,
+            "config_key": self.config_key,
+            "config_value": self.config_value,
+            "config_type": self.config_type,
+            "description": self.description,
+            "is_active": self.is_active,
+            "priority": self.priority,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }

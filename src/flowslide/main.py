@@ -2,6 +2,7 @@
 Main FastAPI application entry point
 """
 
+import asyncio
 import logging
 import os
 from typing import Any, Callable, Protocol
@@ -15,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from . import __version__ as FS_VERSION
 from .api.config_api import router as config_router
 from .api.database_api import router as database_router
+from .api.deployment_api import router as deployment_router
 from .api.flowslide_api import router as flowslide_router
 from .api.global_master_template_api import router as template_api_router
 from .api.image_api import router as image_router
@@ -110,40 +112,73 @@ async def add_security_headers(request, call_next):
 async def startup_event():
     """Initialize database on startup"""
     try:
-        # Get database path from config
-        import urllib.parse
+        from .database.database import initialize_database, update_session_makers
 
-        from .core.simple_config import DATABASE_URL
+        # 初始化数据库管理器
+        db_mgr = initialize_database()
+        logger.info(f"Database manager initialized: {db_mgr.database_type}")
 
-        # Extract database file path from URL
-        parsed = urllib.parse.urlparse(DATABASE_URL)
-        if parsed.scheme == "sqlite":
-            # Remove leading /// and get relative path
-            db_file_path = parsed.path.lstrip("/")
-            # Ensure data directory exists
-            os.makedirs(os.path.dirname(db_file_path), exist_ok=True)
-        else:
-            db_file_path = None
+        # 更新session makers
+        update_session_makers()
 
+        # 确保数据目录存在
+        if db_mgr.database_type == "sqlite":
+            import urllib.parse
+            from .core.simple_config import LOCAL_DATABASE_URL
+
+            parsed = urllib.parse.urlparse(LOCAL_DATABASE_URL)
+            if parsed.scheme == "sqlite":
+                db_file_path = parsed.path.lstrip("/")
+                os.makedirs(os.path.dirname(db_file_path), exist_ok=True)
+
+        # 检查是否是首次运行
+        db_file_path = "./data/flowslide.db" if db_mgr.database_type == "sqlite" else None
         db_exists = db_file_path and os.path.exists(db_file_path)
 
-        logger.info(f"Initializing database... URL: {DATABASE_URL}")
+        logger.info(f"Initializing database... Type: {db_mgr.database_type}")
         await init_db()
         logger.info("Database initialized successfully")
 
+        # 如果配置了外部数据库，启动数据同步
+        if db_mgr.sync_enabled:
+            from .services.data_sync_service import start_data_sync
+            asyncio.create_task(start_data_sync())
+
+        # 如果配置了R2，启动定期备份
+        if os.getenv("R2_ACCESS_KEY_ID"):
+            from .services.backup_service import create_backup
+            asyncio.create_task(schedule_backup(create_backup))
+
         # Only import templates if database file didn't exist before (first time setup)
-        if not db_exists:
+        if not db_exists and db_mgr.database_type == "sqlite":
             logger.info("First time setup detected - importing templates from examples...")
             template_ids = await ensure_default_templates_exist_first_time()
             logger.info(
                 f"Template initialization completed. {len(template_ids)} templates available."
             )
         else:
-            logger.info("Database already exists - skipping template import")
+            logger.info("Database already exists or using external DB - skipping template import")
 
     except Exception as e:
         logger.error(f"Failed to initialize application: {e}")
         raise
+
+
+async def schedule_backup(backup_func):
+    """定期备份调度"""
+    import asyncio
+
+    # 首次运行延迟10分钟
+    await asyncio.sleep(600)
+
+    while True:
+        try:
+            # 每24小时备份一次
+            await asyncio.sleep(24 * 60 * 60)
+            await backup_func("full")
+        except Exception as e:
+            logger.error(f"Scheduled backup error: {e}")
+            await asyncio.sleep(60 * 60)  # 出错后等待1小时重试
 
 
 @app.on_event("shutdown")
@@ -175,6 +210,7 @@ app.middleware("http")(auth_middleware)
 # Include routers
 app.include_router(auth_router, prefix="", tags=["Authentication"])
 app.include_router(config_router, prefix="", tags=["Configuration Management"])
+app.include_router(deployment_router, prefix="/api/deployment", tags=["Deployment Mode Management"])
 app.include_router(image_router, prefix="", tags=["Image Service"])
 
 app.include_router(openai_router, prefix="/v1", tags=["OpenAI Compatible"])
