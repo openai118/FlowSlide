@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import shutil
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -295,14 +296,77 @@ class BackupService:
         try:
             logger.info(f"🔄 Restoring backup: {backup_name}")
 
-            # 停止服务（如果需要）
-            # 解压备份
-            # 恢复数据库
-            # 恢复配置文件
-            # 恢复上传文件
-            # 重启服务
+            # 创建临时恢复目录
+            restore_temp_dir = self.backup_dir / f"restore_temp_{int(time.time())}"
+            restore_temp_dir.mkdir(exist_ok=True)
 
-            logger.info("✅ Backup restored successfully")
+            def extract_and_restore():
+                import zipfile
+                import shutil
+                from pathlib import Path
+
+                try:
+                    # 解压备份文件
+                    logger.info(f"📦 Extracting backup: {backup_name}")
+                    with zipfile.ZipFile(str(backup_path), 'r') as zip_ref:
+                        zip_ref.extractall(str(restore_temp_dir))
+
+                    # 查找数据库文件
+                    db_files = list(restore_temp_dir.glob("*.db"))
+                    if not db_files:
+                        raise Exception("备份文件中没有找到数据库文件")
+
+                    db_file = db_files[0]
+                    logger.info(f"🗄️ Found database file: {db_file.name}")
+
+                    # 备份当前数据库
+                    current_db_path = Path("./data/flowslide.db")
+                    if current_db_path.exists():
+                        backup_current = current_db_path.with_suffix('.db.backup')
+                        shutil.copy2(str(current_db_path), str(backup_current))
+                        logger.info(f"💾 Backed up current database to: {backup_current}")
+
+                    # 恢复数据库文件
+                    shutil.copy2(str(db_file), str(current_db_path))
+                    logger.info(f"✅ Database restored from: {db_file.name}")
+
+                    # 恢复上传文件（如果存在）
+                    uploads_dir = restore_temp_dir / "uploads"
+                    if uploads_dir.exists():
+                        target_uploads = Path("./uploads")
+                        if target_uploads.exists():
+                            shutil.rmtree(str(target_uploads))
+                        shutil.copytree(str(uploads_dir), str(target_uploads))
+                        logger.info("📁 Uploads directory restored")
+
+                    # 恢复配置文件（如果存在）
+                    config_files = list(restore_temp_dir.glob("*.json")) + list(restore_temp_dir.glob("*.yaml")) + list(restore_temp_dir.glob("*.yml"))
+                    for config_file in config_files:
+                        if "flowslide" in config_file.name.lower():
+                            target_config = Path(".") / config_file.name
+                            shutil.copy2(str(config_file), str(target_config))
+                            logger.info(f"⚙️ Config file restored: {config_file.name}")
+
+                    logger.info("✅ Backup restored successfully")
+                    return True
+
+                except Exception as e:
+                    logger.error(f"❌ Restore operation failed: {e}")
+                    # 尝试恢复原始数据库
+                    current_db_path = Path("./data/flowslide.db")
+                    backup_current = current_db_path.with_suffix('.db.backup')
+                    if backup_current.exists():
+                        shutil.copy2(str(backup_current), str(current_db_path))
+                        logger.info("🔄 Original database restored from backup")
+                    raise
+                finally:
+                    # 清理临时文件
+                    if restore_temp_dir.exists():
+                        shutil.rmtree(str(restore_temp_dir))
+                        logger.info("🧹 Temporary restore files cleaned up")
+
+            # 在线程池中运行恢复操作
+            await asyncio.to_thread(extract_and_restore)
             return True
 
         except Exception as e:
@@ -338,9 +402,13 @@ class BackupService:
             # 找到最新的备份文件
             latest_backup = max(response['Contents'], key=lambda x: x['LastModified'])
             backup_key = latest_backup['Key']
+            backup_size = latest_backup['Size']
             local_backup_path = self.backup_dir / Path(backup_key).name
 
-            logger.info(f"📥 Downloading latest backup from R2: {backup_key}")
+            logger.info(f"📥 Downloading latest backup from R2: {backup_key} (Size: {backup_size} bytes)")
+
+            # 确保备份目录存在
+            self.backup_dir.mkdir(exist_ok=True)
 
             # 下载备份文件
             await asyncio.to_thread(
@@ -350,7 +418,15 @@ class BackupService:
                 str(local_backup_path)
             )
 
-            logger.info(f"✅ Backup downloaded: {local_backup_path}")
+            # 验证下载的文件
+            if not local_backup_path.exists():
+                raise Exception("下载的文件不存在")
+
+            downloaded_size = local_backup_path.stat().st_size
+            if downloaded_size != backup_size:
+                raise Exception(f"文件下载不完整。期望: {backup_size} bytes, 实际: {downloaded_size} bytes")
+
+            logger.info(f"✅ Backup downloaded successfully: {local_backup_path} ({downloaded_size} bytes)")
 
             # 恢复备份
             success = await self.restore_backup(local_backup_path.name)
@@ -358,9 +434,10 @@ class BackupService:
             if success:
                 restore_info = {
                     "filename": local_backup_path.name,
-                    "size": local_backup_path.stat().st_size,
+                    "size": downloaded_size,
                     "timestamp": datetime.now().isoformat(),
                     "source": "r2",
+                    "r2_key": backup_key,
                     "success": True
                 }
                 logger.info(f"✅ R2 restore completed: {local_backup_path.name}")
