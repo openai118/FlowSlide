@@ -9,7 +9,6 @@ from fastapi import Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from ..database.database import get_db
 from ..database.models import User
 from .auth_service import get_auth_service
 
@@ -88,8 +87,8 @@ class AuthMiddleware:
         user = None
         if session_id:
             try:
-                db_gen = get_db()
-                db = next(db_gen)
+                from ..database.database import SessionLocal
+                db = SessionLocal()
                 try:
                     user = self.auth_service.get_user_by_session(db, session_id)
                 finally:
@@ -158,27 +157,35 @@ def require_admin(request: Request) -> User:
     return user
 
 
-def get_current_user_optional(request: Request, db: Session = Depends(get_db)) -> Optional[User]:
+def get_current_user_optional(request: Request) -> Optional[User]:
     """Get current user if authenticated, None otherwise"""
     session_id = request.cookies.get("session_id")
     if not session_id:
         return None
 
-    auth_service = get_auth_service()
-    return auth_service.get_user_by_session(db, session_id)
+    # Create database session
+    from ..database.database import SessionLocal
+    if SessionLocal is None:
+        return None
+    db = SessionLocal()
+    try:
+        auth_service = get_auth_service()
+        return auth_service.get_user_by_session(db, session_id)
+    finally:
+        db.close()
 
 
-def get_current_user_required(request: Request, db: Session = Depends(get_db)) -> User:
+def get_current_user_required(request: Request) -> User:
     """Get current user, raise exception if not authenticated"""
-    user = get_current_user_optional(request, db)
+    user = get_current_user_optional(request)
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required")
     return user
 
 
-def get_current_admin_user(request: Request, db: Session = Depends(get_db)) -> User:
+def get_current_admin_user(request: Request) -> User:
     """Get current admin user, raise exception if not admin"""
-    user = get_current_user_required(request, db)
+    user = get_current_user_required(request)
     if not user.is_admin:
         raise HTTPException(status_code=403, detail="Admin privileges required")
     return user
