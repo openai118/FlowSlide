@@ -5941,7 +5941,7 @@ function displayAvailableModes(data, selectedMode = null) {
 
     // 如果有当前模式，显示其信息
     if (data.current_mode) {
-        showCurrentModeInfo(data.available_modes.find(m => m.mode === data.current_mode));
+        showSelectedModeInfo(data.available_modes.find(m => m.mode === data.current_mode), data.current_mode);
     }
 }
 
