@@ -141,9 +141,14 @@ async def restore_from_r2():
         if not backup_service._is_r2_configured():
             raise HTTPException(status_code=400, detail="R2云存储未配置")
 
-        # 这里需要实现从R2下载并恢复的逻辑
-        # 暂时返回未实现
-        raise HTTPException(status_code=501, detail="R2恢复功能暂未实现")
+        # 实现R2恢复逻辑
+        restore_result = await backup_service.restore_from_r2()
+
+        logger.info(f"✅ R2 restore completed: {restore_result}")
+        return {
+            "message": "从R2恢复成功",
+            "restore_info": restore_result
+        }
 
     except HTTPException:
         raise

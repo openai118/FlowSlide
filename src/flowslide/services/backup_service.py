@@ -309,6 +309,74 @@ class BackupService:
             logger.error(f"❌ Restore failed: {e}")
             return False
 
+    async def restore_from_r2(self) -> Dict[str, Any]:
+        """从R2恢复最新的备份"""
+        if not self._is_r2_configured():
+            raise Exception("R2云存储未配置")
+
+        try:
+            logger.info("🔄 Starting R2 restore...")
+
+            # 创建S3客户端，配置为R2
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=self.r2_config['access_key'],
+                aws_secret_access_key=self.r2_config['secret_key'],
+                endpoint_url=self.r2_config['endpoint'],
+                region_name='auto'  # R2使用auto region
+            )
+
+            # 列出R2中的备份文件
+            response = s3_client.list_objects_v2(
+                Bucket=self.r2_config['bucket'],
+                Prefix='backups/'
+            )
+
+            if 'Contents' not in response or not response['Contents']:
+                raise Exception("R2中没有找到备份文件")
+
+            # 找到最新的备份文件
+            latest_backup = max(response['Contents'], key=lambda x: x['LastModified'])
+            backup_key = latest_backup['Key']
+            local_backup_path = self.backup_dir / Path(backup_key).name
+
+            logger.info(f"📥 Downloading latest backup from R2: {backup_key}")
+
+            # 下载备份文件
+            await asyncio.to_thread(
+                s3_client.download_file,
+                self.r2_config['bucket'],
+                backup_key,
+                str(local_backup_path)
+            )
+
+            logger.info(f"✅ Backup downloaded: {local_backup_path}")
+
+            # 恢复备份
+            success = await self.restore_backup(local_backup_path.name)
+
+            if success:
+                restore_info = {
+                    "filename": local_backup_path.name,
+                    "size": local_backup_path.stat().st_size,
+                    "timestamp": datetime.now().isoformat(),
+                    "source": "r2",
+                    "success": True
+                }
+                logger.info(f"✅ R2 restore completed: {local_backup_path.name}")
+                return restore_info
+            else:
+                raise Exception("备份恢复失败")
+
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_msg = e.response['Error']['Message']
+            logger.error(f"❌ R2 restore failed (AWS Error {error_code}): {error_msg}")
+            raise Exception(f"R2恢复失败: {error_msg}")
+        except Exception as e:
+            logger.error(f"❌ R2 restore failed: {e}")
+            raise
+
 
 # 创建全局备份服务实例
 backup_service = BackupService()

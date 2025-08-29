@@ -10,7 +10,7 @@ import time
 from typing import Dict, List, Any, Optional, Set
 from datetime import datetime, timedelta
 from enum import Enum
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import db_manager
@@ -598,13 +598,171 @@ class DataSyncManager:
 
     async def _sync_projects_local_to_external(self, batch_size: int):
         """批量同步本地项目到外部数据库"""
-        # 实现项目同步逻辑
-        pass
+        if not db_manager.external_engine:
+            return
+
+        try:
+            logger.info(f"🔄 Syncing local projects to external database (batch_size: {batch_size})...")
+
+            # 获取需要同步的项目
+            cutoff_time = self.last_sync_time or (datetime.now() - timedelta(hours=24))
+
+            def sync_projects():
+                from ..database.database import SessionLocal
+
+                with SessionLocal() as local_session:
+                    # 获取本地有变更的项目
+                    changed_projects = local_session.execute(
+                        text("SELECT * FROM projects WHERE created_at > :cutoff OR updated_at > :cutoff ORDER BY updated_at DESC LIMIT :batch_size"),
+                        {"cutoff": cutoff_time.timestamp(), "batch_size": batch_size}
+                    ).fetchall()
+
+                    if not changed_projects:
+                        logger.info("📭 No local project changes to sync")
+                        return
+
+                    logger.info(f"📤 Found {len(changed_projects)} local projects with changes")
+
+                    # 同步到外部数据库
+                    if db_manager.external_engine:
+                        with db_manager.external_engine.connect() as external_conn:
+                            for project in changed_projects:
+                                # 检查项目是否已存在
+                                existing = external_conn.execute(
+                                    text("SELECT id FROM projects WHERE project_id = :project_id"),
+                                    {"project_id": project.project_id}
+                                ).fetchone()
+
+                                if existing:
+                                    # 更新现有项目
+                                    external_conn.execute(
+                                        text("""
+                                            UPDATE projects SET
+                                                title = :title, scenario = :scenario, topic = :topic,
+                                                requirements = :requirements, status = :status, owner_id = :owner_id,
+                                                outline = :outline, slides_html = :slides_html, slides_data = :slides_data,
+                                                confirmed_requirements = :confirmed_requirements, project_metadata = :project_metadata,
+                                                version = :version, updated_at = :updated_at
+                                            WHERE project_id = :project_id
+                                        """),
+                                        {
+                                            "title": project.title, "scenario": project.scenario, "topic": project.topic,
+                                            "requirements": project.requirements, "status": project.status, "owner_id": project.owner_id,
+                                            "outline": project.outline, "slides_html": project.slides_html, "slides_data": project.slides_data,
+                                            "confirmed_requirements": project.confirmed_requirements, "project_metadata": project.project_metadata,
+                                            "version": project.version, "updated_at": project.updated_at or project.created_at,
+                                            "project_id": project.project_id
+                                        }
+                                    )
+                                else:
+                                    # 插入新项目
+                                    external_conn.execute(
+                                        text("""
+                                            INSERT INTO projects
+                                            (project_id, title, scenario, topic, requirements, status, owner_id, outline, slides_html, slides_data, confirmed_requirements, project_metadata, version, created_at, updated_at)
+                                            VALUES (:project_id, :title, :scenario, :topic, :requirements, :status, :owner_id, :outline, :slides_html, :slides_data, :confirmed_requirements, :project_metadata, :version, :created_at, :updated_at)
+                                        """),
+                                        {
+                                            "project_id": project.project_id, "title": project.title, "scenario": project.scenario, "topic": project.topic,
+                                            "requirements": project.requirements, "status": project.status, "owner_id": project.owner_id,
+                                            "outline": project.outline, "slides_html": project.slides_html, "slides_data": project.slides_data,
+                                            "confirmed_requirements": project.confirmed_requirements, "project_metadata": project.project_metadata,
+                                            "version": project.version, "created_at": project.created_at, "updated_at": project.updated_at or project.created_at
+                                        }
+                                    )
+
+                                logger.info(f"📤 Synced project {project.title} (ID: {project.project_id})")
+
+            await asyncio.to_thread(sync_projects)
+            logger.info("✅ Projects sync local to external completed")
+
+        except Exception as e:
+            logger.error(f"❌ Projects sync local to external failed: {e}")
 
     async def _sync_projects_external_to_local(self, batch_size: int):
         """批量同步外部项目到本地数据库"""
-        # 实现项目同步逻辑
-        pass
+        if not db_manager.external_engine:
+            return
+
+        try:
+            logger.info(f"🔄 Syncing external projects to local database (batch_size: {batch_size})...")
+
+            # 获取需要同步的项目
+            cutoff_time = self.last_sync_time or (datetime.now() - timedelta(hours=24))
+
+            def sync_projects():
+                from ..database.database import SessionLocal
+
+                # 获取外部数据库中有变更的项目
+                if db_manager.external_engine:
+                    with db_manager.external_engine.connect() as external_conn:
+                        changed_projects = external_conn.execute(
+                            text("SELECT * FROM projects WHERE created_at > :cutoff OR updated_at > :cutoff ORDER BY updated_at DESC LIMIT :batch_size"),
+                            {"cutoff": cutoff_time.timestamp(), "batch_size": batch_size}
+                        ).fetchall()
+
+                        if not changed_projects:
+                            logger.info("📭 No external project changes to sync")
+                            return
+
+                        logger.info(f"📥 Found {len(changed_projects)} external projects with changes")
+
+                        # 同步到本地数据库
+                        with SessionLocal() as local_session:
+                            for project in changed_projects:
+                                # 检查项目是否已存在
+                                existing = local_session.execute(
+                                    text("SELECT id FROM projects WHERE project_id = :project_id"),
+                                    {"project_id": project.project_id}
+                                ).fetchone()
+
+                                if existing:
+                                    # 更新现有项目
+                                    local_session.execute(
+                                        text("""
+                                            UPDATE projects SET
+                                                title = :title, scenario = :scenario, topic = :topic,
+                                                requirements = :requirements, status = :status, owner_id = :owner_id,
+                                                outline = :outline, slides_html = :slides_html, slides_data = :slides_data,
+                                                confirmed_requirements = :confirmed_requirements, project_metadata = :project_metadata,
+                                                version = :version, updated_at = :updated_at
+                                            WHERE project_id = :project_id
+                                        """),
+                                        {
+                                            "title": project.title, "scenario": project.scenario, "topic": project.topic,
+                                            "requirements": project.requirements, "status": project.status, "owner_id": project.owner_id,
+                                            "outline": project.outline, "slides_html": project.slides_html, "slides_data": project.slides_data,
+                                            "confirmed_requirements": project.confirmed_requirements, "project_metadata": project.project_metadata,
+                                            "version": project.version, "updated_at": project.updated_at or project.created_at,
+                                            "project_id": project.project_id
+                                        }
+                                    )
+                                else:
+                                    # 插入新项目
+                                    local_session.execute(
+                                        text("""
+                                            INSERT INTO projects
+                                            (project_id, title, scenario, topic, requirements, status, owner_id, outline, slides_html, slides_data, confirmed_requirements, project_metadata, version, created_at, updated_at)
+                                            VALUES (:project_id, :title, :scenario, :topic, :requirements, :status, :owner_id, :outline, :slides_html, :slides_data, :confirmed_requirements, :project_metadata, :version, :created_at, :updated_at)
+                                        """),
+                                        {
+                                            "project_id": project.project_id, "title": project.title, "scenario": project.scenario, "topic": project.topic,
+                                            "requirements": project.requirements, "status": project.status, "owner_id": project.owner_id,
+                                            "outline": project.outline, "slides_html": project.slides_html, "slides_data": project.slides_data,
+                                            "confirmed_requirements": project.confirmed_requirements, "project_metadata": project.project_metadata,
+                                            "version": project.version, "created_at": project.created_at, "updated_at": project.updated_at or project.created_at
+                                        }
+                                    )
+
+                                logger.info(f"📥 Synced project {project.title} (ID: {project.project_id})")
+
+                            local_session.commit()
+
+            await asyncio.to_thread(sync_projects)
+            logger.info("✅ Projects sync external to local completed")
+
+        except Exception as e:
+            logger.error(f"❌ Projects sync external to local failed: {e}")
 
     async def _sync_todo_data_local_to_external(self, batch_size: int):
         """同步本地TODO数据到外部数据库"""
