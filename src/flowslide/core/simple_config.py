@@ -11,7 +11,7 @@ try:
     load_dotenv()
     print("Environment variables loaded from .env file")
 except ImportError:
-    print("⚠️ python-dotenv not installed, using system environment variables")
+    print("Warning: python-dotenv not installed, using system environment variables")
 
 # 数据库配置策略：
 # 1. 优先使用本地SQLite数据库（快速启动）

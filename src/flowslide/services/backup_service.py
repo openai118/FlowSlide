@@ -158,12 +158,21 @@ class BackupService:
             logger.info(f"☁️ Starting R2 upload: {backup_path.name}")
 
             # 创建S3客户端，配置为R2
+            from botocore.config import Config
+            config = Config(
+                region_name='auto',
+                retries={'max_attempts': 3, 'mode': 'standard'},
+                read_timeout=30,
+                connect_timeout=15,
+                signature_version='s3v4'
+            )
+
             s3_client = boto3.client(
                 's3',
                 aws_access_key_id=self.r2_config['access_key'],
                 aws_secret_access_key=self.r2_config['secret_key'],
                 endpoint_url=self.r2_config['endpoint'],
-                region_name='auto'  # R2使用auto region
+                config=config
             )
 
             # 生成备份日期目录
@@ -376,159 +385,221 @@ class BackupService:
             return False
 
     async def restore_from_r2(self) -> Dict[str, Any]:
-        """从R2恢复最新的备份"""
+        """从R2恢复最新的备份，如果R2不可用则使用本地备份"""
         try:
             logger.info("🔄 Starting R2 restore...")
 
-            # 检查R2配置
-            if not self._is_r2_configured():
-                error_msg = "R2云存储未配置。请检查以下环境变量：R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT, R2_BUCKET_NAME"
-                logger.error(f"❌ {error_msg}")
-                raise Exception(error_msg)
-
-            # 验证配置值
-            missing_configs = []
-            if not self.r2_config.get('access_key'):
-                missing_configs.append('R2_ACCESS_KEY_ID')
-            if not self.r2_config.get('secret_key'):
-                missing_configs.append('R2_SECRET_ACCESS_KEY')
-            if not self.r2_config.get('endpoint'):
-                missing_configs.append('R2_ENDPOINT')
-            if not self.r2_config.get('bucket'):
-                missing_configs.append('R2_BUCKET_NAME')
-
-            if missing_configs:
-                error_msg = f"R2配置不完整，缺少: {', '.join(missing_configs)}"
-                logger.error(f"❌ {error_msg}")
-                raise Exception(error_msg)
-
-            logger.info(f"✅ R2配置验证通过 - Bucket: {self.r2_config['bucket']}")
-
-            # 创建S3客户端，配置为R2
+            # 首先尝试R2恢复
             try:
-                s3_client = boto3.client(
-                    's3',
-                    aws_access_key_id=self.r2_config['access_key'],
-                    aws_secret_access_key=self.r2_config['secret_key'],
-                    endpoint_url=self.r2_config['endpoint'],
-                    region_name='auto'  # R2使用auto region
-                )
-                logger.info("✅ S3客户端创建成功")
-            except Exception as e:
-                error_msg = f"创建R2客户端失败: {str(e)}"
-                logger.error(f"❌ {error_msg}")
-                raise Exception(error_msg)
+                return await self._restore_from_r2_cloud()
+            except Exception as r2_error:
+                logger.warning(f"⚠️ R2恢复失败: {r2_error}")
+                logger.info("🔄 尝试使用本地备份恢复...")
 
-            # 列出R2中的备份文件
-            try:
-                logger.info("📋 正在列出R2中的备份文件...")
-                response = s3_client.list_objects_v2(
-                    Bucket=self.r2_config['bucket'],
-                    Prefix='backups/'
-                )
-                logger.info(f"✅ 成功连接到R2存储桶: {self.r2_config['bucket']}")
-            except ClientError as e:
-                error_code = e.response['Error']['Code']
-                error_msg = e.response['Error']['Message']
-                logger.error(f"❌ 无法访问R2存储桶 (AWS Error {error_code}): {error_msg}")
-                raise Exception(f"无法访问R2存储桶: {error_msg}")
-            except Exception as e:
-                error_msg = f"连接R2失败: {str(e)}"
-                logger.error(f"❌ {error_msg}")
-                raise Exception(error_msg)
+                # 回退到本地备份
+                return await self._restore_from_local_backup()
 
-            if 'Contents' not in response or not response['Contents']:
-                error_msg = f"在R2存储桶 '{self.r2_config['bucket']}' 中没有找到备份文件。请确保已上传备份文件。"
-                logger.error(f"❌ {error_msg}")
-                raise Exception(error_msg)
+        except Exception as e:
+            logger.error(f"❌ 所有恢复方法都失败: {e}")
+            raise
 
-            # 找到最新的备份文件
-            latest_backup = max(response['Contents'], key=lambda x: x['LastModified'])
-            backup_key = latest_backup['Key']
-            backup_size = latest_backup['Size']
-            backup_date = latest_backup['LastModified']
+    async def _restore_from_r2_cloud(self) -> Dict[str, Any]:
+        """从R2云存储恢复"""
+        # 检查R2配置
+        if not self._is_r2_configured():
+            error_msg = "R2云存储未配置。请检查以下环境变量：R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT, R2_BUCKET_NAME"
+            logger.error(f"❌ {error_msg}")
+            raise Exception(error_msg)
 
-            logger.info(f"📥 找到最新备份: {backup_key}")
-            logger.info(f"   📅 修改时间: {backup_date}")
-            logger.info(f"   📏 文件大小: {backup_size} bytes")
+        # 验证配置值
+        missing_configs = []
+        if not self.r2_config.get('access_key'):
+            missing_configs.append('R2_ACCESS_KEY_ID')
+        if not self.r2_config.get('secret_key'):
+            missing_configs.append('R2_SECRET_ACCESS_KEY')
+        if not self.r2_config.get('endpoint'):
+            missing_configs.append('R2_ENDPOINT')
+        if not self.r2_config.get('bucket'):
+            missing_configs.append('R2_BUCKET_NAME')
 
-            # 确保备份目录存在
-            try:
-                self.backup_dir.mkdir(exist_ok=True)
-                logger.info(f"✅ 备份目录准备就绪: {self.backup_dir}")
-            except Exception as e:
-                error_msg = f"创建备份目录失败: {str(e)}"
-                logger.error(f"❌ {error_msg}")
-                raise Exception(error_msg)
+        if missing_configs:
+            error_msg = f"R2配置不完整，缺少: {', '.join(missing_configs)}"
+            logger.error(f"❌ {error_msg}")
+            raise Exception(error_msg)
 
-            local_backup_path = self.backup_dir / Path(backup_key).name
+        logger.info(f"✅ R2配置验证通过 - Bucket: {self.r2_config['bucket']}")
 
-            # 下载备份文件
-            try:
-                logger.info(f"📥 正在下载备份文件到: {local_backup_path}")
-                await asyncio.to_thread(
-                    s3_client.download_file,
-                    self.r2_config['bucket'],
-                    backup_key,
-                    str(local_backup_path)
-                )
-                logger.info("✅ 文件下载完成")
-            except ClientError as e:
-                error_code = e.response['Error']['Code']
-                error_msg = e.response['Error']['Message']
-                logger.error(f"❌ 下载失败 (AWS Error {error_code}): {error_msg}")
-                raise Exception(f"从R2下载备份失败: {error_msg}")
-            except Exception as e:
-                error_msg = f"下载备份文件时发生错误: {str(e)}"
-                logger.error(f"❌ {error_msg}")
-                raise Exception(error_msg)
+        # 创建S3客户端，配置为R2
+        try:
+            from botocore.config import Config
+            config = Config(
+                region_name='auto',
+                retries={'max_attempts': 3, 'mode': 'standard'},
+                read_timeout=30,
+                connect_timeout=15,
+                signature_version='s3v4'
+            )
 
-            # 验证下载的文件
-            if not local_backup_path.exists():
-                error_msg = f"下载完成后文件不存在: {local_backup_path}"
-                logger.error(f"❌ {error_msg}")
-                raise Exception(error_msg)
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=self.r2_config['access_key'],
+                aws_secret_access_key=self.r2_config['secret_key'],
+                endpoint_url=self.r2_config['endpoint'],
+                config=config
+            )
+            logger.info("✅ S3客户端创建成功")
+        except Exception as e:
+            error_msg = f"创建R2客户端失败: {str(e)}"
+            logger.error(f"❌ {error_msg}")
+            raise Exception(error_msg)
 
-            downloaded_size = local_backup_path.stat().st_size
-            if downloaded_size != backup_size:
-                error_msg = f"文件下载不完整。期望: {backup_size} bytes, 实际: {downloaded_size} bytes"
-                logger.error(f"❌ {error_msg}")
-                # 删除不完整的文件
-                local_backup_path.unlink(missing_ok=True)
-                raise Exception(error_msg)
+        # 列出R2中的备份文件
+        try:
+            logger.info("📋 正在列出R2中的备份文件...")
+            logger.info(f"🔍 搜索存储桶: {self.r2_config['bucket']}, 前缀: backups/")
 
-            logger.info(f"✅ 备份文件验证通过: {local_backup_path} ({downloaded_size} bytes)")
+            response = s3_client.list_objects_v2(
+                Bucket=self.r2_config['bucket'],
+                Prefix='backups/'
+            )
+            logger.info(f"✅ 成功连接到R2存储桶: {self.r2_config['bucket']}")
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_msg = e.response['Error']['Message']
+            logger.error(f"❌ 无法访问R2存储桶 (AWS Error {error_code}): {error_msg}")
+            logger.error(f"🔍 调试信息: 存储桶={self.r2_config['bucket']}, 端点={self.r2_config['endpoint']}")
+            raise Exception(f"无法访问R2存储桶: {error_msg}")
+        except Exception as e:
+            error_msg = f"连接R2失败: {str(e)}"
+            logger.error(f"❌ {error_msg}")
+            logger.error(f"🔍 调试信息: 类型={type(e).__name__}, 消息={str(e)}")
+            raise Exception(error_msg)
 
-            # 恢复备份
-            try:
-                logger.info("🔄 正在恢复备份...")
-                success = await self.restore_backup(local_backup_path.name)
+        if 'Contents' not in response or not response['Contents']:
+            error_msg = f"在R2存储桶 '{self.r2_config['bucket']}' 中没有找到备份文件。请确保已上传备份文件。"
+            logger.error(f"❌ {error_msg}")
+            raise Exception(error_msg)
 
-                if success:
-                    restore_info = {
-                        "filename": local_backup_path.name,
-                        "size": downloaded_size,
-                        "timestamp": datetime.now().isoformat(),
-                        "source": "r2",
-                        "r2_key": backup_key,
-                        "r2_bucket": self.r2_config['bucket'],
-                        "backup_date": backup_date.isoformat(),
-                        "success": True
-                    }
-                    logger.info(f"✅ R2恢复完成: {local_backup_path.name}")
-                    return restore_info
-                else:
-                    error_msg = "备份恢复过程返回失败状态"
-                    logger.error(f"❌ {error_msg}")
-                    raise Exception(error_msg)
+        # 找到最新的备份文件
+        latest_backup = max(response['Contents'], key=lambda x: x['LastModified'])
+        backup_key = latest_backup['Key']
+        backup_size = latest_backup['Size']
+        backup_date = latest_backup['LastModified']
 
-            except Exception as e:
-                error_msg = f"恢复备份时发生错误: {str(e)}"
+        logger.info(f"📥 找到最新备份: {backup_key}")
+        logger.info(f"   📅 修改时间: {backup_date}")
+        logger.info(f"   📏 文件大小: {backup_size} bytes")
+
+        # 确保备份目录存在
+        try:
+            self.backup_dir.mkdir(exist_ok=True)
+            logger.info(f"✅ 备份目录准备就绪: {self.backup_dir}")
+        except Exception as e:
+            error_msg = f"创建备份目录失败: {str(e)}"
+            logger.error(f"❌ {error_msg}")
+            raise Exception(error_msg)
+
+        local_backup_path = self.backup_dir / Path(backup_key).name
+
+        # 下载备份文件
+        try:
+            logger.info(f"📥 正在下载备份文件到: {local_backup_path}")
+            await asyncio.to_thread(
+                s3_client.download_file,
+                self.r2_config['bucket'],
+                backup_key,
+                str(local_backup_path)
+            )
+            logger.info("✅ 文件下载完成")
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_msg = e.response['Error']['Message']
+            logger.error(f"❌ 下载失败 (AWS Error {error_code}): {error_msg}")
+            raise Exception(f"从R2下载备份失败: {error_msg}")
+        except Exception as e:
+            error_msg = f"下载备份文件时发生错误: {str(e)}"
+            logger.error(f"❌ {error_msg}")
+            raise Exception(error_msg)
+
+        # 验证下载的文件
+        if not local_backup_path.exists():
+            error_msg = f"下载完成后文件不存在: {local_backup_path}"
+            logger.error(f"❌ {error_msg}")
+            raise Exception(error_msg)
+
+        downloaded_size = local_backup_path.stat().st_size
+        if downloaded_size != backup_size:
+            error_msg = f"文件下载不完整。期望: {backup_size} bytes, 实际: {downloaded_size} bytes"
+            logger.error(f"❌ {error_msg}")
+            # 删除不完整的文件
+            local_backup_path.unlink(missing_ok=True)
+            raise Exception(error_msg)
+
+        logger.info(f"✅ 备份文件验证通过: {local_backup_path} ({downloaded_size} bytes)")
+
+        # 恢复备份
+        try:
+            logger.info("🔄 正在恢复备份...")
+            success = await self.restore_backup(local_backup_path.name)
+
+            if success:
+                restore_info = {
+                    "filename": local_backup_path.name,
+                    "size": downloaded_size,
+                    "timestamp": datetime.now().isoformat(),
+                    "source": "r2",
+                    "r2_key": backup_key,
+                    "r2_bucket": self.r2_config['bucket'],
+                    "backup_date": backup_date.isoformat(),
+                    "success": True
+                }
+                logger.info(f"✅ R2恢复完成: {local_backup_path.name}")
+                return restore_info
+            else:
+                error_msg = "备份恢复过程返回失败状态"
                 logger.error(f"❌ {error_msg}")
                 raise Exception(error_msg)
 
         except Exception as e:
-            logger.error(f"❌ R2恢复失败: {e}")
+            error_msg = f"恢复备份时发生错误: {str(e)}"
+            logger.error(f"❌ {error_msg}")
+            raise Exception(error_msg)
+
+    async def _restore_from_local_backup(self) -> Dict[str, Any]:
+        """从本地备份恢复"""
+        try:
+            logger.info("🔄 使用本地备份进行恢复...")
+
+            # 查找可用的本地备份
+            if not self.backup_dir.exists():
+                raise Exception("备份目录不存在")
+
+            backup_files = list(self.backup_dir.glob("*.zip"))
+            if not backup_files:
+                raise Exception("没有找到本地备份文件")
+
+            # 使用最新的备份
+            latest_backup = max(backup_files, key=lambda x: x.stat().st_mtime)
+            logger.info(f"📁 使用本地备份: {latest_backup.name}")
+
+            # 恢复备份
+            success = await self.restore_backup(latest_backup.name)
+
+            if success:
+                restore_info = {
+                    "filename": latest_backup.name,
+                    "size": latest_backup.stat().st_size,
+                    "timestamp": datetime.now().isoformat(),
+                    "source": "local",
+                    "success": True
+                }
+                logger.info(f"✅ 本地备份恢复完成: {latest_backup.name}")
+                return restore_info
+            else:
+                raise Exception("本地备份恢复失败")
+
+        except Exception as e:
+            logger.error(f"❌ 本地备份恢复失败: {e}")
             raise
 
 
