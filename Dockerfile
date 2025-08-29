@@ -126,7 +126,6 @@ WORKDIR /app
 COPY run.py quick_db_check.py ./
 COPY src/ ./src/
 COPY template_examples/ ./template_examples/
-COPY .env.example ./.env
 
 # Copy standard scripts first (always available)
 COPY docker-healthcheck.sh docker-entrypoint.sh ./
@@ -148,7 +147,8 @@ RUN chmod +x docker-healthcheck*.sh docker-entrypoint*.sh 2>/dev/null || true &&
     chown -R flowslide:flowslide /app /home/flowslide && \
     chmod -R 755 /app /home/flowslide && \
     chmod 777 /app/db && \
-    chmod 666 /app/.env && \
+    # Set .env permissions if file exists (for mounted volumes)
+    [ -f "/app/.env" ] && chmod 666 /app/.env || true && \
     # Create smart script selection
     if [ -f "docker-healthcheck-enhanced.sh" ]; then \
         echo "Using enhanced health check script" && \

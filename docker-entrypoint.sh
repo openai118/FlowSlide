@@ -85,6 +85,32 @@ check_environment() {
     if [ "$SECRET_KEY" = "your-very-secure-secret-key-change-this-in-production" ] || [ "$SECRET_KEY" = "dev-secret-key-not-for-production" ]; then
         warn "⚠️ Using default SECRET_KEY. Please change it for production!"
     fi
+
+    # Check database configuration
+    if [ -n "$DATABASE_URL" ]; then
+        if [[ "$DATABASE_URL" == *"username:password"* ]] || [[ "$DATABASE_URL" == *"your_database"* ]] || [[ "$DATABASE_URL" == *"your_db_user"* ]]; then
+            warn "⚠️ DATABASE_URL contains example/placeholder values. Please configure a real database URL."
+            warn "   Current: $DATABASE_URL"
+            warn "   This may cause the system to incorrectly detect deployment mode."
+            export DATABASE_URL=""
+        else
+            info "✅ External database configured: $DATABASE_URL"
+        fi
+    fi
+
+    # Check R2 configuration
+    if [ -n "$R2_ACCESS_KEY_ID" ]; then
+        if [[ "$R2_ACCESS_KEY_ID" == *"your_r2_access_key_id"* ]]; then
+            warn "⚠️ R2_ACCESS_KEY_ID contains example/placeholder value. Please configure a real R2 access key."
+            warn "   This may cause the system to incorrectly detect deployment mode."
+            export R2_ACCESS_KEY_ID=""
+            export R2_SECRET_ACCESS_KEY=""
+            export R2_ENDPOINT=""
+            export R2_BUCKET_NAME=""
+        else
+            info "✅ R2 cloud storage configured"
+        fi
+    fi
 }
 
 # Create necessary directories
