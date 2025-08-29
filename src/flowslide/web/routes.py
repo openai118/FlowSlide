@@ -833,8 +833,7 @@ async def test_ollama_provider_proxy(
         from ..services.config_service import get_config_service
 
         # Prefer api_key from frontend body if provided, otherwise use server-side config
-        body = await request.json()
-        body_api_key = body.get("api_key")
+        body_api_key = data.get("api_key")
         cfg = get_config_service().get_config_by_category("ai_providers")
         cfg_key = cfg.get("ollama_api_key") if cfg else None
         use_key = body_api_key or cfg_key

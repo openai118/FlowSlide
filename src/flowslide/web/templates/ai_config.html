@@ -3263,6 +3263,12 @@ async function testOllamaProvider(config) {
                 const errJson = await proxyResp.json();
                 errMsg = errJson.error || errJson.detail || errMsg;
             } catch (e) {}
+
+            // 处理认证错误
+            if (proxyResp.status === 401) {
+                throw new Error('请先登录后再测试AI提供商');
+            }
+
             throw new Error(errMsg);
         }
 
@@ -4784,7 +4790,18 @@ async function fetchProviderModels(provider) {
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+            let errMsg = `HTTP ${response.status}`;
+            try {
+                const errJson = await response.json();
+                errMsg = errJson.error || errJson.detail || errMsg;
+            } catch (e) {}
+
+            // 处理认证错误
+            if (response.status === 401) {
+                throw new Error('请先登录后再获取模型列表');
+            }
+
+            throw new Error(errMsg);
         }
 
         const result = await response.json();
