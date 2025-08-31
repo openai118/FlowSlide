@@ -2,6 +2,42 @@
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Distribution / packaging
+build/
+dist/
+eggs/
+*.egg-info/
+
+# Logs and temporary files
+*.log
+*.zip
+*.tmp
+*.bak
+*.swp
+
+# Environment files
+.env
+.env.*
+
+# IDEs
+.vscode/
+.idea/
+
+# Compiled python
+*.pyc
+
+# OS files
+.DS_Store
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
 *.so
 .Python
 build/
