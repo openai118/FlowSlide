@@ -123,7 +123,7 @@ RUN pip install --no-cache-dir playwright==1.40.0 && \
 WORKDIR /app
 
 # Copy application code (minimize layers)
-COPY run.py quick_db_check.py ./
+COPY run.py ./
 COPY src/ ./src/
 
 # Copy standard scripts first (always available)
