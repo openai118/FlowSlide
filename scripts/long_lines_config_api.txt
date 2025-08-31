@@ -1,4 +1,0 @@
-201:107:        raise HTTPException(status_code=500, detail=f"Failed to get configuration for category {category}")
-238:101:            return {"success": True, "message": f"Configuration for {category} updated successfully"}
-239:101:        raise HTTPException(status_code=500, detail=f"Failed to update configuration for {category}")
-244:101:        raise HTTPException(status_code=500, detail=f"Failed to update configuration for {category}")
