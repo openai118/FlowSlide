@@ -4129,7 +4129,7 @@ async function saveGenerationParams() {
     });
 
     try {
-        const response = await fetch('/api/config/generation_params', {
+        const response = await fetch('/api/config/category/generation_params', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -4175,7 +4175,7 @@ async function saveAppConfig() {
     });
 
     try {
-        const response = await fetch('/api/config/app_config', {
+        const response = await fetch('/api/config/category/app_config', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
