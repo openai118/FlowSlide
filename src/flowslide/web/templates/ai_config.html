@@ -1091,6 +1091,94 @@
 
 
 
+<!-- Bulk Paste Modal -->
+<div id="bulk-paste-modal" class="modal" style="display: none;" onclick="if(event.target === this) hideBulkPasteModal()">
+    <div class="modal-content bulk-paste-modal-content" style="width: 90%; max-width: 700px; max-height: 90vh; overflow-y: auto;">
+        <!-- Modal Header -->
+        <div class="modal-header" style="background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 12px 12px 0 0; padding: 20px; border-bottom: none;">
+            <h3 style="color: var(--text-primary); margin: 0; text-align: center; font-size: 1.3em; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <span style="font-size: 1.5em;">📋</span>
+                批量粘贴解析配置
+            </h3>
+            <button onclick="hideBulkPasteModal()" class="modal-close-btn" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: var(--text-primary); font-size: 1.5em; cursor: pointer; padding: 5px; border-radius: 50%; transition: all 0.2s ease; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;">
+                ✕
+            </button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="modal-body" style="background: var(--card-bg); border: 1px solid var(--panel-border); border-top: none; border-bottom: none; padding: 25px;">
+            <!-- Instructions -->
+            <div class="instruction-card" style="background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 10px; padding: 15px; margin-bottom: 20px;">
+                <div style="display: flex; align-items: flex-start; gap: 10px;">
+                    <span style="color: var(--accent-blue); font-size: 1.2em;">💡</span>
+                    <div>
+                        <h4 style="color: var(--text-primary); margin: 0 0 8px 0; font-size: 1em; font-weight: 600;">使用说明</h4>
+                        <p style="color: var(--text-secondary); margin: 0; font-size: 0.9em; line-height: 1.5;">
+                            粘贴环境变量或键值对，每行一个或用分号分隔。系统会自动解析并填充到下方配置字段中。
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Textarea Section -->
+            <div class="textarea-section">
+                <label for="bulk-paste-text" style="display: block; margin-bottom: 12px; font-weight: 600; color: var(--text-primary); font-size: 1em;">
+                    配置内容
+                </label>
+                <div class="textarea-container" style="position: relative;">
+                    <textarea id="bulk-paste-text"
+                              placeholder="粘贴环境变量或键值对，每行一个或用分号分隔&#10;&#10;例如：&#10;R2_ACCESS_KEY_ID=your_key&#10;R2_SECRET_ACCESS_KEY=your_secret&#10;R2_ENDPOINT=https://your-account.r2.cloudflarestorage.com&#10;R2_BUCKET_NAME=your-bucket&#10;DATABASE_URL=sqlite:///./flowslide.db&#10;API_URL=https://your-api.com&#10;API_ANON_KEY=your-anon-key&#10;API_SERVICE_KEY=your-service-key"
+                              style="width: 100%; height: 250px; padding: 15px; border: 2px solid var(--border-color); border-radius: 10px; background: var(--input-bg); color: var(--text-color); font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace; font-size: 13px; line-height: 1.5; resize: vertical; transition: all 0.3s ease; outline: none;"
+                              onfocus="this.style.borderColor = 'var(--accent-blue)'; this.style.boxShadow = '0 0 0 3px rgba(52, 152, 219, 0.1)';"
+                              onblur="this.style.borderColor = 'var(--border-color)'; this.style.boxShadow = 'none';">
+                    </textarea>
+                    <div class="textarea-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+                        <small style="color: var(--text-secondary); font-size: 0.85em;">
+                            支持格式：KEY=VALUE 或 KEY:VALUE，每行一个或用分号分隔。注释行以#开头。
+                        </small>
+                        <button onclick="document.getElementById('bulk-paste-text').value = ''" class="clear-btn" style="background: var(--secondary-gradient); color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.8em; cursor: pointer; transition: all 0.2s ease;">
+                            清空
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview Section -->
+            <div class="preview-section" id="bulk-paste-preview" style="display: none; margin-top: 20px;">
+                <h4 style="color: var(--text-primary); margin-bottom: 12px; font-size: 1em; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                    <span style="color: var(--accent-green);">🔍</span>
+                    解析预览
+                </h4>
+                <div class="preview-content" style="background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 8px; padding: 15px; max-height: 150px; overflow-y: auto;">
+                    <div id="preview-items" style="display: grid; gap: 8px;">
+                        <!-- Preview items will be inserted here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="modal-footer" style="background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 0 0 12px 12px; border-top: none; padding: 20px; display: flex; justify-content: space-between; align-items: center;">
+            <div class="footer-info" style="color: var(--text-secondary); font-size: 0.85em;">
+                <span id="parse-status">准备解析配置...</span>
+            </div>
+            <div class="footer-actions" style="display: flex; gap: 10px;">
+                <button onclick="hideBulkPasteModal()" class="btn btn-secondary" style="padding: 10px 20px; font-weight: 500;">
+                    取消
+                </button>
+                <button onclick="applyBulkPaste()" class="btn btn-primary" style="padding: 10px 25px; font-weight: 500; position: relative;">
+                    <span id="apply-btn-text">✅ 解析并应用</span>
+                    <div id="apply-btn-progress" style="display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.1); border-radius: 6px; align-items: center; justify-content: center;">
+                        <div style="width: 16px; height: 16px; border: 2px solid #fff; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
 <!-- 数据备份配置标签页 -->
 <div id="data-backup" class="tab-content" style="display: none;">
     <div class="card">
@@ -2410,7 +2498,6 @@
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(5px);
 }
 
 .modal-content {
@@ -2432,6 +2519,123 @@
     to {
         opacity: 1;
         transform: translateY(0);
+    }
+}
+
+/* Bulk Paste Modal Specific Styles */
+.bulk-paste-modal-content {
+    margin: 2% auto;
+    padding: 0;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--glass-border);
+    overflow: hidden;
+    max-width: 700px;
+}
+
+.modal-header {
+    position: relative;
+    background: var(--panel-bg);
+    border-bottom: 1px solid var(--panel-border);
+}
+
+.modal-close-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: scale(1.1);
+}
+
+.modal-body {
+    background: var(--card-bg);
+}
+
+.instruction-card {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    transition: all 0.3s ease;
+}
+
+.instruction-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.textarea-container textarea {
+    transition: all 0.3s ease;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
+}
+
+.textarea-container textarea:focus {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.clear-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.preview-content {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+}
+
+.preview-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.preview-content::-webkit-scrollbar-track {
+    background: var(--panel-bg);
+}
+
+.preview-content::-webkit-scrollbar-thumb {
+    background: var(--panel-border);
+    border-radius: 3px;
+}
+
+.preview-content::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-blue);
+}
+
+.modal-footer {
+    background: var(--panel-bg);
+    border-top: 1px solid var(--panel-border);
+}
+
+.footer-actions .btn {
+    transition: all 0.3s ease;
+}
+
+.footer-actions .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Responsive design for bulk paste modal */
+@media (max-width: 768px) {
+    .bulk-paste-modal-content {
+        margin: 1% auto;
+        width: 95%;
+        max-width: none;
+    }
+
+    .modal-header,
+    .modal-body,
+    .modal-footer {
+        padding: 15px;
+    }
+
+    .textarea-container textarea {
+        height: 200px;
+        font-size: 12px;
+    }
+
+    .footer-actions {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .footer-actions .btn {
+        width: 100%;
     }
 }
 </style>
@@ -7018,11 +7222,26 @@ document.addEventListener('visibilitychange', function() {
 <script>
 // 从 ai_config_buckup.html 移植的批量粘贴解析和 R2 状态绑定函数
 function showBulkPasteModal(){
-    const m = document.getElementById('bulk-paste-modal'); if(m) m.style.display = 'flex';
-    const ta = document.getElementById('bulk-paste-text'); if(ta) ta.value = '';
+    const m = document.getElementById('bulk-paste-modal');
+    if(m) {
+        m.style.display = 'flex';
+        // 重置状态
+        const ta = document.getElementById('bulk-paste-text');
+        if(ta) ta.value = '';
+        const preview = document.getElementById('bulk-paste-preview');
+        if(preview) preview.style.display = 'none';
+        const status = document.getElementById('parse-status');
+        if(status) status.textContent = '准备解析配置...';
+        const applyBtn = document.getElementById('apply-btn-text');
+        if(applyBtn) applyBtn.textContent = '✅ 解析并应用';
+        const progress = document.getElementById('apply-btn-progress');
+        if(progress) progress.style.display = 'none';
+    }
 }
+
 function hideBulkPasteModal(){
-    const m = document.getElementById('bulk-paste-modal'); if(m) m.style.display = 'none';
+    const m = document.getElementById('bulk-paste-modal');
+    if(m) m.style.display = 'none';
 }
 
 function parseKeyValues(raw){
@@ -7030,16 +7249,63 @@ function parseKeyValues(raw){
     if(!raw) return result;
     const lines = raw.split(/\r?\n|;/);
     for(let l of lines){
-        l = l.trim(); if(!l) continue; if(l.startsWith('#')) continue;
-        const idx = l.indexOf('='); if(idx === -1) continue;
-        const k = l.substring(0, idx).trim(); const v = l.substring(idx+1).trim(); if(k) result[k]=v;
+        l = l.trim();
+        if(!l) continue;
+        if(l.startsWith('#')) continue;
+        const idx = l.indexOf('=');
+        if(idx === -1) continue;
+        const k = l.substring(0, idx).trim();
+        const v = l.substring(idx+1).trim();
+        if(k) result[k] = v;
     }
     return result;
 }
 
-async function applyBulkPaste(){
-    const raw = (document.getElementById('bulk-paste-text')||{}).value || '';
+function updateBulkPastePreview(){
+    const raw = document.getElementById('bulk-paste-text').value || '';
     const kv = parseKeyValues(raw);
+    const preview = document.getElementById('bulk-paste-preview');
+    const previewItems = document.getElementById('preview-items');
+    const status = document.getElementById('parse-status');
+
+    if(Object.keys(kv).length > 0){
+        preview.style.display = 'block';
+        const items = Object.entries(kv).map(([key, value]) => {
+            const displayKey = key.toLowerCase();
+            const isSensitive = ['secret', 'key', 'password', 'token'].some(term => displayKey.includes(term));
+            const maskedValue = isSensitive ? '••••••••' : value;
+            return `<div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: var(--input-bg); border-radius: 4px; font-family: monospace; font-size: 12px;">
+                <span style="color: var(--accent-blue); font-weight: 500;">${key}</span>
+                <span style="color: var(--text-secondary); margin: 0 8px;">→</span>
+                <span style="color: var(--text-primary);">${maskedValue}</span>
+            </div>`;
+        }).join('');
+        previewItems.innerHTML = items;
+        status.textContent = `已解析 ${Object.keys(kv).length} 个配置项`;
+    } else {
+        preview.style.display = 'none';
+        status.textContent = '准备解析配置...';
+    }
+}
+
+async function applyBulkPaste(){
+    const raw = document.getElementById('bulk-paste-text').value || '';
+    const kv = parseKeyValues(raw);
+
+    if(Object.keys(kv).length === 0){
+        alert('未检测到有效的配置项，请检查输入格式');
+        return;
+    }
+
+    // 显示加载状态
+    const applyBtn = document.getElementById('apply-btn-text');
+    const progress = document.getElementById('apply-btn-progress');
+    const status = document.getElementById('parse-status');
+
+    if(applyBtn) applyBtn.textContent = '处理中...';
+    if(progress) progress.style.display = 'flex';
+    if(status) status.textContent = '正在应用配置...';
+
     const mapping = {
         'R2_ACCESS_KEY_ID': 'r2_access_key_id',
         'R2_SECRET_ACCESS_KEY': 'r2_secret_access_key',
@@ -7053,6 +7319,7 @@ async function applyBulkPaste(){
         'API_SERVICE_KEY': 'api_service_key'
     };
 
+    // 填充表单字段
     for(const [k,v] of Object.entries(kv)){
         const name = mapping[k] || k.toLowerCase();
         const el = document.querySelector(`[name='${name}']`);
@@ -7061,35 +7328,43 @@ async function applyBulkPaste(){
 
     try{
         const resp = await fetch('/api/config/parse-and-apply',{
-            method:'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({config:{raw}})
+            method:'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({config:{raw}})
         });
         const data = await resp.json().catch(()=>null);
+
         if(resp.ok && data && data.success){
-            alert('解析并保存成功，R2 配置完整: ' + (data.r2_configured ? '是' : '否'));
-            try{ await refreshConfigFromServer(); }catch(e){ console.warn('refresh after parse failed', e); }
+            if(status) status.textContent = '✅ 配置应用成功';
+            setTimeout(() => {
+                alert('解析并保存成功，R2 配置完整: ' + (data.r2_configured ? '是' : '否'));
+                refreshConfigFromServer().catch(e => console.warn('refresh after parse failed', e));
+                hideBulkPasteModal();
+            }, 500);
         } else {
+            if(status) status.textContent = '❌ 配置应用失败';
+            if(progress) progress.style.display = 'none';
+            if(applyBtn) applyBtn.textContent = '✅ 解析并应用';
             alert('解析或保存失败: ' + (data && (data.errors || data.message) ? JSON.stringify(data.errors || data.message) : 'Unknown'));
         }
-    }catch(e){ console.error(e); alert('调用解析接口失败，请查看控制台'); }
-
-    hideBulkPasteModal();
-
-    // Bind form inputs to update badges live
-    document.addEventListener('DOMContentLoaded', function(){
-        const form = document.getElementById('app-config-form');
-        if(!form) return;
-        const handler = () => updateR2Status && updateR2Status();
-        form.querySelectorAll('input, select, textarea').forEach(el => {
-            el.addEventListener('input', handler);
-            el.addEventListener('change', handler);
-        });
-    });
-
-    // Ensure password inputs have autocomplete
-    document.addEventListener('DOMContentLoaded', function(){
-        const pwds = Array.from(document.querySelectorAll('input[type="password"]'));
-        for(const p of pwds){ if(!p.hasAttribute('autocomplete')) p.setAttribute('autocomplete','current-password'); }
-    });
+    }catch(e){
+        console.error(e);
+        if(status) status.textContent = '❌ 网络请求失败';
+        if(progress) progress.style.display = 'none';
+        if(applyBtn) applyBtn.textContent = '✅ 解析并应用';
+        alert('调用解析接口失败，请查看控制台');
+    }
 }
+
+// 添加实时预览监听器
+document.addEventListener('DOMContentLoaded', function(){
+    const textarea = document.getElementById('bulk-paste-text');
+    if(textarea){
+        textarea.addEventListener('input', updateBulkPastePreview);
+        textarea.addEventListener('paste', function(){
+            setTimeout(updateBulkPastePreview, 100);
+        });
+    }
+});
 </script>
 {% endblock %}
