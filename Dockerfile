@@ -125,7 +125,6 @@ WORKDIR /app
 # Copy application code (minimize layers)
 COPY run.py quick_db_check.py ./
 COPY src/ ./src/
-COPY template_examples/ ./template_examples/
 
 # Copy standard scripts first (always available)
 COPY docker-healthcheck.sh docker-entrypoint.sh ./
