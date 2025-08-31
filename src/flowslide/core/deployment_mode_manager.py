@@ -331,11 +331,32 @@ class DeploymentModeManager:
 
     def _is_mode_compatible(self, from_mode: DeploymentMode, to_mode: DeploymentMode) -> bool:
         """检查模式兼容性"""
+        # 如果没有已知源模式，认为兼容（首次检测场景）
         if from_mode is None:
-            return True  # 初始模式
+            return True
 
-        compatible_modes = self.compatibility_matrix.get(from_mode.value, [])
-        return to_mode.value in compatible_modes
+        # 相同模式视为兼容
+        if from_mode == to_mode:
+            return True
+
+        # 使用兼容性矩阵作为有向图，判断目标模式是否可从当前模式通过一系列合法步骤到达
+        start = from_mode.value
+        target = to_mode.value
+
+        # 简单广度优先搜索（BFS）判断可达性
+        visited = set()
+        queue = [start]
+
+        while queue:
+            node = queue.pop(0)
+            if node == target:
+                return True
+            visited.add(node)
+            for neigh in self.compatibility_matrix.get(node, []):
+                if neigh not in visited and neigh not in queue:
+                    queue.append(neigh)
+
+        return False
 
     async def _perform_pre_switch_checks(self, strategy: Dict[str, Any]) -> bool:
         """执行前置检查"""

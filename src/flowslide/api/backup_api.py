@@ -9,11 +9,11 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Body
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from ..services.backup_service import backup_service, create_backup, list_backups
+from ..services.backup_service import backup_service, create_backup, list_backups, list_r2_files, delete_r2_file, restore_r2_key
 from ..database import db_manager
 
 router = APIRouter(prefix="/api/backup", tags=["Backup Management"])
@@ -56,6 +56,42 @@ async def create_database_backup():
     except Exception as e:
         logger.error(f"❌ Database backup failed: {e}")
         raise HTTPException(status_code=500, detail=f"创建数据库备份失败: {str(e)}")
+
+
+@router.post("/restore/local")
+async def restore_local_backup(payload: Dict[str, Any] = Body(...)):
+    """Restore a specific local backup by filename (JSON body: {"filename": "..."})"""
+    try:
+        filename = payload.get('filename')
+        if not filename:
+            raise HTTPException(status_code=400, detail="filename required")
+        logger.info(f"🔄 Restoring local backup: {filename}")
+        success = await backup_service.restore_backup(filename)
+        if not success:
+            raise HTTPException(status_code=500, detail="恢复失败")
+        return {"success": True, "message": f"恢复完成: {filename}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ restore_local_backup failed: {e}")
+        raise HTTPException(status_code=500, detail=f"恢复本地备份失败: {str(e)}")
+
+
+@router.delete("/local/{filename}")
+async def delete_local_backup(filename: str):
+    """Delete a specific local backup file"""
+    try:
+        p = Path(backup_service.backup_dir) / filename
+        if not p.exists():
+            raise HTTPException(status_code=404, detail="文件不存在")
+        p.unlink()
+        logger.info(f"🗑️ Deleted local backup: {filename}")
+        return {"success": True, "message": f"已删除: {filename}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ delete_local_backup failed: {e}")
+        raise HTTPException(status_code=500, detail=f"删除本地备份失败: {str(e)}")
 
 
 @router.get("/download/latest")
@@ -129,6 +165,50 @@ async def sync_to_r2():
     except Exception as e:
         logger.error(f"❌ R2 sync failed: {e}")
         raise HTTPException(status_code=500, detail=f"同步到R2失败: {str(e)}")
+
+
+@router.get("/r2/list")
+async def r2_list():
+    """List objects in R2 backups prefix"""
+    try:
+        items = await list_r2_files()
+        # convert to simple list of keys for frontend
+        keys = [it['key'] for it in items]
+        return {"success": True, "files": keys, "items": items}
+    except Exception as e:
+        logger.error(f"❌ r2_list failed: {e}")
+        raise HTTPException(status_code=500, detail=f"列出R2文件失败: {str(e)}")
+
+
+@router.delete("/r2")
+async def delete_r2_object(key: str):
+    """Delete an object from R2 by key"""
+    try:
+        ok = await delete_r2_file(key)
+        if not ok:
+            raise HTTPException(status_code=500, detail="删除失败")
+        return {"success": True, "message": f"已删除: {key}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ delete_r2_object failed: {e}")
+        raise HTTPException(status_code=500, detail=f"删除R2对象失败: {str(e)}")
+
+
+@router.post("/r2/restore")
+async def restore_r2_object(payload: Dict[str, Any] = Body(...)):
+    """Download a specific R2 object and restore it (JSON body: {"key": "..."})"""
+    try:
+        key = payload.get('key')
+        if not key:
+            raise HTTPException(status_code=400, detail="key required")
+        info = await restore_r2_key(key)
+        return {"success": True, "restore_info": info}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ restore_r2_object failed: {e}")
+        raise HTTPException(status_code=500, detail=f"从R2恢复失败: {str(e)}")
 
 
 @router.post("/restore/r2")

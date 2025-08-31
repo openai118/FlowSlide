@@ -617,6 +617,110 @@ async def list_backups() -> list:
     return backup_service.list_backups()
 
 
+async def list_r2_files() -> list:
+    """Module-level helper: 列出R2中 backups/ 前缀下的对象（返回 key/name, size, last_modified）"""
+    # use global backup_service instance
+    if not backup_service._is_r2_configured():
+        return []
+
+    try:
+        from botocore.config import Config
+        config = Config(region_name='auto')
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=backup_service.r2_config['access_key'],
+            aws_secret_access_key=backup_service.r2_config['secret_key'],
+            endpoint_url=backup_service.r2_config['endpoint'],
+            config=config
+        )
+
+        response = s3_client.list_objects_v2(Bucket=backup_service.r2_config['bucket'], Prefix='backups/')
+        items = []
+        if 'Contents' in response and response['Contents']:
+            for obj in response['Contents']:
+                items.append({
+                    'key': obj.get('Key'),
+                    'size': obj.get('Size'),
+                    'last_modified': obj.get('LastModified').isoformat() if obj.get('LastModified') else None
+                })
+        items.sort(key=lambda x: x.get('last_modified') or '', reverse=True)
+        return items
+    except Exception as e:
+        logger.warning(f"list_r2_files failed: {e}")
+        return []
+
+
+async def delete_r2_file(key: str) -> bool:
+    """Module-level helper: 从R2删除指定对象（key）"""
+    if not backup_service._is_r2_configured():
+        raise Exception("R2未配置")
+
+    try:
+        from botocore.config import Config
+        config = Config(region_name='auto')
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=backup_service.r2_config['access_key'],
+            aws_secret_access_key=backup_service.r2_config['secret_key'],
+            endpoint_url=backup_service.r2_config['endpoint'],
+            config=config
+        )
+
+        await asyncio.to_thread(s3_client.delete_object, Bucket=backup_service.r2_config['bucket'], Key=key)
+        logger.info(f"✅ R2 object deleted: {key}")
+        return True
+    except Exception as e:
+        logger.error(f"❌ delete_r2_file failed: {e}")
+        return False
+
+
+async def restore_r2_key(key: str) -> Dict[str, Any]:
+    """Module-level helper: 从R2下载指定 key 并恢复该备份（将文件下载到 backup_dir 并调用 restore_backup）"""
+    if not backup_service._is_r2_configured():
+        raise Exception("R2未配置")
+
+    try:
+        from botocore.config import Config
+        config = Config(region_name='auto')
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=backup_service.r2_config['access_key'],
+            aws_secret_access_key=backup_service.r2_config['secret_key'],
+            endpoint_url=backup_service.r2_config['endpoint'],
+            config=config
+        )
+
+        backup_service.backup_dir.mkdir(exist_ok=True)
+        local_backup_path = backup_service.backup_dir / Path(key).name
+
+        await asyncio.to_thread(
+            s3_client.download_file,
+            backup_service.r2_config['bucket'],
+            key,
+            str(local_backup_path)
+        )
+
+        if not local_backup_path.exists():
+            raise Exception("下载后的文件不存在")
+
+        success = await backup_service.restore_backup(local_backup_path.name)
+        if not success:
+            raise Exception("恢复失败")
+
+        return {
+            'filename': local_backup_path.name,
+            'size': local_backup_path.stat().st_size,
+            'timestamp': datetime.now().isoformat(),
+            'source': 'r2',
+            'r2_key': key,
+            'r2_bucket': backup_service.r2_config['bucket'],
+            'success': True
+        }
+    except Exception as e:
+        logger.error(f"❌ restore_r2_key failed: {e}")
+        raise
+
+
 async def restore_backup(backup_name: str) -> bool:
     """恢复备份"""
     return await backup_service.restore_backup(backup_name)

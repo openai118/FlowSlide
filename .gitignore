@@ -148,3 +148,9 @@ temp_*.py
 .lock
 # uv.lock - Keep this file for reproducible builds
 # uv.lock
+ai_config_*.html
+ai_config_*.txt
+login_resp.json
+uvicorn_*.txt
+tmp_*.py
+/scripts/*.py

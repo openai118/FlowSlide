@@ -633,21 +633,89 @@
                 </div>
             </div>
 
-            <div>
-                <h4 style="color: #e74c3c; margin-bottom: 15px;">数据库配置</h4>
+            <div style="width:100%; grid-column: 1 / -1;">
+                <h3 style="color:#c0392b; margin-bottom:12px; font-size:1.25em; font-weight:700;">数据库与 Cloudflare R2 配置</h3>
 
-                <div class="form-group">
-                    <label>数据库URL (DATABASE_URL):</label>
-                    <div style="display:flex; gap:8px; align-items:center;">
-                        <input type="password" name="database_url"
-                               placeholder="sqlite:///./flowslide.db"
-                               data-sensitive="true" style="flex:1;">
-                        <button type="button" class="btn btn-info" onclick="toggleSecretVisibility('database_url', this)" title="显示/隐藏">
-                            👁️
-                        </button>
+                <form id="app-config-form" autocomplete="on" style="display:flex; gap:16px; width:100%; align-items:flex-start;">
+                    <!-- Hidden username field recommended for password autofill heuristics -->
+                    <input type="text" name="__appconfig_username" autocomplete="username" style="position:absolute; left:-9999px; top:auto; width:1px; height:1px; opacity:0;" />
+                    <!-- 左侧：快速配置 + R2 参数（已交换） -->
+                    <div style="display:flex; flex-direction:column; gap:12px; flex:1;">
+                        <!-- 快速配置 区块 -->
+                        <div style="background: var(--panel-bg); padding:14px; border-radius:10px; border:1px solid var(--panel-border);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                                <h5 id="quick-config-title" style="margin:0; color:#2c3e50; font-size:1.05em; font-weight:600;">快速配置：数据库 & R2</h5>
+                                <div style="display:flex; gap:8px;">
+                                    <button class="btn btn-outline" type="button" onclick="showBulkPasteModal()">批量粘贴解析</button>
+                                </div>
+                            </div>
+                            <p style="color:#6c757d; margin:0 0 10px 0;">粘贴环境变量或键值对（每行或用分号分隔），解析后会填充下方字段，解析完成请点击“保存应用配置”生效。</p>
+                        </div>
+
+                        <!-- R2 参数（从右侧移动到此处） -->
+                        <div style="background: var(--panel-bg); padding:14px; border-radius:10px; border:1px solid var(--panel-border);">
+                            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                                <h6 style="margin:0; color:#2c3e50; font-size:1.05em; font-weight:600;">☁️ R2 的配置参数</h6>
+                                <span id="r2-config-badge" style="display:inline-block;padding:2px 8px;border-radius:12px;color:#fff;font-size:12px;background:#6c757d;margin-left:8px;">未配置</span>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:10px;">
+                                <div class="form-group">
+                                    <label>R2_ACCESS_KEY_ID</label>
+                                    <input type="text" name="r2_access_key_id" placeholder="R2_ACCESS_KEY_ID" value="{{ current_config.get('r2_access_key_id','') }}">
+                                </div>
+                                <div class="form-group">
+                                    <label>R2_SECRET_ACCESS_KEY</label>
+                                    <input type="password" name="r2_secret_access_key" placeholder="R2_SECRET_ACCESS_KEY" value="{{ current_config.get('r2_secret_access_key','') }}" autocomplete="current-password">
+                                </div>
+                                <div class="form-group">
+                                    <label>R2_ENDPOINT</label>
+                                    <input type="text" name="r2_endpoint" placeholder="R2_ENDPOINT" value="{{ current_config.get('r2_endpoint','') }}">
+                                </div>
+                                <div class="form-group">
+                                    <label>R2_BUCKET_NAME</label>
+                                    <input type="text" name="r2_bucket_name" placeholder="R2_BUCKET_NAME" value="{{ current_config.get('r2_bucket_name','') }}">
+                                </div>
+                                <!-- STORAGE_BUCKET and STORAGE_PROVIDER moved to database block -->
+                            </div>
+                        </div>
                     </div>
-                    <small style="color: #7f8c8d;">支持SQLite、PostgreSQL、MySQL等。出于安全考虑，已保存的值在页面上以密文显示。</small>
-                </div>
+
+                    <!-- 右侧：数据库配置参数（从左侧移动到此处） -->
+                    <div style="display:flex; flex-direction:column; gap:12px; flex:1;">
+                        <div style="background: var(--panel-bg); padding:14px; border-radius:10px; border:1px solid var(--panel-border); height:100%; box-sizing:border-box;">
+                            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                                <h6 style="margin:0; color:#2c3e50; font-size:1.05em; font-weight:600;">🗄️ 数据库配置参数</h6>
+                                <span id="db-config-badge" style="display:inline-block;padding:2px 8px;border-radius:12px;color:#fff;font-size:12px;background:#6c757d;margin-left:8px;">未配置</span>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:10px;">
+                                <div class="form-group">
+                                    <label>DATABASE_URL</label>
+                                    <input type="password" name="database_url" placeholder="sqlite:///./flowslide.db" data-sensitive="true" value="{{ current_config.get('database_url','') }}">
+                                </div>
+                                <div class="form-group">
+                                    <label>API_URL</label>
+                                    <input type="text" name="api_url" placeholder="API_URL" value="{{ current_config.get('api_url','') }}">
+                                </div>
+                                <div class="form-group">
+                                    <label>API_ANON_KEY</label>
+                                    <input type="password" name="api_anon_key" placeholder="API_ANON_KEY" value="{{ current_config.get('api_anon_key','') }}" autocomplete="current-password">
+                                </div>
+                                <div class="form-group">
+                                    <label>API_SERVICE_KEY</label>
+                                    <input type="password" name="api_service_key" placeholder="API_SERVICE_KEY" value="{{ current_config.get('api_service_key','') }}" autocomplete="current-password">
+                                </div>
+                                <div class="form-group">
+                                    <label>STORAGE_BUCKET</label>
+                                    <input type="text" name="storage_bucket" placeholder="STORAGE_BUCKET" value="{{ current_config.get('storage_bucket','') }}">
+                                </div>
+                                <div class="form-group">
+                                    <label>STORAGE_PROVIDER</label>
+                                    <input type="text" name="storage_provider" placeholder="STORAGE_PROVIDER" value="{{ current_config.get('storage_provider','') }}">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
             </div>
         </div>
 
@@ -1064,6 +1132,10 @@
                     </h5>
 
                     <!-- 配置状态显示 -->
+                    <style>
+                        /* 强制隐藏模式选择下方的描述区域，保持下拉与切换按钮紧凑 */
+                        #selected-mode-info { display: none !important; }
+                    </style>
                     <div id="config-status-display" style="background: rgba(52, 152, 219, 0.1); padding: 12px; border-radius: 6px; margin-bottom: 15px;">
                         <!-- 配置状态将在这里动态显示 -->
                     </div>
@@ -1106,18 +1178,34 @@
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px;">
                 <!-- 数据库同步 -->
                 <div style="background: var(--glass-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--glass-border);">
-                    <h5 style="color: #27ae60; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                        <span>�</span> 数据库同步
+                    <h5 style="color: #27ae60; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; justify-content: space-between;">
+                        <div style="display:flex; align-items:center; gap:8px;"><span>�</span> 数据库同步</div>
+                        <span id="db-config-badge" style="display:inline-block;padding:6px 10px;border-radius:12px;color:#fff;font-size:12px;background:#6c757d;">未配置</span>
                     </h5>
                     <div style="display: flex; flex-direction: column; gap: 12px;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-weight: 500; color: #495057;">最后同步时间:</span>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span style="font-weight: 500; color: #495057;">最后同步时间:</span>
+                            </div>
                             <span id="last-db-backup" style="color: #6c757d; font-size: 0.9em;">未知</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <span style="font-weight: 500; color: #495057;">同步文件大小:</span>
                             <span id="db-backup-size" style="color: #6c757d; font-size: 0.9em;">未知</span>
                         </div>
+                        <!-- DB backup file list selector (label on previous line, select + actions in flex row to match R2) -->
+                        <div style="margin-top:10px;">
+                            <label style="font-weight:500; color:#495057;">数据库备份:</label>
+                            <div style="display:flex; gap:8px; margin-top:6px;">
+                                <select id="db-file-list" style="flex:1; padding:6px; border-radius:6px; border:1px solid #ddd;">
+                                    <option value="">-- 无可用文件 --</option>
+                                </select>
+                                <div id="db-empty-note" style="display:none; color:#6c757d; font-size:0.9em; margin-left:8px;">暂无本地备份。可点击“同步到外部”或运行手动备份。</div>
+                                <button onclick="restoreSelectedDB()" class="btn btn-warning" style="padding:6px 10px;">恢复</button>
+                                <button onclick="deleteSelectedDB()" class="btn btn-danger" style="padding:6px 10px;">删除</button>
+                            </div>
+                        </div>
+
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px;">
                             <button onclick="syncToExternal()" class="btn btn-success" style="padding: 8px 6px; font-size: 0.85em;">
                                 📤 同步到外部
@@ -1134,20 +1222,37 @@
 
                 <!-- R2 云存储同步 -->
                 <div style="background: var(--glass-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--glass-border);">
-                    <h5 style="color: #17a2b8; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                        <span>☁️</span> R2 云存储同步
+                    <h5 style="color: #17a2b8; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; justify-content: space-between;">
+                        <div style="display:flex; align-items:center; gap:8px;"><span>☁️</span> R2 云存储同步</div>
+                        <span id="r2-config-badge" style="display:inline-block;padding:6px 10px;border-radius:12px;color:#fff;font-size:12px;background:#6c757d;">未配置</span>
                     </h5>
                     <div style="display: flex; flex-direction: column; gap: 12px;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-weight: 500; color: #495057;">同步状态:</span>
-                            <span id="r2-sync-status" style="background: #95a5a6; color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.8em;">
-                                未配置
-                            </span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-weight: 500; color: #495057;">最后同步:</span>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span style="font-weight: 500; color: #495057;">最后同步时间:</span>
+                            </div>
                             <span id="last-r2-sync" style="color: #6c757d; font-size: 0.9em;">从未同步</span>
                         </div>
+
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 500; color: #495057;">同步文件大小:</span>
+                            <span id="r2-backup-size" style="color: #6c757d; font-size: 0.9em;">未知</span>
+                        </div>
+
+                        <!-- R2 file list selector -->
+                        <div style="margin-top:8px;">
+                            <label style="font-weight:500; color:#495057;">R2 文件备份:</label>
+                            <div style="display:flex; gap:8px; margin-top:6px;">
+                                <select id="r2-file-list" style="flex:1; padding:6px; border-radius:6px; border:1px solid #ddd;">
+                                    <option value="">-- 无可用文件 --</option>
+                                </select>
+                                <div id="r2-empty-note" style="display:none; color:#6c757d; font-size:0.9em; margin-left:8px;">R2 上暂无备份文件。请确认 R2 配置并执行备份后重试。</div>
+                                <button onclick="restoreSelectedFromR2()" class="btn btn-warning" style="padding:6px 10px;">恢复</button>
+                                <button onclick="deleteSelectedFromR2()" class="btn btn-danger" style="padding:6px 10px;">删除</button>
+                            </div>
+                        </div>
+
+                        <!-- DB backup file list selector (for database card) -->
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px;">
                             <button onclick="syncToR2()" class="btn btn-primary" style="padding: 8px 6px; font-size: 0.85em;">
                                 🔄 同步到R2
@@ -2333,6 +2438,8 @@
 {% endblock %}
 
 {% block extra_js %}
+<!-- Safe container for server-rendered config as JSON to avoid JS parse-time issues -->
+<script id="current-config-json" type="application/json">{{ current_config | tojson | replace("</","<\\/") }}</script>
 <script>
 // 受控日志：只有在 ?debug=1 或 window.__ai_debug 为 true 时输出 info/debug
 window.__ai_log = (function(){
@@ -2345,7 +2452,19 @@ window.__ai_log = (function(){
     };
 })();
 // 全局变量和常量
-let currentConfig = {{ current_config | tojson }};
+// Load server-rendered config from the safe JSON script tag. Use try/catch so a parse error
+// doesn't abort the rest of the script and break UI initialization (which caused the
+// "系统配置" 卡片 无法打开 when a JSON.parse error occurred).
+let currentConfig = {};
+try {
+    const __cfg = document.getElementById('current-config-json');
+    if (__cfg && __cfg.textContent) {
+        currentConfig = JSON.parse(__cfg.textContent);
+    }
+} catch (e) {
+    console.error('Failed to parse currentConfig JSON from DOM:', e);
+    currentConfig = {};
+}
 const AVAILABLE_PROVIDERS = ['openai', 'anthropic', 'google', 'azure_openai', 'ollama'];
 const PROVIDER_DISPLAY_NAMES = {
     'openai': 'OpenAI',
@@ -6895,5 +7014,82 @@ document.addEventListener('visibilitychange', function() {
         }
     }
 });
+</script>
+<script>
+// 从 ai_config_buckup.html 移植的批量粘贴解析和 R2 状态绑定函数
+function showBulkPasteModal(){
+    const m = document.getElementById('bulk-paste-modal'); if(m) m.style.display = 'flex';
+    const ta = document.getElementById('bulk-paste-text'); if(ta) ta.value = '';
+}
+function hideBulkPasteModal(){
+    const m = document.getElementById('bulk-paste-modal'); if(m) m.style.display = 'none';
+}
+
+function parseKeyValues(raw){
+    const result = {};
+    if(!raw) return result;
+    const lines = raw.split(/\r?\n|;/);
+    for(let l of lines){
+        l = l.trim(); if(!l) continue; if(l.startsWith('#')) continue;
+        const idx = l.indexOf('='); if(idx === -1) continue;
+        const k = l.substring(0, idx).trim(); const v = l.substring(idx+1).trim(); if(k) result[k]=v;
+    }
+    return result;
+}
+
+async function applyBulkPaste(){
+    const raw = (document.getElementById('bulk-paste-text')||{}).value || '';
+    const kv = parseKeyValues(raw);
+    const mapping = {
+        'R2_ACCESS_KEY_ID': 'r2_access_key_id',
+        'R2_SECRET_ACCESS_KEY': 'r2_secret_access_key',
+        'R2_ENDPOINT': 'r2_endpoint',
+        'R2_BUCKET_NAME': 'r2_bucket_name',
+        'STORAGE_BUCKET': 'storage_bucket',
+        'STORAGE_PROVIDER': 'storage_provider',
+        'DATABASE_URL': 'database_url',
+        'API_URL': 'api_url',
+        'API_ANON_KEY': 'api_anon_key',
+        'API_SERVICE_KEY': 'api_service_key'
+    };
+
+    for(const [k,v] of Object.entries(kv)){
+        const name = mapping[k] || k.toLowerCase();
+        const el = document.querySelector(`[name='${name}']`);
+        if(el) el.value = v;
+    }
+
+    try{
+        const resp = await fetch('/api/config/parse-and-apply',{
+            method:'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({config:{raw}})
+        });
+        const data = await resp.json().catch(()=>null);
+        if(resp.ok && data && data.success){
+            alert('解析并保存成功，R2 配置完整: ' + (data.r2_configured ? '是' : '否'));
+            try{ await refreshConfigFromServer(); }catch(e){ console.warn('refresh after parse failed', e); }
+        } else {
+            alert('解析或保存失败: ' + (data && (data.errors || data.message) ? JSON.stringify(data.errors || data.message) : 'Unknown'));
+        }
+    }catch(e){ console.error(e); alert('调用解析接口失败，请查看控制台'); }
+
+    hideBulkPasteModal();
+
+    // Bind form inputs to update badges live
+    document.addEventListener('DOMContentLoaded', function(){
+        const form = document.getElementById('app-config-form');
+        if(!form) return;
+        const handler = () => updateR2Status && updateR2Status();
+        form.querySelectorAll('input, select, textarea').forEach(el => {
+            el.addEventListener('input', handler);
+            el.addEventListener('change', handler);
+        });
+    });
+
+    // Ensure password inputs have autocomplete
+    document.addEventListener('DOMContentLoaded', function(){
+        const pwds = Array.from(document.querySelectorAll('input[type="password"]'));
+        for(const p of pwds){ if(!p.hasAttribute('autocomplete')) p.setAttribute('autocomplete','current-password'); }
+    });
+}
 </script>
 {% endblock %}

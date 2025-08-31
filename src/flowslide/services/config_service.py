@@ -282,6 +282,16 @@ class ConfigService:
                 "category": "app_config",
                 "default": "sqlite:///./flowslide.db",
             },
+            "api_url": {"type": "url", "category": "app_config", "default": ""},
+            "api_anon_key": {"type": "password", "category": "app_config", "default": ""},
+            "api_service_key": {"type": "password", "category": "app_config", "default": ""},
+            # Cloudflare R2 / Storage configuration
+            "r2_access_key_id": {"type": "password", "category": "app_config", "default": ""},
+            "r2_secret_access_key": {"type": "password", "category": "app_config", "default": ""},
+            "r2_endpoint": {"type": "url", "category": "app_config", "default": ""},
+            "r2_bucket_name": {"type": "text", "category": "app_config", "default": ""},
+            "storage_bucket": {"type": "text", "category": "app_config", "default": ""},
+            "storage_provider": {"type": "text", "category": "app_config", "default": ""},
             # Image Service Configuration
             "enable_image_service": {
                 "type": "boolean",

@@ -365,7 +365,8 @@ async def web_ai_config(request: Request, user: User = Depends(get_current_user_
                 # build provider status separately to avoid long inline comprehension
                 "provider_status": _build_provider_status(ai_config),
                 "current_config": current_config,
-                "user": user.to_dict(),
+                        "user": user.to_dict(),
+                        "is_admin": getattr(user, "is_admin", False),
             },
         )
     finally:

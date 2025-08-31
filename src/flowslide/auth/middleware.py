@@ -54,6 +54,7 @@ class AuthMiddleware:
             "/api/backup/",  # 备份API无需认证（用于自动化备份）
             "/api/system/",  # 系统监控API无需认证
             "/api/deployment/",  # 部署模式API无需认证
+            "/api/config/",  # 配置API允许路由自行处理权限（GET 可公开返回掩码）
             "/api/global-master-templates/",  # 模板详情API无需认证
             "/home/",  # 允许 /home/ 形式
             "/scenarios/",  # 允许 /scenarios/ 形式
