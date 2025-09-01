@@ -199,6 +199,7 @@ function showAIGenerationError(errorMessage) {
 
 async function startStreamingGeneration(requestData) {
     let generatedTemplateId = null;
+    let streamError = null;
 
     try {
         // 更新状态
@@ -240,6 +241,15 @@ async function startStreamingGeneration(requestData) {
                 try {
                     if (line.startsWith('data: ')) {
                         const data = JSON.parse(line.slice(6));
+
+                        // If server signals an error in the stream, capture it and abort processing
+                        if (data.type === 'error') {
+                            streamError = data.message || 'AI service returned an error';
+                            // show the error in the stream area for visibility
+                            appendToStream('\n\n❌ 错误：' + streamError + '\n');
+                            break; // stop processing further lines
+                        }
+
                         await handleStreamData(data);
 
                         if (data.type === 'complete' && data.template_id) {
@@ -250,6 +260,15 @@ async function startStreamingGeneration(requestData) {
                     console.warn('Failed to parse stream data:', line, e);
                 }
             }
+        }
+
+        // If an error was received in the stream, surface it and abort success flow
+        if (streamError) {
+            console.error('Stream error during generation:', streamError);
+            // Update status and show error UI
+            updateGenerationStatus('AI 生成失败，请检查 API 配置');
+            showAIGenerationError(streamError);
+            return; // stop further success handling
         }
 
         // 生成完成
