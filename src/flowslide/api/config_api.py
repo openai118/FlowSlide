@@ -336,7 +336,12 @@ async def parse_and_apply_config(request: ConfigUpdateRequest, config_service: C
             if '=' not in part:
                 continue
             k, v = part.split('=', 1)
-            kv[k.strip()] = v.strip()
+            k = k.strip()
+            v = v.strip()
+            # Strip surrounding quotes
+            if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
+                v = v[1:-1]
+            kv[k] = v
 
         if not kv:
             return {"success": False, "message": "No key=value pairs found"}

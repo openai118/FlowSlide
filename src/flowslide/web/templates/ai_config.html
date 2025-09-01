@@ -131,20 +131,20 @@
                 </div>
 
                 <!-- 提供者配置表单 -->
-                <div class="provider-config-form">
+                <form class="provider-config-form" data-provider="{{ provider }}">
                     <div class="provider-config-fields">
                         {% if provider == "openai" %}
                             <div class="form-group">
                                 <label>API Key:</label>
                                 <input type="password" name="openai_api_key" placeholder="sk-..."
                                        value="{{ current_config.get('openai_api_key', '') }}"
-                                       style="font-family: monospace; font-size: 0.9em;">
+                                       style="font-family: monospace; font-size: 0.9em;" autocomplete="off">
                             </div>
                             <div class="form-group">
                                 <label>Base URL:</label>
                                 <input type="text" name="openai_base_url"
                                        value="{{ current_config.get('openai_base_url', '') }}"
-                                       placeholder="{{ current_config.get('openai_base_url', 'https://api.openai.com/v1') }}">
+                                       placeholder="{{ current_config.get('openai_base_url', 'https://api.openai.com/v1') }}" autocomplete="off">
                                  <small style="color: #7f8c8d;">可选：自定义网关或代理地址，默认 https://api.openai.com/v1</small>
                             </div>
                             <div class="form-group">
@@ -155,7 +155,7 @@
                                     </select>
                                     <input type="text" name="openai_model" id="openai_model_input" class="model-input"
                                            value="{{ current_config.get('openai_model', '') }}"
-                                           placeholder="{{ current_config.get('openai_model', 'gpt-4o') }}">
+                                           placeholder="{{ current_config.get('openai_model', 'gpt-4o') }}" autocomplete="off">
                                     <button type="button" onclick="event.preventDefault(); fetchAndShowModels('openai'); return false;" id="openai_model_fetch_btn"
                                             class="model-fetch-btn" title="获取可用模型列表">
                                         📋
@@ -168,13 +168,13 @@
                             <label>API Key:</label>
                             <input type="password" name="anthropic_api_key" placeholder="sk-ant-..."
                                    value="{{ current_config.get('anthropic_api_key', '') }}"
-                                   style="font-family: monospace; font-size: 0.9em;">
+                                   style="font-family: monospace; font-size: 0.9em;" autocomplete="off">
                         </div>
                         <div class="form-group">
                             <label>Base URL:</label>
                             <input type="text" name="anthropic_base_url"
                                    value="{{ current_config.get('anthropic_base_url', '') }}"
-                                   placeholder="{{ current_config.get('anthropic_base_url', 'https://api.anthropic.com') }}">
+                                   placeholder="{{ current_config.get('anthropic_base_url', 'https://api.anthropic.com') }}" autocomplete="off">
                             <small style="color: #7f8c8d;">可选：自定义网关或代理地址，默认 https://api.anthropic.com</small>
                         </div>
                         <div class="form-group">
@@ -185,7 +185,7 @@
                                 </select>
                                 <input type="text" name="anthropic_model" id="anthropic_model_input" class="model-input"
                                        value="{{ current_config.get('anthropic_model', '') }}"
-                                       placeholder="{{ current_config.get('anthropic_model', 'claude-3-5-sonnet-20241022') }}">
+                                       placeholder="{{ current_config.get('anthropic_model', 'claude-3-5-sonnet-20241022') }}" autocomplete="off">
                                 <button type="button" onclick="event.preventDefault(); fetchAndShowModels('anthropic'); return false;" id="anthropic_model_fetch_btn"
                                         class="model-fetch-btn" title="获取可用模型列表">
                                     📋
@@ -198,13 +198,13 @@
                             <label>API Key:</label>
                             <input type="password" name="google_api_key" placeholder="your-google-api-key"
                                    value="{{ current_config.get('google_api_key', '') }}"
-                                   style="font-family: monospace; font-size: 0.9em;">
+                                   style="font-family: monospace; font-size: 0.9em;" autocomplete="off">
                         </div>
                         <div class="form-group">
                             <label>Base URL:</label>
                             <input type="text" name="google_base_url"
                                    value="{{ current_config.get('google_base_url', '') }}"
-                                   placeholder="{{ current_config.get('google_base_url', 'https://generativelanguage.googleapis.com') }}">
+                                   placeholder="{{ current_config.get('google_base_url', 'https://generativelanguage.googleapis.com') }}" autocomplete="off">
                             <small style="color: #7f8c8d;">可选：自定义网关或代理地址，默认 https://generativelanguage.googleapis.com</small>
                         </div>
                         <div class="form-group">
@@ -215,7 +215,7 @@
                                 </select>
                                 <input type="text" name="google_model" id="google_model_input" class="model-input"
                                        value="{{ current_config.get('google_model', '') }}"
-                                       placeholder="{{ current_config.get('google_model', 'gemini-1.5-flash') }}">
+                                       placeholder="{{ current_config.get('google_model', 'gemini-1.5-flash') }}" autocomplete="off">
                                 <button type="button" onclick="event.preventDefault(); fetchAndShowModels('google'); return false;" id="google_model_fetch_btn"
                                         class="model-fetch-btn" title="获取可用模型列表">
                                     📋
@@ -228,13 +228,13 @@
                             <label>API Key:</label>
                             <input type="password" name="azure_openai_api_key" placeholder="your-azure-key"
                                    value="{{ current_config.get('azure_openai_api_key', '') }}"
-                                   style="font-family: monospace; font-size: 0.9em;">
+                                   style="font-family: monospace; font-size: 0.9em;" autocomplete="off">
                         </div>
                         <div class="form-group">
                             <label>Endpoint:</label>
                             <input type="text" name="azure_openai_endpoint"
                                    value="{{ current_config.get('azure_openai_endpoint', '') }}"
-                                   placeholder="https://your-resource.openai.azure.com/">
+                                   placeholder="https://your-resource.openai.azure.com/" autocomplete="off">
                         </div>
                         <div class="form-group">
                             <label>Deployment Name:</label>
@@ -244,7 +244,7 @@
                                 </select>
                                 <input type="text" name="azure_openai_deployment_name" id="azure_openai_model_input" class="model-input"
                                        value="{{ current_config.get('azure_openai_deployment_name', '') }}"
-                                       placeholder="your-deployment-name">
+                                       placeholder="your-deployment-name" autocomplete="off">
                                 <button type="button" onclick="event.preventDefault(); fetchAndShowModels('azure_openai'); return false;" id="azure_openai_model_fetch_btn"
                                         class="model-fetch-btn" title="获取可用部署列表">
                                     📋
@@ -255,14 +255,14 @@
                             <label>API Version:</label>
                             <input type="text" name="azure_openai_api_version"
                                    value="{{ current_config.get('azure_openai_api_version', '') }}"
-                                   placeholder="2024-02-15-preview">
+                                   placeholder="2024-02-15-preview" autocomplete="off">
                         </div>
                     {% elif provider == "ollama" %}
                         <div class="form-group">
                             <label>Base URL:</label>
                             <input type="text" name="ollama_base_url"
                                    value="{{ current_config.get('ollama_base_url', '') }}"
-                                   placeholder="{{ current_config.get('ollama_base_url', 'http://localhost:11434') }}">
+                                   placeholder="{{ current_config.get('ollama_base_url', 'http://localhost:11434') }}" autocomplete="off">
                         </div>
                         <div class="form-group">
                             <label>默认模型:</label>
@@ -272,7 +272,7 @@
                                 </select>
                                 <input type="text" name="ollama_model" id="ollama_model_input" class="model-input"
                                        value="{{ current_config.get('ollama_model', '') }}"
-                                       placeholder="{{ current_config.get('ollama_model', 'llama2, mistral, codellama...') }}">
+                                       placeholder="{{ current_config.get('ollama_model', 'llama2, mistral, codellama...') }}" autocomplete="off">
                                 <button type="button" onclick="event.preventDefault(); fetchAndShowModels('ollama'); return false;" id="ollama_model_fetch_btn"
                                         class="model-fetch-btn" title="获取可用模型列表">
                                     📋
@@ -284,13 +284,13 @@
 
                     <div class="provider-config-actions">
                         <div style="text-align: center;">
-                            <button id="test-{{ provider }}-btn" onclick="testProviderWithProgress('{{ provider }}')" class="btn btn-primary" style="margin-right: 10px; position: relative;">
+                            <button type="button" id="test-{{ provider }}-btn" onclick="testProviderWithProgress('{{ provider }}')" class="btn btn-primary" style="margin-right: 10px; position: relative;">
                                 <span id="test-{{ provider }}-text">🧪 测试</span>
                                 <div id="test-{{ provider }}-progress" style="display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.1); border-radius: 4px; align-items: center; justify-content: center;">
                                     <div style="width: 16px; height: 16px; border: 2px solid #fff; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
                                 </div>
                             </button>
-                            <button id="save-{{ provider }}-btn" onclick="saveProviderConfigWithProgress('{{ provider }}')" class="btn btn-success" style="position: relative;">
+                            <button type="button" id="save-{{ provider }}-btn" onclick="saveProviderConfigWithProgress('{{ provider }}')" class="btn btn-success" style="position: relative;">
                                 <span id="save-{{ provider }}-text">💾 保存配置</span>
                                 <div id="save-{{ provider }}-progress" class="progress-overlay">
                                     <div class="progress-spinner"></div>
@@ -298,7 +298,7 @@
                             </button>
                         </div>
                     </div>
-                </div>
+                </form>
             </div>
             {% endfor %}
         </div>
@@ -345,13 +345,13 @@
                     </div>
                     <div class="form-group" id="fixedPagesGroup" style="display:none;">
                         <label style="font-weight: 600; color: #495057;">固定页数</label>
-                        <input type="number" name="fixed_pages" min="1" placeholder="10">
+                        <input type="number" name="fixed_pages" min="1" placeholder="10" autocomplete="off">
                     </div>
                     <div class="form-group" id="rangePagesGroup" style="display:none;">
                         <label style="font-weight: 600; color: #495057;">页数范围</label>
                         <div style="display:flex; gap:8px;">
-                            <input type="number" name="min_pages" min="1" placeholder="10" style="flex:1;">
-                            <input type="number" name="max_pages" min="1" placeholder="20" style="flex:1;">
+                            <input type="number" name="min_pages" min="1" placeholder="10" style="flex:1;" autocomplete="off">
+                            <input type="number" name="max_pages" min="1" placeholder="20" style="flex:1;" autocomplete="off">
                         </div>
                     </div>
                 </div>
@@ -453,29 +453,31 @@
 
                 <!-- API 密钥配置 -->
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 25px;">
-                    <div class="form-group">
-                        <label style="font-weight: 600; color: #495057; margin-bottom: 8px; display: block;">
-                            Tavily API Key
-                        </label>
-                        <input type="password" name="tavily_api_key" placeholder="tvly-..."
-                               value="{{ current_config.get('tavily_api_key', '') }}"
-                               style="font-family: monospace; font-size: 0.9em; margin-bottom: 8px;">
-                        <small style="color: #6c757d; font-size: 0.85em; line-height: 1.4;">
-                            用于深度研究功能的API密钥，可在 <a href="https://tavily.com" target="_blank" style="color: #e74c3c;">Tavily官网</a> 获取
-                        </small>
-                    </div>
+                    <form id="research-api-form">
+                        <div class="form-group">
+                            <label style="font-weight: 600; color: #495057; margin-bottom: 8px; display: block;">
+                                Tavily API Key
+                            </label>
+                            <input type="password" name="tavily_api_key" placeholder="tvly-..."
+                                   value="{{ current_config.get('tavily_api_key', '') }}"
+                                   style="font-family: monospace; font-size: 0.9em; margin-bottom: 8px;" autocomplete="off">
+                            <small style="color: #6c757d; font-size: 0.85em; line-height: 1.4;">
+                                用于深度研究功能的API密钥，可在 <a href="https://tavily.com" target="_blank" style="color: #e74c3c;">Tavily官网</a> 获取
+                            </small>
+                        </div>
 
-                    <div class="form-group">
-                        <label style="font-weight: 600; color: #495057; margin-bottom: 8px; display: block;">
-                            SearXNG 主机地址
-                        </label>
-                        <input type="url" name="searxng_host" placeholder="http://localhost:8888"
-                               value="{{ current_config.get('searxng_host', '') }}"
-                               style="font-family: monospace; font-size: 0.9em; margin-bottom: 8px;">
-                        <small style="color: #6c757d; font-size: 0.85em; line-height: 1.4;">
-                            SearXNG 实例的完整URL地址，用于开源搜索引擎研究功能
-                        </small>
-                    </div>
+                        <div class="form-group">
+                            <label style="font-weight: 600; color: #495057; margin-bottom: 8px; display: block;">
+                                SearXNG 主机地址
+                            </label>
+                            <input type="url" name="searxng_host" placeholder="http://localhost:8888"
+                                   value="{{ current_config.get('searxng_host', '') }}"
+                                   style="font-family: monospace; font-size: 0.9em; margin-bottom: 8px;" autocomplete="off">
+                            <small style="color: #6c757d; font-size: 0.85em; line-height: 1.4;">
+                                SearXNG 实例的完整URL地址，用于开源搜索引擎研究功能
+                            </small>
+                        </div>
+                    </form>
                 </div>
 
                 <!-- 高级选项 -->
@@ -524,24 +526,26 @@
                 <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); display: flex; align-items: center; gap: 8px;">
                     <span>📄</span> 其他配置
                 </h4>
-                <div class="form-group">
-                    <label style="font-weight: 600; color: var(--text-primary); margin-bottom: 8px; display: block;">
-                        Apryse License Key (PPT导出)
-                    </label>
-                    <div style="display: flex; gap: 8px; align-items: flex-start;">
-                        <input type="password" name="apryse_license_key" id="apryse_license_key" placeholder="your-apryse-license-key"
-                               value="{{ current_config.get('apryse_license_key', '') }}"
-                               style="font-family: monospace; font-size: 0.9em; flex: 1;">
-                        <button type="button" onclick="checkApryseLicense()" id="checkLicenseBtn"
-                                style="padding: 8px 16px; background: var(--accent-blue, #4facfe); color: white; border: none; border-radius: 6px; font-size: 0.9em; cursor: pointer; white-space: nowrap;">
-                            检测许可证
-                        </button>
+                <form id="other-config-form">
+                    <div class="form-group">
+                        <label style="font-weight: 600; color: var(--text-primary); margin-bottom: 8px; display: block;">
+                            Apryse License Key (PPT导出)
+                        </label>
+                        <div style="display: flex; gap: 8px; align-items: flex-start;">
+                            <input type="password" name="apryse_license_key" id="apryse_license_key" placeholder="your-apryse-license-key"
+                                   value="{{ current_config.get('apryse_license_key', '') }}"
+                                   style="font-family: monospace; font-size: 0.9em; flex: 1;" autocomplete="off">
+                            <button type="button" onclick="checkApryseLicense()" id="checkLicenseBtn"
+                                    style="padding: 8px 16px; background: var(--accent-blue, #4facfe); color: white; border: none; border-radius: 6px; font-size: 0.9em; cursor: pointer; white-space: nowrap;">
+                                检测许可证
+                            </button>
+                        </div>
+                        <div id="licenseStatus" style="margin-top: 8px; padding: 8px; border-radius: 4px; font-size: 0.85em; display: none;"></div>
+                        <small style="color: var(--text-secondary); font-size: 0.85em; line-height: 1.4; margin-top: 8px; display: block;">
+                            用于PPTX导出功能的Apryse SDK许可证密钥，可在 <a href="https://www.pdftron.com/" target="_blank" style="color: var(--accent-purple, #667eea);">Apryse官网</a> 获取
+                        </small>
                     </div>
-                    <div id="licenseStatus" style="margin-top: 8px; padding: 8px; border-radius: 4px; font-size: 0.85em; display: none;"></div>
-                    <small style="color: var(--text-secondary); font-size: 0.85em; line-height: 1.4; margin-top: 8px; display: block;">
-                        用于PPTX导出功能的Apryse SDK许可证密钥，可在 <a href="https://www.pdftron.com/" target="_blank" style="color: var(--accent-purple, #667eea);">Apryse官网</a> 获取
-                    </small>
-                </div>
+                </form>
             </div>
         </div>
 
@@ -567,17 +571,17 @@
 
                 <div class="form-group">
                     <label>主机地址 (HOST):</label>
-                    <input type="text" name="host" placeholder="0.0.0.0">
+                    <input type="text" name="host" placeholder="0.0.0.0" autocomplete="off">
                 </div>
 
                 <div class="form-group">
                     <label>端口 (PORT):</label>
-                    <input type="number" name="port" min="1" max="65535" placeholder="8000">
+                    <input type="number" name="port" min="1" max="65535" placeholder="8000" autocomplete="off">
                 </div>
 
                 <div class="form-group">
                     <label>基础URL (BASE_URL):</label>
-                    <input type="url" name="base_url" placeholder="http://localhost:8000">
+                    <input type="url" name="base_url" placeholder="http://localhost:8000" autocomplete="off">
                     <small style="color: #7f8c8d;">用于生成图片等资源的绝对URL，支持反向代理域名</small>
                 </div>
 
@@ -595,19 +599,28 @@
             <div>
                 <h4 style="color: #27ae60; margin-bottom: 15px;">安全配置</h4>
 
-                <div class="form-group">
-                    <label>密钥 (SECRET_KEY):</label>
-                    <input type="password" name="secret_key" placeholder="your-very-secure-secret-key"
-                           style="font-family: monospace; font-size: 0.9em;">
-                    <small style="color: #7f8c8d;">用于会话加密的密钥</small>
-                </div>
+                <form id="security-config-form">
+                    <div class="form-group">
+                        <label>密钥 (SECRET_KEY):</label>
+                        <input type="password" name="secret_key" placeholder="your-very-secure-secret-key"
+                               style="font-family: monospace; font-size: 0.9em;" autocomplete="off">
+                        <small style="color: #7f8c8d;">用于会话加密的密钥</small>
+                    </div>
 
-                <div class="form-group">
-                    <label>访问令牌过期时间 (ACCESS_TOKEN_EXPIRE_MINUTES):</label>
-                    <input type="number" name="access_token_expire_minutes" min="0" max="525600"
-                           placeholder="30">
-                    <small style="color: #7f8c8d;">单位：分钟，设置为 0 表示永不过期</small>
-                </div>
+                    <div class="form-group">
+                        <label>访问令牌过期时间 (ACCESS_TOKEN_EXPIRE_MINUTES):</label>
+                        <input type="number" name="access_token_expire_minutes" min="0" max="525600"
+                               placeholder="30">
+                        <small style="color: #7f8c8d;">单位：分钟，设置为 0 表示永不过期</small>
+                    </div>
+
+                    <!-- Save button for security config -->
+                    <div style="text-align: center; margin-top: 15px;">
+                        <button type="button" onclick="saveSecurityConfig()" class="btn btn-success" style="padding: 8px 20px; font-size: 0.9em;">
+                            💾 保存安全配置
+                        </button>
+                    </div>
+                </form>
             </div>
 
             <div>
@@ -622,7 +635,7 @@
 
                 <div class="form-group">
                     <label>上传目录 (UPLOAD_DIR):</label>
-                    <input type="text" name="upload_dir" placeholder="uploads">
+                    <input type="text" name="upload_dir" placeholder="uploads" autocomplete="off">
                 </div>
 
                 <div class="form-group">
@@ -661,7 +674,7 @@
                             <div style="display:flex; flex-direction:column; gap:10px;">
                                 <div class="form-group">
                                     <label>R2_ACCESS_KEY_ID</label>
-                                    <input type="text" name="r2_access_key_id" placeholder="R2_ACCESS_KEY_ID" value="{{ current_config.get('r2_access_key_id','') }}">
+                                    <input type="text" name="r2_access_key_id" placeholder="R2_ACCESS_KEY_ID" value="{{ current_config.get('r2_access_key_id','') }}" autocomplete="off">
                                 </div>
                                 <div class="form-group">
                                     <label>R2_SECRET_ACCESS_KEY</label>
@@ -669,11 +682,11 @@
                                 </div>
                                 <div class="form-group">
                                     <label>R2_ENDPOINT</label>
-                                    <input type="text" name="r2_endpoint" placeholder="R2_ENDPOINT" value="{{ current_config.get('r2_endpoint','') }}">
+                                    <input type="text" name="r2_endpoint" placeholder="R2_ENDPOINT" value="{{ current_config.get('r2_endpoint','') }}" autocomplete="off">
                                 </div>
                                 <div class="form-group">
                                     <label>R2_BUCKET_NAME</label>
-                                    <input type="text" name="r2_bucket_name" placeholder="R2_BUCKET_NAME" value="{{ current_config.get('r2_bucket_name','') }}">
+                                    <input type="text" name="r2_bucket_name" placeholder="R2_BUCKET_NAME" value="{{ current_config.get('r2_bucket_name','') }}" autocomplete="off">
                                 </div>
                                 <!-- STORAGE_BUCKET and STORAGE_PROVIDER moved to database block -->
                             </div>
@@ -690,11 +703,11 @@
                             <div style="display:flex; flex-direction:column; gap:10px;">
                                 <div class="form-group">
                                     <label>DATABASE_URL</label>
-                                    <input type="password" name="database_url" placeholder="sqlite:///./flowslide.db" data-sensitive="true" value="{{ current_config.get('database_url','') }}">
+                                    <input type="password" name="database_url" placeholder="sqlite:///./flowslide.db" data-sensitive="true" value="{{ current_config.get('database_url','') }}" autocomplete="off">
                                 </div>
                                 <div class="form-group">
                                     <label>API_URL</label>
-                                    <input type="text" name="api_url" placeholder="API_URL" value="{{ current_config.get('api_url','') }}">
+                                    <input type="text" name="api_url" placeholder="API_URL" value="{{ current_config.get('api_url','') }}" autocomplete="off">
                                 </div>
                                 <div class="form-group">
                                     <label>API_ANON_KEY</label>
@@ -706,11 +719,11 @@
                                 </div>
                                 <div class="form-group">
                                     <label>STORAGE_BUCKET</label>
-                                    <input type="text" name="storage_bucket" placeholder="STORAGE_BUCKET" value="{{ current_config.get('storage_bucket','') }}">
+                                    <input type="text" name="storage_bucket" placeholder="STORAGE_BUCKET" value="{{ current_config.get('storage_bucket','') }}" autocomplete="off">
                                 </div>
                                 <div class="form-group">
                                     <label>STORAGE_PROVIDER</label>
-                                    <input type="text" name="storage_provider" placeholder="STORAGE_PROVIDER" value="{{ current_config.get('storage_provider','') }}">
+                                    <input type="text" name="storage_provider" placeholder="STORAGE_PROVIDER" value="{{ current_config.get('storage_provider','') }}" autocomplete="off">
                                 </div>
                             </div>
                         </div>
@@ -808,91 +821,103 @@
                     <span>🔑</span> API密钥配置
                 </h4>
 
-                <!-- AI图片生成服务 -->
-                <div style="margin-bottom: 30px;">
-                    <h5 style="color: #6f42c1; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
-                        <span>🎨</span> AI图片生成服务
-                    </h5>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
-                        <div class="form-group">
-                            <label style="font-weight: 500; color: #495057;">DALL-E API Key (OpenAI):</label>
-                            <input type="password" name="openai_api_key_image" placeholder="sk-..."
-                                   value="{{ current_config.get('openai_api_key_image', '') }}"
-                                   style="font-family: monospace; font-size: 0.9em; margin-top: 5px;">
-                            <small style="color: #6c757d; margin-top: 5px; display: block;">用于DALL-E 3图片生成，与文本生成共用OpenAI密钥</small>
-                        </div>
+                <form id="image-service-api-form">
+                    <!-- AI图片生成服务 -->
+                    <div style="margin-bottom: 30px;">
+                        <h5 style="color: #6f42c1; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                            <span>🎨</span> AI图片生成服务
+                        </h5>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+                            <div class="form-group">
+                                <label style="font-weight: 500; color: #495057;">DALL-E API Key (OpenAI):</label>
+                                <input type="password" name="openai_api_key_image" placeholder="sk-..."
+                                       value="{{ current_config.get('openai_api_key_image', '') }}"
+                                       style="font-family: monospace; font-size: 0.9em; margin-top: 5px;" autocomplete="off">
+                                <small style="color: #6c757d; margin-top: 5px; display: block;">用于DALL-E 3图片生成，与文本生成共用OpenAI密钥</small>
+                            </div>
 
-                        <div class="form-group">
-                            <label style="font-weight: 500; color: #495057;">SiliconFlow API Key:</label>
-                            <input type="password" name="siliconflow_api_key" placeholder="your-siliconflow-api-key"
-                                   value="{{ current_config.get('siliconflow_api_key', '') }}"
-                                   style="font-family: monospace; font-size: 0.9em; margin-top: 5px;">
-                            <small style="color: #6c757d; margin-top: 5px; display: block;">用于SiliconFlow Kolors图片生成</small>
+                            <div class="form-group">
+                                <label style="font-weight: 500; color: #495057;">SiliconFlow API Key:</label>
+                                <input type="password" name="siliconflow_api_key" placeholder="your-siliconflow-api-key"
+                                       value="{{ current_config.get('siliconflow_api_key', '') }}"
+                                       style="font-family: monospace; font-size: 0.9em; margin-top: 5px;" autocomplete="off">
+                                <small style="color: #6c757d; margin-top: 5px; display: block;">用于SiliconFlow Kolors图片生成</small>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Pollinations免费服务 -->
-                <div style="margin-bottom: 30px;">
-                    <h5 style="color: #28a745; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
-                        <span>🌸</span> Pollinations (免费服务)
-                    </h5>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
-                        <div class="form-group">
-                            <label style="font-weight: 500; color: #495057;">API Token (可选):</label>
-                            <input type="password" name="pollinations_api_token" placeholder="your-pollinations-token"
-                                   value="{{ current_config.get('pollinations_api_token', '') }}"
-                                   style="font-family: monospace; font-size: 0.9em; margin-top: 5px;">
-                            <small style="color: #6c757d; margin-top: 5px; display: block;">可选的API Token，用于移除logo和获得更高的使用限制</small>
+                    <!-- Pollinations免费服务 -->
+                    <div style="margin-bottom: 30px;">
+                        <h5 style="color: #28a745; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                            <span>🌸</span> Pollinations (免费服务)
+                        </h5>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+                            <div class="form-group">
+                                <label style="font-weight: 500; color: #495057;">API Token (可选):</label>
+                                <input type="password" name="pollinations_api_token" placeholder="your-pollinations-token"
+                                       value="{{ current_config.get('pollinations_api_token', '') }}"
+                                       style="font-family: monospace; font-size: 0.9em; margin-top: 5px;" autocomplete="off">
+                                <small style="color: #6c757d; margin-top: 5px; display: block;">可选的API Token，用于移除logo和获得更高的使用限制</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label style="font-weight: 500; color: #495057;">Referrer (可选):</label>
+                                <input type="text" name="pollinations_referrer" placeholder="MyApp"
+                                       value="{{ current_config.get('pollinations_referrer', '') }}"
+                                       style="margin-top: 5px;" autocomplete="off">
+                                <small style="color: #6c757d; margin-top: 5px; display: block;">推荐人标识符，用于认证和统计（可选）</small>
+                            </div>
                         </div>
-
-                        <div class="form-group">
-                            <label style="font-weight: 500; color: #495057;">Referrer (可选):</label>
-                            <input type="text" name="pollinations_referrer" placeholder="MyApp"
-                                   value="{{ current_config.get('pollinations_referrer', '') }}"
-                                   style="margin-top: 5px;">
-                            <small style="color: #6c757d; margin-top: 5px; display: block;">推荐人标识符，用于认证和统计（可选）</small>
+                        <div style="margin-top: 15px; padding: 12px 16px; background: var(--tint-green); border: 1px solid var(--accent-green); border-radius: 8px; border-left: 4px solid var(--accent-green);">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="color: var(--accent-green); font-weight: 500;">✅ 基础功能免费</span>
+                            </div>
+                            <small style="color: var(--text-secondary); margin-top: 5px; display: block;">Pollinations提供免费的AI图片生成服务，Token可选用于高级功能</small>
                         </div>
                     </div>
-                    <div style="margin-top: 15px; padding: 12px 16px; background: var(--tint-green); border: 1px solid var(--accent-green); border-radius: 8px; border-left: 4px solid var(--accent-green);">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="color: var(--accent-green); font-weight: 500;">✅ 基础功能免费</span>
-                        </div>
-                        <small style="color: var(--text-secondary); margin-top: 5px; display: block;">Pollinations提供免费的AI图片生成服务，Token可选用于高级功能</small>
-                    </div>
-                </div>
 
-                <!-- 网络图片搜索服务 -->
-                <div>
-                    <h5 style="color: #17a2b8; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
-                        <span>🌐</span> 网络图片搜索服务
-                    </h5>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
-                        <div class="form-group">
-                            <label style="font-weight: 500; color: #495057;">Unsplash Access Key:</label>
-                            <input type="password" name="unsplash_access_key" placeholder="your-unsplash-access-key"
-                                   value="{{ current_config.get('unsplash_access_key', '') }}"
-                                   style="font-family: monospace; font-size: 0.9em; margin-top: 5px;">
-                            <small style="color: #6c757d; margin-top: 5px; display: block;">用于搜索Unsplash高质量摄影图片，支持多语言搜索</small>
-                        </div>
+                    <!-- 网络图片搜索服务 -->
+                    <div>
+                        <h5 style="color: #17a2b8; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                            <span>🌐</span> 网络图片搜索服务
+                        </h5>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+                            <div class="form-group">
+                                <label style="font-weight: 500; color: #495057;">Unsplash Access Key:</label>
+                                <input type="password" name="unsplash_access_key" placeholder="your-unsplash-access-key"
+                                       value="{{ current_config.get('unsplash_access_key', '') }}"
+                                       style="font-family: monospace; font-size: 0.9em; margin-top: 5px;" autocomplete="off">
+                                <small style="color: #6c757d; margin-top: 5px; display: block;">用于搜索Unsplash高质量摄影图片，支持多语言搜索</small>
+                            </div>
 
-                        <div class="form-group">
-                            <label style="font-weight: 500; color: #495057;">Pixabay API Key:</label>
-                            <input type="password" name="pixabay_api_key" placeholder="your-pixabay-api-key"
-                                   value="{{ current_config.get('pixabay_api_key', '') }}"
-                                   style="font-family: monospace; font-size: 0.9em; margin-top: 5px;">
-                            <small style="color: #6c757d; margin-top: 5px; display: block;">用于搜索免费图片和插图</small>
-                        </div>
+                            <div class="form-group">
+                                <label style="font-weight: 500; color: #495057;">Pixabay API Key:</label>
+                                <input type="password" name="pixabay_api_key" placeholder="your-pixabay-api-key"
+                                       value="{{ current_config.get('pixabay_api_key', '') }}"
+                                       style="font-family: monospace; font-size: 0.9em; margin-top: 5px;" autocomplete="off">
+                                <small style="color: #6c757d; margin-top: 5px; display: block;">用于搜索免费图片和插图</small>
+                            </div>
 
-                        <div class="form-group">
-                            <label style="font-weight: 500; color: #495057;">SearXNG Host:</label>
-                            <input type="url" name="searxng_host_image" placeholder="http://localhost:8888"
-                                   value="{{ current_config.get('searxng_host_image', '') }}"
-                                   style="font-family: monospace; font-size: 0.9em; margin-top: 5px;">
-                            <small style="color: #6c757d; margin-top: 5px; display: block;">SearXNG实例的主机地址，用于开源搜索引擎图片搜索</small>
+                            <div class="form-group">
+                                <label style="font-weight: 500; color: #495057;">SearXNG Host:</label>
+                                <input type="url" name="searxng_host_image" placeholder="http://localhost:8888"
+                                       value="{{ current_config.get('searxng_host_image', '') }}"
+                                       style="font-family: monospace; font-size: 0.9em; margin-top: 5px;" autocomplete="off">
+                                <small style="color: #6c757d; margin-top: 5px; display: block;">SearXNG实例的主机地址，用于开源搜索引擎图片搜索</small>
+                            </div>
                         </div>
                     </div>
-                </div>
+
+                    <!-- Save button for image service API form -->
+                    <div style="text-align: center; margin-top: 25px; padding: 20px; background: var(--glass-bg); border-radius: 12px; border: 1px solid var(--glass-border);">
+                        <button type="button" onclick="saveImageServiceConfigWithProgress()" class="btn btn-success" style="padding: 12px 30px; font-weight: 600; font-size: 1.05em; position: relative;">
+                            <span id="save-image-service-text">💾 保存API配置</span>
+                            <div id="save-image-service-progress" class="progress-overlay">
+                                <div class="progress-spinner"></div>
+                            </div>
+                        </button>
+                    </div>
+                </form>
             </div>
 
             <!-- 详细配置 -->
@@ -923,7 +948,7 @@
                             </div>
                             <div class="form-group">
                                 <label style="font-weight: 500; color: #495057;">每页最大本地图片数量:</label>
-                                <input type="number" name="max_local_images_per_slide" value="2" min="1" max="5" style="margin-top: 5px;">
+                                <input type="number" name="max_local_images_per_slide" value="2" min="1" max="5" style="margin-top: 5px;" autocomplete="off">
                                 <small style="color: #6c757d; margin-top: 5px; display: block;">限制每页从本地图床选择的图片数量</small>
                             </div>
                         </div>
@@ -946,7 +971,7 @@
                             </div>
                             <div class="form-group">
                                 <label style="font-weight: 500; color: #495057;">每页最大网络图片数量:</label>
-                                <input type="number" name="max_network_images_per_slide" value="2" min="1" max="5" style="margin-top: 5px;">
+                                <input type="number" name="max_network_images_per_slide" value="2" min="1" max="5" style="margin-top: 5px;" autocomplete="off">
                                 <small style="color: #6c757d; margin-top: 5px; display: block;">限制每页从网络搜索的图片数量</small>
                             </div>
                         </div>
@@ -969,7 +994,7 @@
                             </div>
                             <div class="form-group">
                                 <label style="font-weight: 500; color: #495057;">每页最大AI生成图片数量:</label>
-                                <input type="number" name="max_ai_images_per_slide" value="1" min="1" max="3" style="margin-top: 5px;">
+                                <input type="number" name="max_ai_images_per_slide" value="1" min="1" max="3" style="margin-top: 5px;" autocomplete="off">
                                 <small style="color: #6c757d; margin-top: 5px; display: block;">限制每页AI生成的图片数量</small>
                             </div>
                             <div class="form-group">
@@ -1056,7 +1081,7 @@
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px;">
                             <div class="form-group">
                                 <label style="font-weight: 500; color: #495057;">每页最大图片总数:</label>
-                                <input type="number" name="max_total_images_per_slide" value="3" min="1" max="8" style="margin-top: 5px;">
+                                <input type="number" name="max_total_images_per_slide" value="3" min="1" max="8" style="margin-top: 5px;" autocomplete="off">
                                 <small style="color: #6c757d; margin-top: 5px; display: block;">限制每页图片的总数量，避免页面过于拥挤</small>
                             </div>
                             <div class="form-group">
@@ -1093,27 +1118,27 @@
 
 <!-- Bulk Paste Modal -->
 <div id="bulk-paste-modal" class="modal" style="display: none;" onclick="if(event.target === this) hideBulkPasteModal()">
-    <div class="modal-content bulk-paste-modal-content" style="width: 90%; max-width: 700px; max-height: 90vh; overflow-y: auto;">
+    <div class="modal-content bulk-paste-modal-content" style="width: 90%; max-width: 700px; max-height: 90vh; overflow-y: auto; background: #ffffff; border: 2px solid #e1e5e9; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
         <!-- Modal Header -->
-        <div class="modal-header" style="background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 12px 12px 0 0; padding: 20px; border-bottom: none;">
-            <h3 style="color: var(--text-primary); margin: 0; text-align: center; font-size: 1.3em; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px;">
+        <div class="modal-header" style="background: #f8f9fa; border-bottom: 1px solid #dee2e6; border-radius: 12px 12px 0 0; padding: 20px; border-bottom: none;">
+            <h3 style="color: #24292f; margin: 0; text-align: center; font-size: 1.3em; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px;">
                 <span style="font-size: 1.5em;">📋</span>
                 批量粘贴解析配置
             </h3>
-            <button onclick="hideBulkPasteModal()" class="modal-close-btn" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: var(--text-primary); font-size: 1.5em; cursor: pointer; padding: 5px; border-radius: 50%; transition: all 0.2s ease; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;">
+            <button onclick="hideBulkPasteModal()" class="modal-close-btn" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #24292f; font-size: 1.5em; cursor: pointer; padding: 5px; border-radius: 50%; transition: all 0.2s ease; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;">
                 ✕
             </button>
         </div>
 
         <!-- Modal Body -->
-        <div class="modal-body" style="background: var(--card-bg); border: 1px solid var(--panel-border); border-top: none; border-bottom: none; padding: 25px;">
+        <div class="modal-body" style="background: #ffffff; border: 1px solid #dee2e6; border-top: none; border-bottom: none; padding: 25px;">
             <!-- Instructions -->
-            <div class="instruction-card" style="background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 10px; padding: 15px; margin-bottom: 20px;">
+            <div class="instruction-card" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 10px; padding: 15px; margin-bottom: 20px;">
                 <div style="display: flex; align-items: flex-start; gap: 10px;">
-                    <span style="color: var(--accent-blue); font-size: 1.2em;">💡</span>
+                    <span style="color: #0366d6; font-size: 1.2em;">💡</span>
                     <div>
-                        <h4 style="color: var(--text-primary); margin: 0 0 8px 0; font-size: 1em; font-weight: 600;">使用说明</h4>
-                        <p style="color: var(--text-secondary); margin: 0; font-size: 0.9em; line-height: 1.5;">
+                        <h4 style="color: #24292f; margin: 0 0 8px 0; font-size: 1em; font-weight: 600;">使用说明</h4>
+                        <p style="color: #586069; margin: 0; font-size: 0.9em; line-height: 1.5;">
                             粘贴环境变量或键值对，每行一个或用分号分隔。系统会自动解析并填充到下方配置字段中。
                         </p>
                     </div>
@@ -1122,21 +1147,21 @@
 
             <!-- Textarea Section -->
             <div class="textarea-section">
-                <label for="bulk-paste-text" style="display: block; margin-bottom: 12px; font-weight: 600; color: var(--text-primary); font-size: 1em;">
+                <label for="bulk-paste-text" style="display: block; margin-bottom: 12px; font-weight: 600; color: #24292f; font-size: 1em;">
                     配置内容
                 </label>
                 <div class="textarea-container" style="position: relative;">
                     <textarea id="bulk-paste-text"
                               placeholder="粘贴环境变量或键值对，每行一个或用分号分隔&#10;&#10;例如：&#10;R2_ACCESS_KEY_ID=your_key&#10;R2_SECRET_ACCESS_KEY=your_secret&#10;R2_ENDPOINT=https://your-account.r2.cloudflarestorage.com&#10;R2_BUCKET_NAME=your-bucket&#10;DATABASE_URL=sqlite:///./flowslide.db&#10;API_URL=https://your-api.com&#10;API_ANON_KEY=your-anon-key&#10;API_SERVICE_KEY=your-service-key"
-                              style="width: 100%; height: 250px; padding: 15px; border: 2px solid var(--border-color); border-radius: 10px; background: var(--input-bg); color: var(--text-color); font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace; font-size: 13px; line-height: 1.5; resize: vertical; transition: all 0.3s ease; outline: none;"
-                              onfocus="this.style.borderColor = 'var(--accent-blue)'; this.style.boxShadow = '0 0 0 3px rgba(52, 152, 219, 0.1)';"
-                              onblur="this.style.borderColor = 'var(--border-color)'; this.style.boxShadow = 'none';">
+                              style="width: 100%; height: 250px; padding: 15px; border: 2px solid #d1d5db; border-radius: 10px; background: #ffffff; color: #24292f; font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace; font-size: 13px; line-height: 1.5; resize: vertical; transition: all 0.3s ease; outline: none; overflow: auto;"
+                              onfocus="this.style.borderColor = '#0366d6'; this.style.boxShadow = '0 0 0 3px rgba(3, 102, 214, 0.1)';"
+                              onblur="this.style.borderColor = '#d1d5db'; this.style.boxShadow = 'none';">
                     </textarea>
                     <div class="textarea-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-                        <small style="color: var(--text-secondary); font-size: 0.85em;">
+                        <small style="color: #586069; font-size: 0.85em;">
                             支持格式：KEY=VALUE 或 KEY:VALUE，每行一个或用分号分隔。注释行以#开头。
                         </small>
-                        <button onclick="document.getElementById('bulk-paste-text').value = ''" class="clear-btn" style="background: var(--secondary-gradient); color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.8em; cursor: pointer; transition: all 0.2s ease;">
+                        <button onclick="document.getElementById('bulk-paste-text').value = ''" class="clear-btn" style="background: #f6f8fa; color: #24292f; border: 1px solid #d1d5db; padding: 4px 8px; border-radius: 4px; font-size: 0.8em; cursor: pointer; transition: all 0.2s ease;">
                             清空
                         </button>
                     </div>
@@ -1145,11 +1170,11 @@
 
             <!-- Preview Section -->
             <div class="preview-section" id="bulk-paste-preview" style="display: none; margin-top: 20px;">
-                <h4 style="color: var(--text-primary); margin-bottom: 12px; font-size: 1em; font-weight: 600; display: flex; align-items: center; gap: 8px;">
-                    <span style="color: var(--accent-green);">🔍</span>
+                <h4 style="color: #24292f; margin-bottom: 12px; font-size: 1em; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                    <span style="color: #28a745;">🔍</span>
                     解析预览
                 </h4>
-                <div class="preview-content" style="background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 8px; padding: 15px; max-height: 150px; overflow-y: auto;">
+                <div class="preview-content" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px; max-height: 150px; overflow-y: auto;">
                     <div id="preview-items" style="display: grid; gap: 8px;">
                         <!-- Preview items will be inserted here -->
                     </div>
@@ -1158,8 +1183,8 @@
         </div>
 
         <!-- Modal Footer -->
-        <div class="modal-footer" style="background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 0 0 12px 12px; border-top: none; padding: 20px; display: flex; justify-content: space-between; align-items: center;">
-            <div class="footer-info" style="color: var(--text-secondary); font-size: 0.85em;">
+        <div class="modal-footer" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 0 0 12px 12px; border-top: none; padding: 20px; display: flex; justify-content: space-between; align-items: center;">
+            <div class="footer-info" style="color: #586069; font-size: 0.85em;">
                 <span id="parse-status">准备解析配置...</span>
             </div>
             <div class="footer-actions" style="display: flex; gap: 10px;">
@@ -1315,11 +1340,16 @@
                         <span id="r2-config-badge" style="display:inline-block;padding:6px 10px;border-radius:12px;color:#fff;font-size:12px;background:#6c757d;">未配置</span>
                     </h5>
                     <div style="display: flex; flex-direction: column; gap: 12px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div style="display:flex; align-items:center; gap:8px;">
-                                <span style="font-weight: 500; color: #495057;">最后同步时间:</span>
-                            </div>
-                            <span id="last-r2-sync" style="color: #6c757d; font-size: 0.9em;">从未同步</span>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <span id="r2-sync-status" style="background: #95a5a6; color: white; padding: 6px 14px; border-radius: 20px; font-size: 0.85em; font-weight: 500;">
+                                未测试
+                            </span>
+                            <span id="r2-response-time" style="color: #6c757d; font-size: 0.85em;">
+                                --
+                            </span>
+                            <button onclick="testR2Connection()" style="padding: 6px 12px; background: var(--accent-gradient); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85em;">
+                                🔍 测试
+                            </button>
                         </div>
 
                         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -1467,11 +1497,11 @@
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <span style="font-weight: 500; color: #495057;">保留备份数量:</span>
-                            <input type="number" name="max_backups" value="10" min="1" max="50" style="width: 60px; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); color: var(--text-color);">
+                            <input type="number" name="max_backups" value="10" min="1" max="50" style="width: 60px; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); color: var(--text-color);" autocomplete="off">
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <span style="font-weight: 500; color: #495057;">保留天数:</span>
-                            <input type="number" id="retentionDays" name="retention_days" value="30" min="1" max="365" style="width: 60px; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); color: var(--text-color);">
+                            <input type="number" id="retentionDays" name="retention_days" value="30" min="1" max="365" style="width: 60px; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); color: var(--text-color);" autocomplete="off">
                         </div>
                         <button onclick="cleanupOldBackups()" class="btn btn-danger" style="padding: 8px 12px; font-size: 0.9em;">
                             🗑️ 清理旧备份
@@ -2562,6 +2592,7 @@
 .textarea-container textarea {
     transition: all 0.3s ease;
     font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
+    overflow: auto; /* 确保内容过多时显示滚动条 */
 }
 
 .textarea-container textarea:focus {
@@ -6809,6 +6840,14 @@ async function testDatabaseConnection() {
                 if (timeElement && result.response_time_ms) {
                     timeElement.textContent = `${result.response_time_ms}ms`;
                 }
+
+                // 更新配置状态为已配置且可用
+                updateDatabaseConfigStatus({
+                    configured: true,
+                    tested: true,
+                    available: true
+                });
+
                 showNotification('数据库连接正常！', 'success');
             } else {
                 if (statusElement) {
@@ -6818,6 +6857,14 @@ async function testDatabaseConnection() {
                 if (timeElement) {
                     timeElement.textContent = '--';
                 }
+
+                // 更新配置状态为已配置但不可用
+                updateDatabaseConfigStatus({
+                    configured: true,
+                    tested: true,
+                    available: false
+                });
+
                 showNotification('数据库连接异常: ' + (result.message || '未知错误'), 'error');
             }
         } else {
@@ -6828,6 +6875,14 @@ async function testDatabaseConnection() {
             if (timeElement) {
                 timeElement.textContent = '--';
             }
+
+            // 更新配置状态为已配置但不可用
+            updateDatabaseConfigStatus({
+                configured: true,
+                tested: true,
+                available: false
+            });
+
             showNotification('数据库连接测试失败', 'error');
         }
     } catch (error) {
@@ -6839,6 +6894,14 @@ async function testDatabaseConnection() {
         if (timeElement) {
             timeElement.textContent = '--';
         }
+
+        // 更新配置状态为已配置但不可用
+        updateDatabaseConfigStatus({
+            configured: true,
+            tested: true,
+            available: false
+        });
+
         showNotification('测试失败: ' + error.message, 'error');
     }
 }
@@ -6914,28 +6977,86 @@ function updateLastBackupInfo(backupInfo) {
     }
 }
 
-// 更新R2同步状态
-function updateR2SyncStatus(syncInfo) {
-    const statusElement = document.getElementById('r2-sync-status');
-    const timeElement = document.getElementById('last-r2-sync');
+// 更新数据库配置状态
+function updateDatabaseConfigStatus(statusInfo) {
+    console.log('🔄 更新数据库配置状态:', statusInfo);
+    const badgeElement = document.getElementById('db-config-badge');
+    const statusElement = document.getElementById('db-connection-status');
 
-    if (statusElement) {
-        if (syncInfo && syncInfo.configured) {
-            statusElement.textContent = '✅ 已配置';
-            statusElement.style.background = '#27ae60'; // 绿色
-        } else {
-            statusElement.textContent = '❌ 未配置';
-            statusElement.style.background = '#e74c3c'; // 红色
+    if (badgeElement) {
+        console.log('📍 找到数据库徽章元素:', badgeElement);
+        if (statusInfo.configured === false) {
+            badgeElement.textContent = '❌ 未配置';
+            badgeElement.style.background = '#6c757d'; // 灰色
+        } else if (statusInfo.configured === true && statusInfo.tested === false) {
+            badgeElement.textContent = '⏳ 未验证';
+            badgeElement.style.background = '#f39c12'; // 橙色
+        } else if (statusInfo.configured === true && statusInfo.tested === true && statusInfo.available === true) {
+            badgeElement.textContent = '✅ 已配置且可用';
+            badgeElement.style.background = '#27ae60'; // 绿色
+        } else if (statusInfo.configured === true && statusInfo.tested === true && statusInfo.available === false) {
+            badgeElement.textContent = '⚠️ 已配置但不可用';
+            badgeElement.style.background = '#e74c3c'; // 红色
         }
+        console.log('✅ 数据库徽章已更新为:', badgeElement.textContent);
+    } else {
+        console.error('❌ 找不到数据库徽章元素 #db-config-badge');
     }
 
-    if (timeElement) {
-        if (syncInfo && syncInfo.last_sync) {
-            timeElement.textContent = new Date(syncInfo.last_sync).toLocaleString();
-        } else if (syncInfo && syncInfo.timestamp) {
-            timeElement.textContent = new Date(syncInfo.timestamp).toLocaleString();
+    if (statusElement) {
+        if (statusInfo.tested === true) {
+            if (statusInfo.available === true) {
+                statusElement.textContent = '✅ 正常';
+                statusElement.style.background = '#27ae60';
+            } else {
+                statusElement.textContent = '❌ 异常';
+                statusElement.style.background = '#e74c3c';
+            }
         } else {
-            timeElement.textContent = '从未同步';
+            statusElement.textContent = '未测试';
+            statusElement.style.background = '#f39c12';
+        }
+    }
+}
+
+// 更新R2配置状态
+function updateR2ConfigStatus(statusInfo) {
+    console.log('🔄 更新R2配置状态:', statusInfo);
+    const badgeElement = document.getElementById('r2-config-badge');
+    const statusElement = document.getElementById('r2-sync-status');
+
+    if (badgeElement) {
+        console.log('📍 找到R2徽章元素:', badgeElement);
+        if (statusInfo.configured === false) {
+            badgeElement.textContent = '❌ 未配置';
+            badgeElement.style.background = '#6c757d'; // 灰色
+        } else if (statusInfo.configured === true && statusInfo.tested === false) {
+            badgeElement.textContent = '⏳ 未验证';
+            badgeElement.style.background = '#f39c12'; // 橙色
+        } else if (statusInfo.configured === true && statusInfo.tested === true && statusInfo.available === true) {
+            badgeElement.textContent = '✅ 已配置且可用';
+            badgeElement.style.background = '#27ae60'; // 绿色
+        } else if (statusInfo.configured === true && statusInfo.tested === true && statusInfo.available === false) {
+            badgeElement.textContent = '⚠️ 已配置但不可用';
+            badgeElement.style.background = '#e74c3c'; // 红色
+        }
+        console.log('✅ R2徽章已更新为:', badgeElement.textContent);
+    } else {
+        console.error('❌ 找不到R2徽章元素 #r2-config-badge');
+    }
+
+    if (statusElement) {
+        if (statusInfo.tested === true) {
+            if (statusInfo.available === true) {
+                statusElement.textContent = '✅ 可用';
+                statusElement.style.background = '#27ae60';
+            } else {
+                statusElement.textContent = '❌ 不可用';
+                statusElement.style.background = '#e74c3c';
+            }
+        } else {
+            statusElement.textContent = '未测试';
+            statusElement.style.background = '#f39c12';
         }
     }
 }
@@ -7052,6 +7173,8 @@ function formatFileSize(bytes) {
 // 初始化数据备份页面
 async function initDataBackupPage() {
     try {
+        console.log('🚀 开始初始化数据备份页面...');
+
         // 刷新部署模式信息
         await refreshDeploymentMode();
 
@@ -7067,14 +7190,17 @@ async function initDataBackupPage() {
         // 加载系统资源信息
         await loadSystemResources();
 
-        // 检查R2同步状态
+        // 检查R2和数据库配置状态
+        console.log('🔍 调用状态检查函数...');
         await checkR2Status();
+        await checkDatabaseStatus();
 
         // 自动检查数据库连接状态
         await testDatabaseConnection();
 
+        console.log('✅ 数据备份页面初始化完成');
     } catch (error) {
-        console.error('初始化数据备份页面失败:', error);
+        console.error('❌ 初始化数据备份页面失败:', error);
     }
 }
 
@@ -7150,18 +7276,155 @@ function updateSystemResources(resources) {
     }
 }
 
-// 检查R2状态
+// 检查R2配置状态
 async function checkR2Status() {
     try {
+        console.log('🔍 检查R2配置状态...');
         const response = await fetch('/api/system/r2-status');
         if (response.ok) {
             const result = await response.json();
+            console.log('✅ R2 API响应:', result);
             if (result.success) {
-                updateR2SyncStatus(result.r2_status);
+                const r2Status = result.r2_status;
+                console.log('📊 R2状态信息:', r2Status);
+
+                // 更新R2配置状态
+                updateR2ConfigStatus({
+                    configured: r2Status.configured,
+                    tested: false, // 配置检查不进行连接测试
+                    available: false // 配置检查不进行连接测试
+                });
+                console.log('✅ R2状态已更新到UI');
             }
+        } else {
+            console.error('❌ R2 API请求失败:', response.status);
         }
     } catch (error) {
-        console.error('检查R2状态失败:', error);
+        console.error('❌ 检查R2状态失败:', error);
+
+        // 如果检查失败，显示为未配置状态
+        updateR2ConfigStatus({
+            configured: false,
+            tested: false,
+            available: false
+        });
+    }
+}
+
+// 检查数据库配置状态
+async function checkDatabaseStatus() {
+    try {
+        console.log('🔍 检查数据库配置状态...');
+        const response = await fetch('/api/system/db-status');
+        if (response.ok) {
+            const result = await response.json();
+            console.log('✅ 数据库API响应:', result);
+            if (result.success) {
+                const dbStatus = result.db_status;
+                console.log('📊 数据库状态信息:', dbStatus);
+
+                // 更新数据库配置状态
+                updateDatabaseConfigStatus({
+                    configured: dbStatus.configured,
+                    tested: false, // 配置检查不进行连接测试
+                    available: false // 配置检查不进行连接测试
+                });
+                console.log('✅ 数据库状态已更新到UI');
+            }
+        } else {
+            console.error('❌ 数据库API请求失败:', response.status);
+        }
+    } catch (error) {
+        console.error('❌ 检查数据库状态失败:', error);
+
+        // 如果检查失败，显示为未配置状态
+        updateDatabaseConfigStatus({
+            configured: false,
+            tested: false,
+            available: false
+        });
+    }
+}
+
+// 测试R2连接
+async function testR2Connection() {
+    const statusElement = document.getElementById('r2-sync-status');
+
+    if (statusElement) {
+        statusElement.textContent = '测试中...';
+        statusElement.style.background = '#f39c12'; // 橙色
+    }
+
+    try {
+        const response = await fetch('/api/system/r2-test');
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                // 更新配置状态为已配置且可用
+                updateR2ConfigStatus({
+                    configured: true,
+                    tested: true,
+                    available: true
+                });
+
+                // 更新响应时间显示
+                const timeElement = document.getElementById('r2-response-time');
+                if (timeElement && result.response_time_ms) {
+                    timeElement.textContent = `${result.response_time_ms}ms`;
+                }
+
+                showNotification('R2连接正常！', 'success');
+            } else {
+                // 更新配置状态为已配置但不可用
+                updateR2ConfigStatus({
+                    configured: true,
+                    tested: true,
+                    available: false
+                });
+
+                // 更新响应时间显示
+                const timeElement = document.getElementById('r2-response-time');
+                if (timeElement && result.response_time_ms) {
+                    timeElement.textContent = `${result.response_time_ms}ms`;
+                } else {
+                    timeElement.textContent = '--';
+                }
+
+                showNotification('R2连接异常: ' + (result.message || '未知错误'), 'error');
+            }
+        } else {
+            // 更新配置状态为已配置但不可用
+            updateR2ConfigStatus({
+                configured: true,
+                tested: true,
+                available: false
+            });
+
+            // 更新响应时间显示
+            const timeElement = document.getElementById('r2-response-time');
+            if (timeElement) {
+                timeElement.textContent = '--';
+            }
+
+            showNotification('R2连接测试失败', 'error');
+        }
+    } catch (error) {
+        console.error('测试R2连接失败:', error);
+
+        // 更新配置状态为已配置但不可用
+        updateR2ConfigStatus({
+            configured: true,
+            tested: true,
+            available: false
+        });
+
+        // 更新响应时间显示
+        const timeElement = document.getElementById('r2-response-time');
+        if (timeElement) {
+            timeElement.textContent = '--';
+        }
+
+        showNotification('测试失败: ' + error.message, 'error');
     }
 }
 
@@ -7184,15 +7447,13 @@ function formatUptime(seconds) {
 document.addEventListener('DOMContentLoaded', function() {
     // 检查当前是否在数据备份标签页，如果是则初始化
     const dataBackupTab = document.getElementById('data-backup');
-    if (dataBackupTab && !dataBackupTab.classList.contains('active')) {
-        // 标签页未激活，不初始化
-        return;
+    if (dataBackupTab && dataBackupTab.classList.contains('active')) {
+        // 标签页已激活，立即初始化
+        setTimeout(() => {
+            initDataBackupPage();
+        }, 500);
     }
-
-    // 延迟初始化，确保DOM完全加载
-    setTimeout(() => {
-        initDataBackupPage();
-    }, 500);
+    // 如果不在数据备份标签页，不需要初始化，会在切换时初始化
 });
 
 // 监听标签页切换事件
@@ -7200,8 +7461,8 @@ document.addEventListener('click', function(e) {
     if (e.target.closest('[data-tab="data-backup"]')) {
         // 切换到数据备份标签页时初始化
         setTimeout(() => {
-        initDataBackupPage();
-    }, 100);
+            initDataBackupPage();
+        }, 100);
     }
 });
 
@@ -7244,6 +7505,24 @@ function hideBulkPasteModal(){
     if(m) m.style.display = 'none';
 }
 
+async function refreshConfigFromServer(){
+    try{
+        const resp = await fetch('/api/config/all');
+        if(resp.ok){
+            const config = await resp.json();
+            // Update form fields with current config
+            for(const [key, value] of Object.entries(config)){
+                const el = document.querySelector(`[name='${key}']`);
+                if(el && el.type !== 'password'){ // Don't overwrite password fields
+                    el.value = value || '';
+                }
+            }
+        }
+    }catch(e){
+        console.warn('Failed to refresh config from server:', e);
+    }
+}
+
 function parseKeyValues(raw){
     const result = {};
     if(!raw) return result;
@@ -7255,7 +7534,11 @@ function parseKeyValues(raw){
         const idx = l.indexOf('=');
         if(idx === -1) continue;
         const k = l.substring(0, idx).trim();
-        const v = l.substring(idx+1).trim();
+        let v = l.substring(idx+1).trim();
+        // Strip surrounding quotes
+        if((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))){
+            v = v.slice(1, -1);
+        }
         if(k) result[k] = v;
     }
     return result;
@@ -7274,10 +7557,10 @@ function updateBulkPastePreview(){
             const displayKey = key.toLowerCase();
             const isSensitive = ['secret', 'key', 'password', 'token'].some(term => displayKey.includes(term));
             const maskedValue = isSensitive ? '••••••••' : value;
-            return `<div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: var(--input-bg); border-radius: 4px; font-family: monospace; font-size: 12px;">
-                <span style="color: var(--accent-blue); font-weight: 500;">${key}</span>
-                <span style="color: var(--text-secondary); margin: 0 8px;">→</span>
-                <span style="color: var(--text-primary);">${maskedValue}</span>
+            return `<div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: #ffffff; border: 1px solid #dee2e6; border-radius: 4px; font-family: monospace; font-size: 12px;">
+                <span style="color: #0366d6; font-weight: 500;">${key}</span>
+                <span style="color: #586069; margin: 0 8px;">→</span>
+                <span style="color: #24292f;">${maskedValue}</span>
             </div>`;
         }).join('');
         previewItems.innerHTML = items;
@@ -7307,21 +7590,12 @@ async function applyBulkPaste(){
     if(status) status.textContent = '正在应用配置...';
 
     const mapping = {
-        'R2_ACCESS_KEY_ID': 'r2_access_key_id',
-        'R2_SECRET_ACCESS_KEY': 'r2_secret_access_key',
-        'R2_ENDPOINT': 'r2_endpoint',
-        'R2_BUCKET_NAME': 'r2_bucket_name',
-        'STORAGE_BUCKET': 'storage_bucket',
-        'STORAGE_PROVIDER': 'storage_provider',
-        'DATABASE_URL': 'database_url',
-        'API_URL': 'api_url',
-        'API_ANON_KEY': 'api_anon_key',
-        'API_SERVICE_KEY': 'api_service_key'
+        // General mapping: convert to lowercase
     };
 
     // 填充表单字段
     for(const [k,v] of Object.entries(kv)){
-        const name = mapping[k] || k.toLowerCase();
+        const name = k.toLowerCase();
         const el = document.querySelector(`[name='${name}']`);
         if(el) el.value = v;
     }
