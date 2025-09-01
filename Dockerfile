@@ -125,6 +125,8 @@ WORKDIR /app
 # Copy application code (minimize layers)
 COPY run.py ./
 COPY src/ ./src/
+# Ensure template examples are included in the final image so the entrypoint can import them
+COPY template_examples/ ./template_examples/
 
 # Copy standard scripts first (always available)
 COPY docker-healthcheck.sh docker-entrypoint.sh ./
