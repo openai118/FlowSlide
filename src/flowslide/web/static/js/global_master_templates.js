@@ -256,13 +256,26 @@ async function startStreamingGeneration(requestData) {
         updateGenerationStatus('模板生成完成！');
         showAIGenerationComplete();
 
-        // 设置查看按钮的模板ID
+        // 尝试立即刷新模板列表，确保新生成的模板能被看到
+        try {
+            // 回到第一页以便看到新导入/生成的模板
+            if (typeof loadTemplates === 'function') {
+                loadTemplates(1);
+            }
+        } catch (e) {
+            console.warn('自动刷新模板列表失败:', e);
+        }
+
+        // 设置查看按钮的模板ID（保留原有行为以便用户手动查看）
         if (generatedTemplateId) {
-            document.getElementById('viewGeneratedTemplateBtn').onclick = () => {
-                closeAIGenerationModal();
-                loadTemplates(1); // 回到第一页查看新生成的模板
-                // 可以添加滚动到新模板的逻辑
-            };
+            const btn = document.getElementById('viewGeneratedTemplateBtn');
+            if (btn) {
+                btn.onclick = () => {
+                    closeAIGenerationModal();
+                    loadTemplates(1); // 回到第一页查看新生成的模板
+                    // 可以添加滚动到新模板的逻辑
+                };
+            }
         }
 
     } catch (error) {
