@@ -159,12 +159,15 @@ class DeploymentModeManager:
 
     def detect_current_mode(self) -> DeploymentMode:
         """检测当前部署模式"""
+        logger.info("开始检测当前部署模式...")
+        
         # 首先检查配置文件中是否有用户保存的模式选择
         try:
             from .deployment_config_manager import config_manager
             config = config_manager.load_config()
             if config.force_mode:
                 try:
+                    logger.info(f"配置文件中强制模式: {config.force_mode}")
                     return DeploymentMode(config.force_mode.lower())
                 except ValueError:
                     logger.warning(f"配置文件中的无效模式: {config.force_mode}")
@@ -175,36 +178,86 @@ class DeploymentModeManager:
         forced_mode = os.getenv("FORCE_DEPLOYMENT_MODE")
         if forced_mode:
             try:
+                logger.info(f"环境变量中强制模式: {forced_mode}")
                 return DeploymentMode(forced_mode.lower())
             except ValueError:
                 logger.warning(f"环境变量中的无效强制模式: {forced_mode}")
 
-        # 自动检测模式（基于环境变量）
-        database_url = os.getenv("DATABASE_URL", "")
-        has_r2 = bool(os.getenv("R2_ACCESS_KEY_ID"))
+        # 使用自动检测服务进行智能检测
+        try:
+            # 动态导入以避免循环导入
+            from .auto_detection_service import AutoDetectionService
+            detection_service = AutoDetectionService()
+            
+            # 在新的事件循环中运行异步检测
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # 如果事件循环已经在运行，创建新任务
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, detection_service.detect_deployment_mode())
+                        detected_mode = future.result(timeout=30)  # 30秒超时
+                else:
+                    detected_mode = loop.run_until_complete(detection_service.detect_deployment_mode())
+            except RuntimeError:
+                # 没有事件循环，创建新的
+                detected_mode = asyncio.run(detection_service.detect_deployment_mode())
 
-        # 检查是否是外部数据库（非SQLite）
-        has_external_db = False
-        if database_url:
-            # 检查是否是PostgreSQL或其他外部数据库
-            if database_url.startswith("postgresql://") or database_url.startswith("mysql://"):
-                has_external_db = True
-            # 如果是SQLite，检查是否是本地文件路径
-            elif database_url.startswith("sqlite:///"):
-                has_external_db = False  # 本地SQLite
+            logger.info(f"🔍 自动检测结果: {detected_mode.value}")
+            logger.info(f"返回自动检测结果: {detected_mode}")
+            return detected_mode
+
+        except Exception as e:
+            logger.warning(f"自动检测失败，使用传统方法: {e}")
+
+            # 回退到传统检测方法
+            # 使用simple_config中的实际数据库URL而不是环境变量
+            try:
+                from .simple_config import DATABASE_URL
+                database_url = DATABASE_URL
+                logger.info(f"使用simple_config中的DATABASE_URL: {database_url}")
+            except Exception as import_error:
+                logger.error(f"无法导入DATABASE_URL: {import_error}")
+                database_url = os.getenv("DATABASE_URL", "")
+                logger.info(f"使用环境变量DATABASE_URL: {database_url}")
+            
+            has_r2 = bool(os.getenv("R2_ACCESS_KEY_ID"))
+            logger.info(f"R2_ACCESS_KEY_ID存在: {has_r2}")
+
+            # 检查是否是外部数据库（非SQLite）
+            has_external_db = False
+            if database_url:
+                # 检查是否是PostgreSQL或其他外部数据库
+                if database_url.startswith("postgresql://") or database_url.startswith("mysql://"):
+                    has_external_db = True
+                    logger.info("检测到PostgreSQL/MySQL外部数据库")
+                # 如果是SQLite，检查是否是本地文件路径
+                elif database_url.startswith("sqlite:///"):
+                    has_external_db = False  # 本地SQLite
+                    logger.info("检测到本地SQLite数据库")
+                else:
+                    # 其他情况默认为外部数据库
+                    has_external_db = True
+                    logger.info("检测到其他类型的外部数据库")
             else:
-                # 其他情况默认为外部数据库
-                has_external_db = True
+                logger.info("未找到数据库URL")
 
-        # 自动检测模式
-        if has_external_db and has_r2:
-            return DeploymentMode.LOCAL_EXTERNAL_R2
-        elif has_external_db:
-            return DeploymentMode.LOCAL_EXTERNAL
-        elif has_r2:
-            return DeploymentMode.LOCAL_R2
-        else:
-            return DeploymentMode.LOCAL_ONLY
+            logger.info(f"has_external_db: {has_external_db}, has_r2: {has_r2}")
+
+            # 自动检测模式
+            if has_external_db and has_r2:
+                logger.info("检测到模式: LOCAL_EXTERNAL_R2")
+                return DeploymentMode.LOCAL_EXTERNAL_R2
+            elif has_external_db:
+                logger.info("检测到模式: LOCAL_EXTERNAL")
+                return DeploymentMode.LOCAL_EXTERNAL
+            elif has_r2:
+                logger.info("检测到模式: LOCAL_R2")
+                return DeploymentMode.LOCAL_R2
+            else:
+                logger.info("检测到模式: LOCAL_ONLY")
+                return DeploymentMode.LOCAL_ONLY
 
     def should_check_mode(self) -> bool:
         """判断是否应该检查模式变化"""
@@ -572,8 +625,12 @@ class DeploymentModeManager:
 
     def get_current_mode_info(self) -> Dict[str, Any]:
         """获取当前模式信息"""
+        # 确保current_mode不为None
+        if self.current_mode is None:
+            self.current_mode = self.detect_current_mode()
+
         return {
-            "current_mode": self.current_mode.value if self.current_mode else None,
+            "current_mode": self.current_mode.value if self.current_mode else DeploymentMode.LOCAL_ONLY.value,
             "switch_in_progress": self.switch_in_progress,
             "last_mode_check": self.last_mode_check.isoformat() if self.last_mode_check else None,
             "switch_context": {

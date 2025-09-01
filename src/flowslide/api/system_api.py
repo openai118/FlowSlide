@@ -32,7 +32,7 @@ async def get_database_status():
             "database_type": db_manager.database_type if hasattr(db_manager, 'database_type') else 'unknown'
         }
 
-        if is_configured:
+        if is_configured and db_url:
             # 解析数据库URL类型（不包含敏感信息）
             if db_url.startswith("sqlite"):
                 status_info["db_type"] = "SQLite"
@@ -79,7 +79,7 @@ async def get_r2_status():
         if is_configured:
             # 解析endpoint类型（不包含敏感信息）
             endpoint = r2_config["endpoint"]
-            if "cloudflarestorage.com" in endpoint:
+            if endpoint and "cloudflarestorage.com" in endpoint:
                 status_info["provider"] = "Cloudflare R2"
             else:
                 status_info["provider"] = "Unknown"
@@ -170,10 +170,15 @@ async def test_database_connection():
 
         # 检查数据库配置
         db_url = os.getenv("DATABASE_URL")
-        if not db_url or not db_url.strip():
+        is_configured = bool(db_url and db_url.strip())
+
+        # 如果没有配置外部数据库，直接返回未配置状态（不报错）
+        if not is_configured:
             return {
-                "success": False,
-                "message": "数据库未配置，请设置DATABASE_URL环境变量",
+                "success": True,  # 改为True，因为本地数据库总是可用的
+                "message": "使用本地SQLite数据库，未配置外部数据库",
+                "database_type": "sqlite",
+                "configured": False,
                 "response_time_ms": round((time.time() - start_time) * 1000, 2)
             }
 
@@ -181,10 +186,26 @@ async def test_database_connection():
         try:
             # 使用数据库管理器进行连接测试
             from ..database import db_manager
+            from sqlalchemy import text
+
+            # 检查数据库管理器是否已初始化
+            if not hasattr(db_manager, 'engine') or db_manager.engine is None:
+                return {
+                    "success": False,
+                    "message": "数据库引擎未初始化",
+                    "response_time_ms": round((time.time() - start_time) * 1000, 2)
+                }
+
+            if not hasattr(db_manager, 'primary_async_engine') or db_manager.primary_async_engine is None:
+                return {
+                    "success": False,
+                    "message": "异步数据库引擎未初始化",
+                    "response_time_ms": round((time.time() - start_time) * 1000, 2)
+                }
 
             # 执行一个简单的查询来测试连接
-            async with db_manager.engine.begin() as conn:
-                result = await conn.execute(db_manager.text("SELECT 1 as test"))
+            async with db_manager.primary_async_engine.connect() as conn:
+                result = await conn.execute(text("SELECT 1 as test"))
                 row = result.fetchone()
 
                 # 计算响应时间
@@ -194,14 +215,15 @@ async def test_database_connection():
                     logger.info(f"✅ Database connection test passed in {response_time}ms")
                     return {
                         "success": True,
-                        "message": "数据库连接正常",
+                        "message": f"数据库连接正常 ({db_manager.database_type})",
                         "database_type": db_manager.database_type,
+                        "configured": True,
                         "response_time_ms": response_time
                     }
                 else:
                     return {
                         "success": False,
-                        "message": "数据库连接测试失败：查询返回异常结果",
+                        "message": "数据库连接异常：查询返回异常结果",
                         "response_time_ms": response_time
                     }
 
@@ -210,7 +232,7 @@ async def test_database_connection():
             logger.error(f"❌ Database connection test failed: {e}")
             return {
                 "success": False,
-                "message": f"数据库连接失败: {str(e)}",
+                "message": f"数据库连接异常: {str(e)}",
                 "response_time_ms": response_time
             }
 
@@ -221,37 +243,6 @@ async def test_database_connection():
             "message": f"数据库测试设置失败: {str(e)}",
             "response_time_ms": None
         }
-    """测试R2云存储连接"""
-    import time
-    import boto3
-    from botocore.exceptions import ClientError, NoCredentialsError
-
-    try:
-        logger.info("🧪 Testing R2 connection...")
-
-        # 记录开始时间
-        start_time = time.time()
-
-        # 检查R2配置
-        r2_config = {
-            "access_key": os.getenv("R2_ACCESS_KEY_ID"),
-            "secret_key": os.getenv("R2_SECRET_ACCESS_KEY"),
-            "endpoint": os.getenv("R2_ENDPOINT"),
-            "bucket": os.getenv("R2_BUCKET_NAME")
-        }
-
-        # 检查配置完整性
-        missing_configs = []
-        for key, value in r2_config.items():
-            if not value:
-                missing_configs.append(key)
-
-        if missing_configs:
-            return {
-                "success": False,
-                "message": f"R2配置不完整，缺少: {', '.join(missing_configs)}",
-                "response_time_ms": round((time.time() - start_time) * 1000, 2)
-            }
 
         # 创建S3客户端连接R2
         s3_client = boto3.client(
@@ -324,89 +315,6 @@ async def test_database_connection():
                 "message": f"R2连接异常: {str(e)}",
                 "response_time_ms": response_time
             }
-
-    except Exception as e:
-        logger.error(f"❌ R2 test setup failed: {e}")
-        return {
-            "success": False,
-            "message": f"R2测试设置失败: {str(e)}",
-            "response_time_ms": None
-        }
-
-
-@router.get("/r2-test")
-async def test_r2_connection():
-    """测试R2云存储连接"""
-    import time
-    import boto3
-    from botocore.exceptions import ClientError, NoCredentialsError
-
-    try:
-        logger.info("🧪 Testing R2 connection...")
-
-        # 记录开始时间
-        start_time = time.time()
-
-        # 检查R2配置
-        r2_config = {
-            "access_key": os.getenv("R2_ACCESS_KEY_ID"),
-            "secret_key": os.getenv("R2_SECRET_ACCESS_KEY"),
-            "endpoint": os.getenv("R2_ENDPOINT"),
-            "bucket": os.getenv("R2_BUCKET_NAME")
-        }
-
-        # 检查配置完整性
-        missing_configs = []
-        for key, value in r2_config.items():
-            if not value:
-                missing_configs.append(key)
-
-        if missing_configs:
-            return {
-                "success": False,
-                "message": f"R2配置不完整，缺少: {', '.join(missing_configs)}",
-                "response_time_ms": round((time.time() - start_time) * 1000, 2)
-            }
-
-        # 创建S3客户端连接R2
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=r2_config["access_key"],
-            aws_secret_access_key=r2_config["secret_key"],
-            endpoint_url=r2_config["endpoint"],
-            region_name='auto'  # Cloudflare R2使用auto region
-        )
-
-        # 测试连接：尝试列出bucket中的对象（最多1个）
-        try:
-            response = s3_client.list_objects_v2(
-                Bucket=r2_config["bucket"],
-                MaxKeys=1
-            )
-
-            # 计算响应时间
-            response_time = round((time.time() - start_time) * 1000, 2)
-
-            logger.info(f"✅ R2 connection test passed in {response_time}ms")
-            return {
-                "success": True,
-                "message": "R2连接正常",
-                "bucket": r2_config["bucket"],
-                "endpoint": r2_config["endpoint"],
-                "response_time_ms": response_time
-            }
-
-        except NoCredentialsError:
-            response_time = round((time.time() - start_time) * 1000, 2)
-            logger.error("❌ R2 credentials invalid")
-            return {
-                "success": False,
-                "message": "R2凭据无效，请检查Access Key和Secret Key",
-                "response_time_ms": response_time
-            }
-
-        except ClientError as e:
-            response_time = round((time.time() - start_time) * 1000, 2)
             error_code = e.response.get('Error', {}).get('Code', 'Unknown')
 
             if error_code == 'NoSuchBucket':
@@ -439,14 +347,6 @@ async def test_r2_connection():
                 "message": f"R2连接异常: {str(e)}",
                 "response_time_ms": response_time
             }
-
-    except Exception as e:
-        logger.error(f"❌ R2 test setup failed: {e}")
-        return {
-            "success": False,
-            "message": f"R2测试设置失败: {str(e)}",
-            "response_time_ms": None
-        }
 
 
 @router.get("/health")
@@ -519,3 +419,56 @@ async def get_system_health():
     except Exception as e:
         logger.error(f"❌ Get system health failed: {e}")
         raise HTTPException(status_code=500, detail=f"获取系统健康状态失败: {str(e)}")
+
+
+@router.get("/auto-detection")
+async def get_auto_detection_status():
+    """获取自动检测状态"""
+    try:
+        logger.info("🔍 获取自动检测状态...")
+
+        from ..core.auto_detection_service import auto_detection_service
+
+        # 获取服务状态
+        service_status = await auto_detection_service.get_service_status()
+
+        # 检测当前部署模式
+        current_mode = await auto_detection_service.detect_deployment_mode()
+
+        return {
+            "success": True,
+            "current_mode": current_mode.value,
+            "services": service_status,
+            "message": "自动检测状态获取成功"
+        }
+
+    except Exception as e:
+        logger.error(f"❌ 获取自动检测状态失败: {e}")
+        return {
+            "success": False,
+            "message": f"获取自动检测状态失败: {str(e)}",
+            "current_mode": "unknown",
+            "services": {}
+        }
+
+
+@router.post("/auto-detection/clear-cache")
+async def clear_auto_detection_cache():
+    """清除自动检测缓存"""
+    try:
+        logger.info("🧹 清除自动检测缓存...")
+
+        from ..core.auto_detection_service import auto_detection_service
+        auto_detection_service.clear_cache()
+
+        return {
+            "success": True,
+            "message": "自动检测缓存已清除"
+        }
+
+    except Exception as e:
+        logger.error(f"❌ 清除自动检测缓存失败: {e}")
+        return {
+            "success": False,
+            "message": f"清除自动检测缓存失败: {str(e)}"
+        }

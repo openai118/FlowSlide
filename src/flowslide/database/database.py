@@ -36,6 +36,7 @@ class DatabaseManager:
         self.primary_async_engine = None
         self.external_engine = None
         self.external_async_engine = None
+        self.engine = None  # 向后兼容的别名
 
         self.database_type = "sqlite"
         self.sync_enabled = False
@@ -58,6 +59,7 @@ class DatabaseManager:
             self.local_async_url,
             echo=False
         )
+        self.engine = self.primary_engine  # 设置向后兼容的别名
         self.database_type = "sqlite"
         logger.info("✅ Local SQLite database ready")
 
@@ -75,42 +77,51 @@ class DatabaseManager:
 
         if is_supabase:
             # Supabase使用pgbouncer，需要特殊配置
+            statement_cache_size = int(os.getenv("PG_STATEMENT_CACHE_SIZE", "0"))
             self.primary_engine = create_engine(
                 self.external_url,
-                pool_size=5,  # 减小连接池大小
-                max_overflow=10,
-                pool_pre_ping=True,
+                pool_size=3,  # 较小的连接池大小
+                max_overflow=2,  # 允许少量溢出
+                pool_pre_ping=False,  # 禁用连接池ping以避免prepared statements
                 pool_recycle=300,  # 更频繁的连接回收
+                pool_timeout=60,  # 增加超时时间
                 echo=False
             )
             self.primary_async_engine = create_async_engine(
                 self.external_async_url,
-                pool_size=5,
-                max_overflow=10,
-                pool_pre_ping=True,
+                pool_size=3,
+                max_overflow=2,
+                pool_pre_ping=False,
                 pool_recycle=300,
-                echo=False
+                pool_timeout=60,
+                echo=False,
+                connect_args={"statement_cache_size": statement_cache_size}  # 禁用prepared statements以兼容pgbouncer
             )
             logger.info("🎯 Detected Supabase - using pgbouncer-compatible configuration")
         else:
             # 普通PostgreSQL配置
+            statement_cache_size = int(os.getenv("PG_STATEMENT_CACHE_SIZE", "0"))
             self.primary_engine = create_engine(
                 self.external_url,
-                pool_size=10,
-                max_overflow=20,
-                pool_pre_ping=True,
+                pool_size=3,
+                max_overflow=2,
+                pool_pre_ping=False,
                 pool_recycle=3600,
+                pool_timeout=60,
                 echo=False,
             )
             self.primary_async_engine = create_async_engine(
                 self.external_async_url,
-                pool_size=10,
-                max_overflow=20,
-                pool_pre_ping=True,
+                pool_size=3,
+                max_overflow=2,
+                pool_pre_ping=False,
                 pool_recycle=3600,
+                pool_timeout=60,
                 echo=False,
+                connect_args={"statement_cache_size": statement_cache_size}  # 兼容pgbouncer
             )
 
+        self.engine = self.primary_engine  # 设置向后兼容的别名
         self.database_type = "postgresql" if "postgresql" in self.external_url else "external"
         logger.info(f"✅ External database ready: {self.database_type}")
 
@@ -126,8 +137,9 @@ class DatabaseManager:
 
             connect_args = {}
             if is_supabase:
-                # Supabase使用pgbouncer，不需要特殊的连接参数
-                connect_args = {}
+                # Supabase使用pgbouncer，需要禁用prepared statements
+                statement_cache_size = int(os.getenv("PG_STATEMENT_CACHE_SIZE", "0"))
+                connect_args = {"statement_cache_size": statement_cache_size}
 
             self.external_engine = create_engine(
                 self.external_url,
@@ -235,6 +247,9 @@ def initialize_database():
     async_engine = db_manager.primary_async_engine
     DATABASE_TYPE = db_manager.database_type
 
+    # 确保向后兼容的别名也被设置
+    db_manager.engine = db_manager.primary_engine
+
     return db_manager
 
 
@@ -276,10 +291,11 @@ async def init_db():
 
         logger.info(f"🗄️ Initializing database tables using {DATABASE_TYPE}...")
 
-        if async_engine:
-            async with async_engine.begin() as conn:
+        if async_engine and engine:
+            # Use sync engine for table creation to avoid pgbouncer issues
+            with engine.begin() as conn:
                 # Create all tables
-                await conn.run_sync(Base.metadata.create_all)
+                Base.metadata.create_all(bind=engine)
 
             logger.info("✅ Database tables created successfully")
 

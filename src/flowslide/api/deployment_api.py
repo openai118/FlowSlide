@@ -70,7 +70,15 @@ async def get_current_mode():
             "switch_context": mode_info["switch_context"]
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取当前模式失败: {str(e)}")
+        logger.error(f"获取当前模式失败: {e}")
+        # 返回默认值而不是抛出异常
+        return {
+            "current_mode": DeploymentMode.LOCAL_ONLY.value,
+            "detected_mode": DeploymentMode.LOCAL_ONLY.value,
+            "switch_in_progress": False,
+            "last_check": None,
+            "switch_context": None
+        }
 
 
 @router.get("/modes")
