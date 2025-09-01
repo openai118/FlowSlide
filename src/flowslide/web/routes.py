@@ -15,6 +15,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import hashlib
 
 from bs4 import BeautifulSoup
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -1327,9 +1328,24 @@ async def get_project_slides_data(project_id: str, user: User = Depends(get_curr
                 "total_slides": 0,
             }
 
+        # Compute per-slide content hashes to allow clients to diff changes
+        try:
+            slides_meta = []
+            for i, s in enumerate(project.slides_data):
+                content = (s.get('html_content') or '')
+                h = hashlib.sha256(content.encode('utf-8')).hexdigest()
+                slides_meta.append({
+                    'index': i,
+                    'hash': h,
+                    'page_number': s.get('page_number', i + 1),
+                })
+        except Exception:
+            slides_meta = []
+
         return {
             "status": "success",
             "slides_data": project.slides_data,
+            "slides_meta": slides_meta,
             "total_slides": len(project.slides_data),
             "project_title": project.title,
             "updated_at": project.updated_at,

@@ -27,7 +27,7 @@ async function updateTagFilter() {
             });
         }
     } catch (error) {
-        console.warn('Failed to load tags for filter:', error);
+        // silently ignore tag load failures in production
     }
 }
 
@@ -257,7 +257,7 @@ async function startStreamingGeneration(requestData) {
                         }
                     }
                 } catch (e) {
-                    console.warn('Failed to parse stream data:', line, e);
+                    // ignore malformed stream lines
                 }
             }
         }
@@ -279,21 +279,41 @@ async function startStreamingGeneration(requestData) {
         try {
             // 回到第一页以便看到新导入/生成的模板
             if (typeof loadTemplates === 'function') {
-                loadTemplates(1);
+                // wait for loadTemplates to finish so we can reliably preview the new template
+                await loadTemplates(1);
             }
         } catch (e) {
-            console.warn('自动刷新模板列表失败:', e);
+            // auto-refresh failure is non-fatal; ignore in UI
         }
 
-        // 设置查看按钮的模板ID（保留原有行为以便用户手动查看）
+        // 如果我们知道新生成的模板ID，直接打开其预览并关闭模态框
         if (generatedTemplateId) {
             const btn = document.getElementById('viewGeneratedTemplateBtn');
             if (btn) {
-                btn.onclick = () => {
-                    closeAIGenerationModal();
-                    loadTemplates(1); // 回到第一页查看新生成的模板
-                    // 可以添加滚动到新模板的逻辑
+                btn.onclick = async () => {
+                    try {
+                        closeAIGenerationModal();
+                        // 打开并显示新模板的预览
+                        if (typeof previewTemplateById === 'function') {
+                            await previewTemplateById(generatedTemplateId);
+                        } else {
+                            // 兜底：只刷新列表
+                            if (typeof loadTemplates === 'function') await loadTemplates(1);
+                        }
+                    } catch (err) {
+                        // ignore preview open failures
+                    }
                 };
+
+                // 自动打开预览（用户可直接看到结果）
+                try {
+                    if (typeof previewTemplateById === 'function') {
+                        closeAIGenerationModal();
+                        await previewTemplateById(generatedTemplateId);
+                    }
+                } catch (err) {
+                    // ignore automatic preview open failures
+                }
             }
         }
 

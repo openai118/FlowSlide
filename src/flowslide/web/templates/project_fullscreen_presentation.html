@@ -544,7 +544,23 @@
         // 全局变量
         let currentSlideIndex = 0;
         let totalSlides = {{ slides_count }};
-        let slidesData = {{ project.slides_data | tojson }};
+    let slidesData = {{ project.slides_data | tojson }};
+    // Track the last known updated_at for slides so we only refresh once per actual update
+    let lastSlidesUpdatedAt = {{ project.updated_at | tojson }};
+    // Client-side map of slide content hashes returned by server
+    let clientSlideHashes = new Map();
+    // Initialize clientSlideHashes from initial slidesData
+    (function initClientHashes() {
+        try {
+            slidesData.forEach((s, i) => {
+                const content = s && s.html_content ? s.html_content : '';
+                // Simple JS hash fallback (not cryptographic) when server-side meta not present
+                clientSlideHashes.set(i, null);
+            });
+        } catch (e) {
+            // ignore
+        }
+    })();
         let autoPlayInterval = null;
         let isAutoPlaying = false;
         let thumbnailsVisible = false;
@@ -556,6 +572,7 @@
         let isTransitioning = false; // 是否正在切换中
         let loadingSlides = new Set(); // 正在加载的幻灯片索引
         let frameIdCounter = 0; // iframe ID计数器
+        let pendingSlideIndex = null; // 如果用户在切换中快速导航，记录待切换目标
 
         // 初始化演示
         document.addEventListener('DOMContentLoaded', function() {
@@ -586,24 +603,119 @@
                     const response = await fetch(`/api/projects/{{ project.project_id }}/slides-data`);
                     const data = await response.json();
 
-                    if (data.status === 'success' && data.updated_at > {{ project.updated_at }}) {
-                        // 数据已更新，刷新幻灯片数据
-                        console.log('检测到幻灯片数据更新，正在刷新...');
-                        slidesData = data.slides_data;
-                        totalSlides = data.total_slides;
+                    if (data.status === 'success' && data.updated_at > lastSlidesUpdatedAt) {
+                            // 数据已更新，尽量进行增量更新以避免页面闪烁
+                            console.log('检测到幻灯片数据更新，尝试增量刷新...');
+                            const newSlides = data.slides_data || [];
+                            const newMeta = data.slides_meta || [];
+                            const newTotal = data.total_slides || newSlides.length;
 
-                        // 清空所有缓存
-                        clearAllCache();
+                            // If slide count changed, fallback to full refresh
+                            if (newTotal !== totalSlides) {
+                                console.log('幻灯片数量变化，执行完全刷新');
+                                slidesData = newSlides;
+                                totalSlides = newTotal;
+                                clearAllCache();
+                                loadSlideWithCache(currentSlideIndex, true);
+                                updateThumbnailsContent();
+                                showUpdateNotification();
+                                try { lastSlidesUpdatedAt = data.updated_at; } catch (e) {}
+                                return;
+                            }
 
-                        // 重新加载当前幻灯片
-                        loadSlideWithCache(currentSlideIndex, true);
+                            // Build map of new hashes from slides_meta if available
+                            const newHashMap = new Map();
+                            if (Array.isArray(newMeta) && newMeta.length === newSlides.length) {
+                                newMeta.forEach(m => newHashMap.set(m.index, m.hash));
+                            }
 
-                        // 更新缩略图
-                        updateThumbnailsContent();
+                            // If we have hashes, compare and update only changed slides
+                            if (newHashMap.size > 0) {
+                                slidesData = newSlides;
+                                totalSlides = newTotal;
 
-                        // 显示更新提示
-                        showUpdateNotification();
-                    }
+                                const changedIndices = [];
+                                for (let i = 0; i < slidesData.length; i++) {
+                                    const newHash = newHashMap.get(i) || null;
+                                    const oldHash = clientSlideHashes.get(i) || null;
+                                    if (oldHash !== newHash) changedIndices.push(i);
+                                }
+
+                                if (changedIndices.length === 0) {
+                                    // Only timestamp changed, no content diff
+                                    try { lastSlidesUpdatedAt = data.updated_at; } catch (e) {}
+                                    return;
+                                }
+
+                                console.log('Changed slide indices:', changedIndices);
+
+                                // For each changed slide, create a new iframe off-screen and swap when loaded
+                                changedIndices.forEach((idx) => {
+                                    // Remove any cached iframe for this idx (but keep others)
+                                    const oldFrame = slideFrameCache.get(idx);
+
+                                    // Create replacement iframe
+                                    const replacement = document.createElement('iframe');
+                                    replacement.className = 'slide-frame hidden not-loaded preloading';
+                                    replacement.title = `PPT Slide ${idx + 1}`;
+                                    replacement.srcdoc = slidesData[idx] && slidesData[idx].html_content ? slidesData[idx].html_content : '';
+
+                                    replacement.onload = function() {
+                                        console.log(`替换幻灯片 ${idx + 1} 加载完成`);
+                                        // Insert into cache and DOM
+                                        slideFrameCache.set(idx, replacement);
+                                        replacement.classList.remove('not-loaded', 'preloading');
+                                        replacement.classList.add('cached');
+
+                                        // If this is the currently visible index, perform a smooth swap
+                                        if (idx === currentSlideIndex) {
+                                            // Leave oldFrame until replacement is ready, then swap
+                                            if (oldFrame && oldFrame.parentNode) {
+                                                oldFrame.classList.remove('visible');
+                                                oldFrame.classList.add('hidden');
+                                            }
+                                            replacement.classList.remove('hidden');
+                                            replacement.classList.add('visible');
+                                            currentVisibleFrame = replacement;
+                                            hideLoadingOverlay();
+                                        } else {
+                                            // keep it hidden for now; will be used when navigating
+                                        }
+
+                                        // cleanup old iframe if present and not currentVisibleFrame
+                                        if (oldFrame && oldFrame !== currentVisibleFrame) {
+                                            if (oldFrame.parentNode) oldFrame.parentNode.removeChild(oldFrame);
+                                        }
+
+                                        // update client-side hash
+                                        clientSlideHashes.set(idx, newHashMap.get(idx));
+                                    };
+
+                                    replacement.onerror = function() {
+                                        console.error(`替换幻灯片 ${idx + 1} 加载失败`);
+                                    };
+
+                                    // Append replacement to container (off-screen) so it loads
+                                    document.getElementById('slideFrameContainer').appendChild(replacement);
+                                });
+
+                                // Ensure UI (thumbnails) updated
+                                updateThumbnailsContent();
+                                showUpdateNotification();
+                                try { lastSlidesUpdatedAt = data.updated_at; } catch (e) {}
+                                return;
+                            } else {
+                                // No per-slide hashes available, fallback to previous behavior
+                                slidesData = newSlides;
+                                totalSlides = newTotal;
+                                clearAllCache();
+                                loadSlideWithCache(currentSlideIndex, true);
+                                updateThumbnailsContent();
+                                showUpdateNotification();
+                                try { lastSlidesUpdatedAt = data.updated_at; } catch (e) {}
+                                return;
+                            }
+                        }
                 } catch (error) {
                     console.warn('检查数据更新失败:', error);
                 }
@@ -657,10 +769,17 @@
 
         // 使用缓存机制加载幻灯片
         function loadSlideWithCache(index, isInitial = false) {
-            if (index < 0 || index >= totalSlides || isTransitioning) return;
+            if (index < 0 || index >= totalSlides) return;
 
             // 如果是相同的幻灯片，直接返回
             if (index === currentSlideIndex && !isInitial) return;
+
+            // 如果正在切换，记录待处理目标并在切换完成后处理
+            if (isTransitioning) {
+                pendingSlideIndex = index;
+                console.log('正在切换，已将目标页入队:', index + 1);
+                return;
+            }
 
             console.log(`加载幻灯片 ${index + 1}/${totalSlides}:`, slidesData[index]?.title);
 
@@ -763,6 +882,18 @@
 
             const stats = getCacheStats();
             console.log(`切换到幻灯片 ${index + 1}，缓存统计:`, stats);
+            // 如果用户在切换过程中快速导航，处理排队的目标
+            setTimeout(() => {
+                if (pendingSlideIndex !== null && pendingSlideIndex !== currentSlideIndex) {
+                    const target = pendingSlideIndex;
+                    pendingSlideIndex = null;
+                    // Small safety: ensure target still within range
+                    if (target >= 0 && target < totalSlides) {
+                        console.log('处理排队的目标页:', target + 1);
+                        loadSlideWithCache(target);
+                    }
+                }
+            }, 120);
         }
 
         // 预加载相邻幻灯片

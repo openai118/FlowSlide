@@ -689,6 +689,19 @@
             } catch (e) {}
         })();
     </script>
+    <!-- Global console guard: silence non-error logs unless window.__FS_DEBUG is true -->
+    <script>
+        (function(){
+            try {
+                if (window.__FS_DEBUG) return; // set true in console to re-enable logs for debugging
+                if (typeof console === 'undefined') return;
+                var noop = function(){};
+                ['log','info','warn'].forEach(function(fn){
+                    try { if (console[fn]) console[fn] = noop; } catch(e) {}
+                });
+            } catch(e) {}
+        })();
+    </script>
     <!-- GitHub-like theme overrides (scoped) -->
     <style id="github-theme-overrides">
         :root.theme-github {

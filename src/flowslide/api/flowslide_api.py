@@ -518,6 +518,23 @@ async def get_project_versions(project_id: str):
         raise HTTPException(status_code=500, detail=f"Error getting project versions: {str(e)}")
 
 
+@router.post("/projects/{project_id}/versions")
+async def create_project_version(project_id: str, request: Request):
+    """Create a new project version (backup snapshot)"""
+    try:
+        body = await request.json()
+        version_data = body.get("version_data") or body
+        # Use project manager to save version
+        result = await _ppt_service().project_manager.save_project_version(project_id, version_data)
+        if not result:
+            raise HTTPException(status_code=400, detail="Failed to create project version")
+        return {"status": "success", "message": "Version created"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating project version: {str(e)}")
+
+
 @router.post("/projects/{project_id}/versions/{version}/restore")
 async def restore_project_version(project_id: str, version: int):
     """Restore project to a specific version"""

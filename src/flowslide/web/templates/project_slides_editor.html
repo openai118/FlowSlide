@@ -37,12 +37,10 @@
             --spacing-xs: 8px;
             --spacing-sm: 12px;
             --spacing-md: 16px;
-            --spacing-lg: 24px;
-            --spacing-xl: 32px;
-            --spacing-2xl: 48px;
-        }
-
-        body {
+        --spacing-lg: 24px;
+        --spacing-xl: 32px;
+        --spacing-2xl: 48px;
+        }        body {
             background: var(--primary-gradient);
             min-height: 100vh;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -3807,6 +3805,81 @@
             }
         }
 
+        // 在前端显示简单的分页预览模态，返回用户是否确认（Promise<boolean>）
+        function showPreviewAndConfirm(previews) {
+            return new Promise((resolve) => {
+                try {
+                    const existing = document.getElementById('templateApplyPreviewModal');
+                    if (existing) existing.remove();
+
+                    let current = 0;
+                    const modal = document.createElement('div');
+                    modal.id = 'templateApplyPreviewModal';
+                    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:13000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+
+                    const panel = document.createElement('div');
+                    panel.style.cssText = 'width: min(1200px, 98%); height: 80%; background:#fff; border-radius:8px; padding:12px; display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,0.3);';
+
+                    const header = document.createElement('div');
+                    header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;';
+                    header.innerHTML = `<div style="font-weight:700">预览：将应用到所有幻灯片（共 ${previews.length} 页）</div>`;
+
+                    const controls = document.createElement('div');
+                    controls.style.cssText = 'display:flex;gap:8px;align-items:center;';
+
+                    const prevBtn = document.createElement('button'); prevBtn.className = 'btn btn-secondary'; prevBtn.innerText = '上一页';
+                    const nextBtn = document.createElement('button'); nextBtn.className = 'btn btn-secondary'; nextBtn.innerText = '下一页';
+                    const confirmBtn = document.createElement('button'); confirmBtn.className = 'btn btn-success'; confirmBtn.innerText = '确认并保存全部';
+                    const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-danger'; cancelBtn.innerText = '取消';
+
+                    controls.appendChild(prevBtn); controls.appendChild(nextBtn);
+                    header.appendChild(controls);
+                    header.appendChild(confirmBtn);
+                    header.appendChild(cancelBtn);
+
+                    const contentWrap = document.createElement('div');
+                    contentWrap.style.cssText = 'flex:1; overflow:auto; background:#f8f9fa; border-radius:6px; padding:10px; display:flex; align-items:center; justify-content:center;';
+                    const iframe = document.createElement('iframe'); iframe.style.cssText = 'width:100%; height:100%; border:none; background:white;';
+                    contentWrap.appendChild(iframe);
+
+                    const footer = document.createElement('div');
+                    footer.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-top:8px;';
+                    const pager = document.createElement('div'); pager.innerText = '';
+                    footer.appendChild(pager);
+
+                    panel.appendChild(header);
+                    panel.appendChild(contentWrap);
+                    panel.appendChild(footer);
+                    modal.appendChild(panel);
+                    document.body.appendChild(modal);
+
+                    const updateView = () => {
+                        const p = previews[current];
+                        iframe.srcdoc = p.html_content || '<div style="padding:20px">无预览内容</div>';
+                        pager.innerText = `${current + 1} / ${previews.length} - ${p.title || ''}`;
+                        prevBtn.disabled = current === 0;
+                        nextBtn.disabled = current === previews.length - 1;
+                        // small delay to ensure load
+                        setTimeout(() => { try { iframe.style.height = (panel.clientHeight - header.clientHeight - footer.clientHeight - 30) + 'px'; } catch(e){} }, 50);
+                    };
+
+                    prevBtn.onclick = () => { if (current > 0) { current--; updateView(); } };
+                    nextBtn.onclick = () => { if (current < previews.length - 1) { current++; updateView(); } };
+
+                    cancelBtn.onclick = () => { modal.remove(); resolve(false); };
+                    confirmBtn.onclick = () => { modal.remove(); resolve(true); };
+
+                    // 点击背景也取消
+                    modal.addEventListener('click', function(e) { if (e.target === modal) { modal.remove(); resolve(false); } });
+
+                    updateView();
+                } catch (err) {
+                    console.error('showPreviewAndConfirm 失败:', err);
+                    resolve(false);
+                }
+            });
+        }
+
         // 拖拽和右键菜单相关变量
         let draggedSlideIndex = -1;
         let copiedSlideData = null;
@@ -7135,6 +7208,249 @@
             }
         }
 
+        // 更新所有缩略图内容（wrapper，用于批量操作后刷新缩略图）
+        function updateThumbnailsContent() {
+            try {
+                if (!Array.isArray(slidesData)) return;
+                for (let i = 0; i < slidesData.length; i++) {
+                    try {
+                        updateThumbnailDisplay(i, slidesData[i]);
+                    } catch (e) {
+                        console.warn('更新缩略图时第' + (i+1) + '页失败:', e);
+                    }
+                }
+            } catch (err) {
+                console.error('updateThumbnailsContent 出错:', err);
+            }
+        }
+
+        // 从完整的 html_content 中提取 body 内部的 HTML（如果存在）
+        function extractBodyHtml(fullHtml) {
+            try {
+                if (!fullHtml || typeof fullHtml !== 'string') return '';
+                const bodyMatch = fullHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+                if (bodyMatch && bodyMatch[1]) return bodyMatch[1];
+                // 如果没有 body 标签，尝试去除 html/head 标签
+                return fullHtml.replace(/<\/?html[^>]*>/gi, '').replace(/<\/?head[^>]*>/gi, '').replace(/<\/?body[^>]*>/gi, '');
+            } catch (e) {
+                console.warn('extractBodyHtml 解析失败，返回原始内容', e);
+                return fullHtml;
+            }
+        }
+
+        // 使用 DOMParser 基于节点级别合并模板与原幻灯片，尽量保留 canvas/script/img 等节点
+        function mergeTemplateAndSlide(templateHtml, slideHtml, titleTxt, pageNum, totalPages) {
+            try {
+                if (!templateHtml || templateHtml.trim() === '') return slideHtml || '';
+
+                const parser = new DOMParser();
+                const tplDoc = parser.parseFromString(templateHtml, 'text/html');
+                const slideDoc = parser.parseFromString(slideHtml || '', 'text/html');
+
+                // 1) 替换标题占位（如果存在）
+                const titleSelectors = ['.page-title', '.main-heading', '.page-header', '.title', '[data-page-title]', 'h1', 'h2'];
+                for (const sel of titleSelectors) {
+                    const el = tplDoc.querySelector(sel);
+                    if (el) {
+                        el.textContent = titleTxt || el.textContent || '';
+                        break;
+                    }
+                }
+
+                // 2) 替换页码占位
+                const replaceTextPlaceholders = (root) => {
+                    if (!root) return;
+                    root.querySelectorAll && root.querySelectorAll('*').forEach(node => {
+                        if (node.childNodes && node.childNodes.length === 1 && node.childNodes[0].nodeType === Node.TEXT_NODE) {
+                            node.textContent = node.textContent.replace(/\{\{\s*current_page_number\s*\}\}/g, String(pageNum || ''))
+                                                               .replace(/\{\{\s*total_page_count\s*\}\}/g, String(totalPages || ''))
+                                                               .replace(/\{\{\s*page_title\s*\}\}/g, titleTxt || '');
+                        }
+                    });
+                };
+                replaceTextPlaceholders(tplDoc);
+
+                // 3) 找到模板中的内容容器并注入 slide 的 body 内容
+                const contentSelectors = [
+                    '[data-page-content]', '.page-content', '.slide-content', '.content', '.main-content', '#content', '.content-area', '.content-wrapper', 'main', 'section'
+                ];
+
+                // 为避免模板中的标题与幻灯片自身的标题重复，但又不误删副标题，
+                // 采用更保守的策略：仅在模板中确实包含相应的 header/footer 或页码占位符时，才从 slide 中移除这些节点。
+                try {
+                    if (slideDoc.querySelectorAll) {
+                        const collected = [];
+                        titleSelectors.forEach(sel => {
+                            slideDoc.querySelectorAll(sel).forEach(n => collected.push(n));
+                        });
+
+                        const pageNumRegex = /^\s*\d+\s*\/\s*\d+\s*$/;
+
+                        // 检测模板中是否存在 header/title 容器或 footer/page 占位符
+                        let templateHasHeader = false;
+                        let templateHasFooterOrPager = false;
+                        try {
+                            // titleSelectors is defined earlier in the function scope
+                            for (const sel of titleSelectors) {
+                                if (tplDoc.querySelector(sel)) { templateHasHeader = true; break; }
+                            }
+                            const tplHtmlStr = tplDoc.documentElement ? tplDoc.documentElement.outerHTML : '';
+                            if (/\{\{\s*page_content\s*\}\}/i.test(tplHtmlStr) || /\{\{\s*current_page_number\s*\}\}/i.test(tplHtmlStr) || /\{\{\s*total_page_count\s*\}\}/i.test(tplHtmlStr)) {
+                                templateHasFooterOrPager = true;
+                            }
+                            if (tplDoc.querySelector('.slide-footer, .footer, footer, .page-footer, .pager, .page-number')) templateHasFooterOrPager = true;
+                        } catch (tplCheckErr) { /* ignore template detection errors */ }
+
+                        collected.forEach(n => {
+                            try {
+                                const txt = (n.textContent || '').trim();
+                                const cls = (n.className || '').toLowerCase();
+
+                                const isExactTitle = titleTxt && txt === String(titleTxt).trim();
+                                const looksLikePageNum = pageNumRegex.test(txt);
+                                const isPagerClass = cls.includes('page-number') || cls.includes('pager') || cls.includes('pagination') || cls.includes('page');
+                                const hasDataPage = n.dataset && (n.dataset.pageNumber || n.dataset.page || n.dataset.pagenumber);
+
+                                // helper: check if node is inside an element that looks like a footer/pager container
+                                const isInFooterLikeAncestor = (node) => {
+                                    let p = node.parentNode;
+                                    while (p && p !== slideDoc && p.nodeType === 1) {
+                                        const an = (p.className || '') + ' ' + (p.id || '');
+                                        const al = an.toLowerCase();
+                                        if (al.includes('footer') || al.includes('foot') || al.includes('slide-footer') || al.includes('pager') || al.includes('pagination') || al.includes('page-footer')) return true;
+                                        p = p.parentNode;
+                                    }
+                                    return false;
+                                };
+
+                                // Remove title only if template provides a header/title area (to avoid removing subtitles)
+                                if (isExactTitle && templateHasHeader) {
+                                    n.remove();
+                                    return;
+                                }
+
+                                // Conservative page-number/footer removal:
+                                // Only remove page-number-like elements when the template provides a footer/pager placeholder or when the element is explicitly a pager/footer
+                                if (looksLikePageNum) {
+                                    if (templateHasFooterOrPager || isPagerClass || hasDataPage || isInFooterLikeAncestor(n)) {
+                                        n.remove();
+                                        return;
+                                    }
+                                    // otherwise keep (likely inline '1/7' in body)
+                                }
+
+                                // If element explicitly marked as pager via class/attr, remove it only when template expects a pager/footer
+                                if ((isPagerClass || hasDataPage) && templateHasFooterOrPager) {
+                                    // only remove if element contains mostly text (no complex children)
+                                    const childCount = n.children ? n.children.length : 0;
+                                    if (childCount === 0 || childCount <= 1) {
+                                        n.remove();
+                                    }
+                                }
+                            } catch (inner) { /* ignore per-node errors */ }
+                        });
+                    }
+                } catch (e) {
+                    // 静默失败，继续使用原始 slide body
+                }
+
+                // 额外尝试：按语义角色（主标题/副标题/正文/图表/图片）一对一映射
+                // 如果模板有明确的插槽（例如 data-page-title, data-page-subtitle, data-page-content, data-page-chart）
+                // 则把 slide 中对应的元素复制到模板对应位置，保留原有节点结构（script/img/canvas等）。
+                try {
+                    const roleMappings = [
+                        // Title: prefer explicit header/title then generic h1
+                        { slide: ['.slide-header .slide-title', '.slide-title', 'h1', '.title'], tpl: ['[data-page-title]', '.slide-header .slide-title', '.slide-title', 'h1', '.title'] },
+                        // Subtitle / hero subtitle
+                        { slide: ['.hero-subtitle', '.slide-subtitle', '.subtitle', 'h2'], tpl: ['[data-page-subtitle]', '.hero-subtitle', '.slide-subtitle', '.subtitle', 'h2'] },
+                        // Short description under hero
+                        { slide: ['.hero-description', '.description', '.lead', 'p.lead'], tpl: ['[data-page-description]', '.hero-description', '.description', '.lead', 'p.lead'] },
+                        // Main content container
+                        { slide: ['.slide-content', '.content', '.page-content', 'main', 'section', '.content-main'], tpl: ['[data-page-content]', '.page-content', '.slide-content', '.content', 'main', 'section', '.content-main'] },
+                        // Charts / canvases
+                        { slide: ['canvas[id*="chart"]', '.chart', '.chart-container'], tpl: ['[data-page-chart]', 'canvas[id*="chart"]', '.chart', '.chart-container'] },
+                        // Images / SVGs
+                        { slide: ['img', 'svg'], tpl: ['[data-page-image]', 'img', 'svg'] }
+                    ];
+
+                    for (const map of roleMappings) {
+                        let slideNode = null;
+                        for (const s of map.slide) {
+                            try { slideNode = slideNode || slideDoc.querySelector(s); } catch(e) { /* ignore invalid selectors */ }
+                            if (slideNode) break;
+                        }
+                        let tplNode = null;
+                        for (const t of map.tpl) {
+                            try { tplNode = tplNode || tplDoc.querySelector(t); } catch(e) { /* ignore invalid selectors */ }
+                            if (tplNode) break;
+                        }
+                        if (slideNode && tplNode) {
+                            // If slide node has child elements (images/canvases/scripts), clone innerHTML to preserve them
+                            try {
+                                if (slideNode.children && slideNode.children.length > 0) {
+                                    tplNode.innerHTML = slideNode.innerHTML;
+                                } else {
+                                    // otherwise copy textContent (keeps simple text like titles/subtitles)
+                                    tplNode.textContent = (slideNode.textContent || '').trim();
+                                }
+                            } catch (copyErr) {
+                                // fallback: set textContent
+                                try { tplNode.textContent = (slideNode.textContent || '').trim(); } catch (_) {}
+                            }
+                        }
+                    }
+                } catch (mapErr) {
+                    // ignore mapping errors and continue to generic injection
+                }
+
+                let injected = false;
+                const slideBodyHtml = slideDoc.body ? slideDoc.body.innerHTML : (slideHtml || '');
+
+                for (const sel of contentSelectors) {
+                    const container = tplDoc.querySelector(sel);
+                    if (container) {
+                        // 清空并注入（保持script/img/canvas等节点）
+                        container.innerHTML = slideBodyHtml || '';
+                        injected = true;
+                        break;
+                    }
+                }
+
+                // 4) 如果没有找到明显的容器，尝试替换 {{ page_content }} 模板占位符
+                if (!injected) {
+                    const tplHtmlStr = tplDoc.documentElement.outerHTML;
+                    if (/\{\{\s*page_content\s*\}\}/i.test(tplHtmlStr)) {
+                        return tplHtmlStr.replace(/\{\{\s*page_content\s*\}\}/gi, slideBodyHtml || '');
+                    }
+                }
+
+                // 5) 最后回退：如果仍未注入，把 slide body 放到 template 的 body 末尾
+                if (!injected) {
+                    if (tplDoc.body) {
+                        tplDoc.body.innerHTML = (tplDoc.body.innerHTML || '') + (slideBodyHtml || '');
+                    }
+                }
+
+                // 6) 返回完整HTML（包含 DOCTYPE）以便 iframe.srcdoc 使用
+                const serialized = '<!DOCTYPE html>\n' + tplDoc.documentElement.outerHTML;
+                return serialized;
+            } catch (e) {
+                console.warn('mergeTemplateAndSlide 失败，降级为字符串替换:', e);
+                try {
+                    // 简单回退，保留以前的行为
+                    let html = templateHtml || '';
+                    html = html.replace(/\{\{\s*page_title\s*\}\}/g, titleTxt || '');
+                    html = html.replace(/\{\{\s*current_page_number\s*\}\}/g, String(pageNum || ''));
+                    html = html.replace(/\{\{\s*total_page_count\s*\}\}/g, String(totalPages || ''));
+                    if (/\{\{\s*page_content\s*\}\}/.test(html)) {
+                        return html.replace(/\{\{\s*page_content\s*\}\}/g, slideHtml || '');
+                    }
+                    if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, (slideHtml || '') + '</body>');
+                    return html + (slideHtml || '');
+                } catch (ee) { return templateHtml || slideHtml || ''; }
+            }
+        }
+
         // 更新主预览区域
         function updateMainPreview(slideData) {
             const slideFrame = document.getElementById('slideFrame');
@@ -7255,6 +7571,133 @@
                 throw error; // 重新抛出错误以便调用者处理
             }
         }
+
+        // --------- 全局母版选择与应用功能 ---------
+        async function openTemplatePicker() {
+            try {
+                const resp = await fetch('/api/global-master-templates/?active_only=true&page_size=1000');
+                if (!resp.ok) throw new Error('无法获取母版列表');
+                const data = await resp.json();
+                const templates = data.templates || [];
+                showTemplateModal(templates);
+            } catch (e) {
+                console.error('打开母版选择器失败:', e);
+                alert('无法加载母版列表，请稍后重试');
+            }
+        }
+
+        function showTemplateModal(templates) {
+            const existing = document.getElementById('templatePickerModal');
+            if (existing) existing.remove();
+            const modal = document.createElement('div');
+            modal.id = 'templatePickerModal';
+            modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 12000; display:flex; align-items:center; justify-content:center; padding:20px; box-sizing:border-box;';
+            const panel = document.createElement('div');
+            panel.style.cssText = 'width: min(1100px, 98%); max-height: 90%; overflow:auto; background: #fff; border-radius: 8px; padding: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);';
+            const header = document.createElement('div');
+            header.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;';
+            header.innerHTML = `<h3 style="margin:0">选择母版模板</h3>`;
+            const closeBtn = document.createElement('button');
+            closeBtn.innerText = '关闭'; closeBtn.style.cssText = 'padding:6px 10px;'; closeBtn.onclick = () => modal.remove();
+            header.appendChild(closeBtn);
+            panel.appendChild(header);
+            const grid = document.createElement('div');
+            grid.style.cssText = 'display:grid; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); gap:12px;';
+
+            templates.forEach(t => {
+                const card = document.createElement('div');
+                card.style.cssText = 'border:1px solid #e6e6e6; border-radius:6px; padding:8px; background:#fafafa; display:flex; flex-direction:column; gap:8px;';
+                const title = document.createElement('div'); title.innerText = t.template_name || `模板 ${t.id}`; title.style.fontWeight = '600';
+                const preview = document.createElement('div'); preview.style.cssText = 'height:120px; overflow:hidden; border-radius:4px; background:#fff; border:1px solid #ddd;';
+                if (t.preview_image) { const img = document.createElement('img'); img.src = t.preview_image; img.style.cssText = 'width:100%; height:100%; object-fit:cover;'; preview.appendChild(img); }
+                else if (t.html_template) { const iframe = document.createElement('iframe'); iframe.style.cssText = 'width:100%; height:100%; border:none;'; iframe.srcdoc = t.html_template; preview.appendChild(iframe); }
+                else { preview.innerText = '暂无预览'; preview.style.display = 'flex'; preview.style.alignItems = 'center'; preview.style.justifyContent = 'center'; preview.style.color = '#888'; }
+
+                const actions = document.createElement('div'); actions.style.cssText = 'display:flex; gap:8px;';
+                const selectBtn = document.createElement('button'); selectBtn.innerText = '选择并设为项目母版'; selectBtn.style.cssText = 'flex:1; padding:8px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer;';
+                selectBtn.onclick = async () => {
+                    try {
+                        selectBtn.disabled = true; selectBtn.innerText = '应用中...';
+                        const res = await fetch(`/api/projects/{{ project.project_id }}/select-template`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_id: '{{ project.project_id }}', selected_template_id: t.id }) });
+                        if (!res.ok) throw new Error('设置项目母版失败');
+                        alert('母版已设置到项目。可选择“应用到所有幻灯片”以批量替换当前幻灯片风格。'); selectBtn.innerText = '已设置';
+                    } catch (e) { console.error('选择母版失败:', e); alert('选择母版失败：' + (e.message || e)); selectBtn.disabled = false; selectBtn.innerText = '选择并设为项目母版'; }
+                };
+
+                const applyAllBtn = document.createElement('button'); applyAllBtn.innerText = '应用到所有幻灯片'; applyAllBtn.style.cssText = 'flex:1; padding:8px; background:#28a745; color:white; border:none; border-radius:4px; cursor:pointer;';
+                applyAllBtn.onclick = async () => {
+                    try {
+                        applyAllBtn.disabled = true; applyAllBtn.innerText = '生成预览...';
+                        const pv = await fetch(`/api/global-master-templates/${t.id}/preview`);
+                        if (!pv.ok) throw new Error('无法获取模板预览');
+                        const pvj = await pv.json();
+                        const templateObj = pvj;
+
+                        // 生成内存预览，但不修改 slidesData
+                        const previews = [];
+                        for (let i = 0; i < slidesData.length; i++) {
+                            const titleTxt = slidesData[i].title || `第${i+1}页`;
+                            const slideHtml = slidesData[i].html_content || '';
+                            const tplHtml = templateObj.html_template || templateObj.html || (typeof templateObj === 'string' ? templateObj : '');
+                            const finalHtml = mergeTemplateAndSlide(tplHtml, slideHtml, titleTxt, i+1, slidesData.length);
+                            previews.push({ page_number: i+1, title: titleTxt, html_content: finalHtml });
+                        }
+
+                        // 显示预览并让用户确认
+                        const confirmed = await showPreviewAndConfirm(previews);
+                        if (!confirmed) {
+                            applyAllBtn.disabled = false; applyAllBtn.innerText = '应用到所有幻灯片';
+                            return;
+                        }
+
+                        applyAllBtn.innerText = '创建备份...';
+                        // 创建项目版本备份（以便可回滚）
+                        const backupResp = await fetch(`/api/projects/{{ project.project_id }}/versions`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: `Backup before apply template ${t.template_name || t.id}`, created_by: 'ui' })
+                        });
+                        if (!backupResp.ok) throw new Error('创建备份失败');
+                        const backupJson = await backupResp.json();
+                        const versionId = backupJson && backupJson.version ? backupJson.version : (backupJson.id || null);
+
+                        applyAllBtn.innerText = '保存变更...';
+                        // 构建批量保存 payload
+                        const newSlides = previews.map(p => ({ ...slidesData[p.page_number - 1], html_content: p.html_content, is_user_edited: true }));
+
+                        const saveResp = await fetch(`/api/projects/{{ project.project_id }}/slides/batch-save`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slides_data: newSlides }) });
+                        if (!saveResp.ok) throw new Error('批量保存失败');
+                        const saveJson = await saveResp.json();
+                        if (!saveJson.success) throw new Error(saveJson.error || 'batch save failed');
+
+                        // 成功后替换本地数据并刷新缩略图
+                        slidesData = newSlides;
+                        updateThumbnailsContent();
+
+                        // 通知用户并提供回滚信息
+                        const rollbackMsg = versionId ? ` 已创建备份(version=${versionId})，如需回滚请在项目版本中恢复。` : '';
+                        alert('母版已应用到所有幻灯片并保存。' + rollbackMsg);
+                        applyAllBtn.innerText = '已应用';
+                        modal.remove();
+                    } catch (e) {
+                        console.error('应用母版到所有幻灯片失败:', e);
+                        alert('应用失败：' + (e.message || e));
+                        applyAllBtn.disabled = false; applyAllBtn.innerText = '应用到所有幻灯片';
+                    }
+                };
+
+                actions.appendChild(selectBtn); actions.appendChild(applyAllBtn);
+                card.appendChild(title); card.appendChild(preview); card.appendChild(actions); grid.appendChild(card);
+            });
+
+            panel.appendChild(grid); modal.appendChild(panel); document.body.appendChild(modal);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                const existingBtn = document.getElementById('openTemplatePickerBtn');
+                if (existingBtn) return;
+                const btn = document.createElement('button'); btn.id = 'openTemplatePickerBtn'; btn.innerText = '选择母版'; btn.title = '从全局母版中选择并应用到项目'; btn.style.cssText = 'position:fixed; right:18px; bottom:120px; z-index:11000; padding:10px 14px; background:#6f42c1; color:#fff; border:none; border-radius:6px; box-shadow:0 6px 18px rgba(0,0,0,0.2); cursor:pointer;'; btn.onclick = openTemplatePicker; document.body.appendChild(btn);
+            } catch (e) { console.error(e); }
+        });
 
         // 清理数据库中多余的幻灯片
         async function cleanupExcessSlides() {

@@ -360,11 +360,41 @@ class GlobalMasterTemplateService:
         try:
             # 检查AI提供商是否支持流式响应
             if hasattr(self.ai_provider, "stream_text_completion"):
-                # 使用流式API
+                # 使用流式API：累积所有片段，边流式返回 thinking 片段，流结束后把结果合并、提取并保存为模板
+                collected = []
                 async for chunk in self.ai_provider.stream_text_completion(
                     prompt=ai_prompt, max_tokens=ai_config.max_tokens, temperature=0.7
                 ):
+                    # chunk is text piece from provider
+                    collected.append(chunk)
                     yield {"type": "thinking", "content": chunk}
+
+                # 流结束后，合并内容并继续后续处理（与非流式分支一致）
+                full_response = "".join(collected)
+                # 尝试从响应中提取 HTML
+                html_template = self._extract_html_from_response(full_response)
+
+                # 验证并保存模板
+                if not self._validate_html_template(html_template):
+                    raise ValueError("Generated HTML template is invalid")
+
+                yield {"type": "thinking", "content": "💾 保存模板到数据库..."}
+
+                template_data = {
+                    "template_name": template_name,
+                    "description": description or f"AI生成的模板：{prompt[:100]}",
+                    "html_template": html_template,
+                    "tags": tags or ["AI生成"],
+                    "created_by": "AI",
+                }
+
+                result = await self.create_template(template_data)
+
+                yield {
+                    "type": "complete",
+                    "message": "模板生成完成！",
+                    "template_id": result["id"],
+                }
             else:
                 # 模拟流式响应
                 yield {"type": "thinking", "content": "🤔 正在分析您的需求...\n\n"}

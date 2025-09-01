@@ -20,8 +20,9 @@ DEFAULT_TEMPLATE_HTML = """<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title }}</title>
     <link href="/static/css/tailwind.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+    <!-- Load Chart.js non-blocking with local fallback to avoid blocking page scripts when CDN is unreachable -->
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js" onerror="this.onerror=null;this.remove();var s=document.createElement('script');s.src='/static/js/chart.min.js';s.defer=true;document.head.appendChild(s);"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js" onerror="this.onerror=null;this.remove();"></script>
     <style>
         body {
             width: 1280px;

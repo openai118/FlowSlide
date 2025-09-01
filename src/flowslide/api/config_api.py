@@ -285,6 +285,40 @@ async def update_config_by_category(
 
 
 
+@router.post("/api/config/ai_providers")
+async def update_ai_providers(
+    request: ConfigUpdateRequest,
+    config_service: ConfigService = Depends(get_config_service),
+    user: User = Depends(get_current_admin_user),
+):
+    """Compatibility endpoint for the UI: update AI provider related configuration."""
+    try:
+        schema = config_service.get_config_schema() or {}
+
+        # Keep only keys that belong to ai_providers category per schema
+        filtered = {k: v for k, v in (request.config or {}).items() if k in schema and schema[k].get("category") == "ai_providers"}
+
+        # Remove masked placeholders for password fields
+        filtered = {k: v for k, v in filtered.items() if not (schema.get(k, {}).get("type") == "password" and v == MASKED_PLACEHOLDER)}
+
+        errors = config_service.validate_config(filtered)
+        if errors:
+            return {"success": False, "errors": errors}
+
+        ok = config_service.update_config_by_category("ai_providers", filtered)
+        if ok:
+            return {"success": True, "message": "AI providers configuration updated successfully"}
+
+        raise HTTPException(status_code=500, detail="Failed to update AI providers configuration")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to update AI providers configuration: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to update AI providers configuration")
+
+
+
 @router.post("/api/config/parse-and-apply")
 async def parse_and_apply_config(request: ConfigUpdateRequest, config_service: ConfigService = Depends(get_config_service), user: User = Depends(get_current_admin_user)):
     """Parse bulk text containing KEY=VALUE lines (or semicolon separated) and apply to configuration."""
