@@ -1340,22 +1340,16 @@
                         <span id="r2-config-badge" style="display:inline-block;padding:6px 10px;border-radius:12px;color:#fff;font-size:12px;background:#6c757d;">未配置</span>
                     </h5>
                     <div style="display: flex; flex-direction: column; gap: 12px;">
-                        <div style="display: flex; align-items: center; gap: 15px;">
-                            <span id="r2-sync-status" style="background: #95a5a6; color: white; padding: 6px 14px; border-radius: 20px; font-size: 0.85em; font-weight: 500;">
-                                未测试
-                            </span>
-                            <span id="r2-response-time" style="color: #6c757d; font-size: 0.85em;">
-                                --
-                            </span>
-                            <button onclick="testR2Connection()" style="padding: 6px 12px; background: var(--accent-gradient); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85em;">
-                                🔍 测试
-                            </button>
-                        </div>
+                            <!-- Status/test controls moved to 系统状态监控 -->
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 500; color: #495057;">最后同步时间:</span>
+                                <span id="last-r2-backup" style="color: #6c757d; font-size: 0.9em;">未知</span>
+                            </div>
 
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-weight: 500; color: #495057;">同步文件大小:</span>
-                            <span id="r2-backup-size" style="color: #6c757d; font-size: 0.9em;">未知</span>
-                        </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 500; color: #495057;">同步文件大小:</span>
+                                <span id="r2-backup-size" style="color: #6c757d; font-size: 0.9em;">未知</span>
+                            </div>
 
                         <!-- R2 file list selector -->
                         <div style="margin-top:8px;">
@@ -1412,6 +1406,28 @@
                     </div>
                     <p style="margin-top: 10px; color: #6c757d; font-size: 0.85em;">
                         检查数据库连接状态和响应时间
+                    </p>
+                </div>
+
+                <!-- R2 云存储连接（集中显示） -->
+                <div style="background: var(--glass-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                    <h5 style="color: #17a2b8; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                        <span>☁️</span> R2 云存储
+                    </h5>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <span id="r2-sync-status" style="background: #95a5a6; color: white; padding: 6px 14px; border-radius: 20px; font-size: 0.85em; font-weight: 500;">
+                            未测试
+                        </span>
+                        <span id="r2-response-time" style="color: #6c757d; font-size: 0.85em;">
+                            --
+                        </span>
+                        <button onclick="testR2Connection()" style="padding: 6px 12px; background: var(--accent-gradient); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85em;">
+                            🔍 测试
+                        </button>
+                    </div>
+                        <!-- R2 最后同步时间放置在数据备份的 R2 云存储同步区块下方 -->
+                    <p style="margin-top: 10px; color: #6c757d; font-size: 0.85em;">
+                        检查 R2 云存储连接状态和响应时间
                     </p>
                 </div>
 
@@ -6977,6 +6993,30 @@ function updateLastBackupInfo(backupInfo) {
     }
 }
 
+// 更新 R2 的最后同步信息（时间和大小）
+function updateR2SyncStatus(syncInfo) {
+    console.log('🔄 更新R2同步信息:', syncInfo);
+    const timeElement = document.getElementById('last-r2-backup');
+    const sizeElement = document.getElementById('r2-backup-size');
+
+    if (timeElement && syncInfo && syncInfo.created_at) {
+        timeElement.textContent = new Date(syncInfo.created_at).toLocaleString();
+    }
+
+    if (sizeElement && syncInfo && syncInfo.size) {
+        sizeElement.textContent = formatFileSize(syncInfo.size);
+    }
+
+    // 如果 syncInfo 同时包含配置状态信息，尝试更新R2配置徽章和状态
+    if (syncInfo && typeof syncInfo.configured !== 'undefined') {
+        updateR2ConfigStatus({
+            configured: syncInfo.configured,
+            tested: !!syncInfo.tested,
+            available: !!syncInfo.available
+        });
+    }
+}
+
 // 更新数据库配置状态
 function updateDatabaseConfigStatus(statusInfo) {
     console.log('🔄 更新数据库配置状态:', statusInfo);
@@ -7280,7 +7320,7 @@ function updateSystemResources(resources) {
 async function checkR2Status() {
     try {
         console.log('🔍 检查R2配置状态...');
-        const response = await fetch('/api/system/r2-status');
+    const response = await fetch('/api/system/r2-status');
         if (response.ok) {
             const result = await response.json();
             console.log('✅ R2 API响应:', result);
@@ -7308,6 +7348,28 @@ async function checkR2Status() {
             tested: false,
             available: false
         });
+    }
+
+    // 额外：获取R2上最新的备份文件，用于初始化页面上的最后同步时间和大小显示
+    try {
+        const listResp = await fetch('/api/backup/r2/list');
+        if (listResp.ok) {
+            const listData = await listResp.json();
+            if (listData && listData.items && listData.items.length > 0) {
+                const latest = listData.items[0];
+                // items use keys: key, size, last_modified
+                const created_at = latest.last_modified || latest.backup_date || null;
+                const size = latest.size || null;
+
+                updateR2SyncStatus({
+                    created_at: created_at,
+                    size: size,
+                    filename: latest.key
+                });
+            }
+        }
+    } catch (e) {
+        console.warn('无法获取R2文件列表以初始化最后同步时间:', e);
     }
 }
 

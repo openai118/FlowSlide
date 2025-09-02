@@ -244,6 +244,38 @@ async def test_database_connection():
             "response_time_ms": None
         }
 
+
+@router.get("/r2-test")
+async def test_r2_connection():
+    """测试R2云存储连接"""
+    import time
+    import boto3
+    from botocore.exceptions import NoCredentialsError, ClientError
+
+    try:
+        logger.info("☁️ Testing R2 connection...")
+
+        # 记录开始时间
+        start_time = time.time()
+
+        # 检查R2配置
+        r2_config = {
+            "access_key": os.getenv("R2_ACCESS_KEY_ID"),
+            "secret_key": os.getenv("R2_SECRET_ACCESS_KEY"),
+            "endpoint": os.getenv("R2_ENDPOINT"),
+            "bucket": os.getenv("R2_BUCKET_NAME")
+        }
+
+        # 检查配置完整性
+        is_configured = all(r2_config.values())
+
+        if not is_configured:
+            return {
+                "success": False,
+                "message": "R2配置不完整，请检查所有必需的环境变量",
+                "response_time_ms": round((time.time() - start_time) * 1000, 2)
+            }
+
         # 创建S3客户端连接R2
         s3_client = boto3.client(
             's3',
@@ -315,38 +347,14 @@ async def test_database_connection():
                 "message": f"R2连接异常: {str(e)}",
                 "response_time_ms": response_time
             }
-            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
 
-            if error_code == 'NoSuchBucket':
-                logger.error("❌ R2 bucket does not exist")
-                return {
-                    "success": False,
-                    "message": f"R2存储桶 '{r2_config['bucket']}' 不存在",
-                    "response_time_ms": response_time
-                }
-            elif error_code == 'AccessDenied':
-                logger.error("❌ R2 access denied")
-                return {
-                    "success": False,
-                    "message": "R2访问被拒绝，请检查权限设置",
-                    "response_time_ms": response_time
-                }
-            else:
-                logger.error(f"❌ R2 connection failed: {error_code}")
-                return {
-                    "success": False,
-                    "message": f"R2连接失败: {error_code}",
-                    "response_time_ms": response_time
-                }
-
-        except Exception as e:
-            response_time = round((time.time() - start_time) * 1000, 2)
-            logger.error(f"❌ R2 connection test failed: {e}")
-            return {
-                "success": False,
-                "message": f"R2连接异常: {str(e)}",
-                "response_time_ms": response_time
-            }
+    except Exception as e:
+        logger.error(f"❌ R2 test setup failed: {e}")
+        return {
+            "success": False,
+            "message": f"R2测试设置失败: {str(e)}",
+            "response_time_ms": None
+        }
 
 
 @router.get("/health")

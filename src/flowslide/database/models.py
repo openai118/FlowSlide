@@ -18,6 +18,9 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    # External system mapping: store external DB id and optional origin/source name
+    external_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    external_origin: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     email: Mapped[Optional[str]] = mapped_column(
@@ -286,6 +289,37 @@ class SystemConfig(Base):
             "is_system": self.is_system,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+        }
+
+
+class SyncConflict(Base):
+    """Record synchronization conflicts for manual review"""
+
+    __tablename__ = "sync_conflicts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    local_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    external_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    attempted_username: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    payload: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    resolved_at: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    resolver: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "local_id": self.local_id,
+            "external_id": self.external_id,
+            "attempted_username": self.attempted_username,
+            "reason": self.reason,
+            "payload": self.payload,
+            "created_at": self.created_at,
+            "resolved": self.resolved,
+            "resolved_at": self.resolved_at,
+            "resolver": self.resolver,
         }
 
 

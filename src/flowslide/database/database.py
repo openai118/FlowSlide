@@ -135,12 +135,15 @@ class DatabaseManager:
             # 检查是否是Supabase
             is_supabase = 'supabase' in parsed.hostname if parsed.hostname else False
 
-            connect_args = {}
+            # For Supabase/pgbouncer we only need to adjust async driver options
+            # Do NOT pass statement_cache_size into the sync create_engine (psycopg2)
+            async_connect_args = {}
             if is_supabase:
-                # Supabase使用pgbouncer，需要禁用prepared statements
+                # Supabase使用pgbouncer，需要禁用prepared statements for asyncpg
                 statement_cache_size = int(os.getenv("PG_STATEMENT_CACHE_SIZE", "0"))
-                connect_args = {"statement_cache_size": statement_cache_size}
+                async_connect_args = {"statement_cache_size": statement_cache_size}
 
+            # Create sync engine without passing DB-API specific connect_args that psycopg2 doesn't accept
             self.external_engine = create_engine(
                 self.external_url,
                 pool_size=5,
@@ -148,8 +151,9 @@ class DatabaseManager:
                 pool_pre_ping=True,
                 pool_recycle=3600,
                 echo=False,
-                connect_args=connect_args
             )
+
+            # Async engine may accept driver-specific connect_args (e.g., asyncpg)
             self.external_async_engine = create_async_engine(
                 self.external_async_url,
                 pool_size=5,
@@ -157,7 +161,7 @@ class DatabaseManager:
                 pool_pre_ping=True,
                 pool_recycle=3600,
                 echo=False,
-                connect_args=connect_args
+                connect_args=async_connect_args
             )
             logger.info("✅ Backup database engine ready")
 
@@ -301,11 +305,139 @@ async def init_db():
 
             # Initialize default admin user
             from ..auth.auth_service import init_default_admin
+            import os
+
+            def _external_has_users() -> bool:
+                """Return True if external DB configured and contains at least one user."""
+                try:
+                    if not getattr(db_manager, "external_engine", None):
+                        return False
+                    with db_manager.external_engine.connect() as conn:
+                        res = conn.execute(text("SELECT 1 FROM users LIMIT 1")).fetchone()
+                        return bool(res)
+                except Exception:
+                    return False
+
+            def _r2_has_backups_with_users() -> bool:
+                """Lightweight check for R2: if R2 configured, assume backups may contain users. This is heuristic."""
+                try:
+                    r2_access_key = os.getenv("R2_ACCESS_KEY_ID")
+                    r2_bucket = os.getenv("R2_BUCKET_NAME")
+                    # If not configured, skip
+                    if not r2_access_key or not r2_bucket:
+                        return False
+                    # Prefer not to import boto3 here; use heuristic that R2 is configured
+                    return True
+                except Exception:
+                    return False
 
             db = SessionLocal()
             try:
-                init_default_admin(db)
-                logger.info("✅ Default admin user initialized")
+                # Determine active deployment mode: prefer ACTIVE_DEPLOYMENT_MODE if set and not 'none'
+                from ..core.deployment_mode_manager import mode_manager
+                active_env = os.getenv("ACTIVE_DEPLOYMENT_MODE")
+                if active_env and active_env.strip().lower() != 'none':
+                    current_mode = None
+                    try:
+                        current_mode = mode_manager.current_mode
+                    except Exception:
+                        current_mode = None
+                else:
+                    # Query mode manager (this will perform auto-detection if needed)
+                    try:
+                        current_mode = mode_manager.current_mode or mode_manager.detect_current_mode()
+                    except Exception:
+                        current_mode = None
+
+                # If current active mode is local-only (or explicitly set to local), create local admin
+                mode_name = current_mode.value if current_mode else 'local_only'
+                if mode_name.startswith('local') and ('external' not in mode_name and 'r2' not in mode_name):
+                    init_default_admin(db)
+                    logger.info("✅ Default admin user initialized (active mode implies local-only)")
+                else:
+                    # For modes that include external or R2, prefer syncing users from external/R2 first
+                    if _external_has_users():
+                        # If local has no users yet, perform an initial full upsert from external -> local
+                        try:
+                            # check local user count
+                            local_count = db.execute(text("SELECT COUNT(*) FROM users")).fetchone()[0]
+                        except Exception:
+                            local_count = 0
+
+                        if local_count == 0:
+                            logger.info("📥 External DB has users and local is empty - performing initial full upsert from external to local")
+                            try:
+                                # Perform upsert: read all external users and insert into local
+                                if getattr(db_manager, 'external_engine', None):
+                                    with db_manager.external_engine.connect() as ext_conn:
+                                        rows = ext_conn.execute(text(
+                                            "SELECT id, username, password_hash, email, is_admin, is_active, created_at, updated_at, last_login FROM users"
+                                        )).fetchall()
+
+                                        created = 0
+                                        with SessionLocal() as local_session:
+                                            for r in rows:
+                                                try:
+                                                    ext_id = r[0]
+                                                    username = r[1]
+                                                    password_hash = r[2]
+                                                    email = r[3]
+                                                    is_admin = bool(r[4]) if len(r) > 4 else False
+                                                    is_active = bool(r[5]) if len(r) > 5 else True
+                                                    created_at = r[6]
+                                                    updated_at = r[7]
+                                                    last_login = r[8]
+                                                except Exception:
+                                                    mapping = dict(r)
+                                                    ext_id = mapping.get('id')
+                                                    username = mapping.get('username')
+                                                    password_hash = mapping.get('password_hash')
+                                                    email = mapping.get('email')
+                                                    is_admin = bool(mapping.get('is_admin'))
+                                                    is_active = bool(mapping.get('is_active', True))
+                                                    created_at = mapping.get('created_at')
+                                                    updated_at = mapping.get('updated_at')
+                                                    last_login = mapping.get('last_login')
+
+                                                if not username or not password_hash:
+                                                    continue
+
+                                                # insert if not exists
+                                                exists = local_session.execute(text("SELECT id FROM users WHERE username=:u LIMIT 1"), {"u": username}).fetchone()
+                                                if exists:
+                                                    continue
+                                                try:
+                                                    local_session.execute(text(
+                                                        "INSERT INTO users (id, username, password_hash, email, is_admin, is_active, created_at, updated_at, last_login) VALUES (:id,:username,:hash,:email,:is_admin,:is_active,:created_at,:updated_at,:last_login)"
+                                                    ), {"id": ext_id, "username": username, "hash": password_hash, "email": email, "is_admin": is_admin, "is_active": is_active, "created_at": created_at, "updated_at": updated_at, "last_login": last_login})
+                                                    created += 1
+                                                except Exception as e:
+                                                    try:
+                                                        local_session.rollback()
+                                                    except Exception:
+                                                        pass
+                                                    logger.warning(f"⚠️ Failed to insert external user {username} during init upsert: {e}")
+
+                                            try:
+                                                local_session.commit()
+                                            except Exception:
+                                                try:
+                                                    local_session.rollback()
+                                                except Exception:
+                                                    pass
+
+                                        logger.info(f"✅ Initial upsert completed: created={created} from external")
+                                else:
+                                    logger.warning("External engine not available - cannot perform initial upsert")
+                            except Exception as e:
+                                logger.warning(f"Initial external->local upsert failed: {e}")
+                        else:
+                            logger.info("ℹ️ External DB has users - local already contains users, skipping initial upsert")
+                    elif _r2_has_backups_with_users():
+                        logger.info("ℹ️ R2 appears configured - will rely on R2/external backups for initial users and skip local admin creation if possible")
+                    else:
+                        init_default_admin(db)
+                        logger.info("✅ Default admin user initialized (no external/R2 users found)")
             except Exception as e:
                 logger.warning(f"⚠️ Admin user initialization warning: {e}")
             finally:

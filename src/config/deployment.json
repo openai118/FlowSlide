@@ -8,7 +8,7 @@
   "data_backup_before_switch": true,
   "notify_on_switch": true,
   "maintenance_mode": false,
-  "force_mode": "local_only",
+  "force_mode": "local_external_r2",
   "preferred_modes": [
     "local_external_r2",
     "local_external",

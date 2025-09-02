@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..core.simple_config import app_config
 from ..database.models import User, UserSession
+from ..services.data_sync_service import sync_service
 
 
 class AuthService:
@@ -72,6 +73,13 @@ class AuthService:
         db.add(user)
         db.commit()
         db.refresh(user)
+
+        # Trigger immediate user sync to external in background
+        try:
+            # Use forced direction to ensure local changes are pushed even if external is authoritative
+            sync_service.trigger_user_sync_background(direction="local_to_external_force")
+        except Exception:
+            pass
 
         return user
 
@@ -180,6 +188,10 @@ class AuthService:
         try:
             user.set_password(new_password)
             db.commit()
+            try:
+                sync_service.trigger_user_sync_background(direction="local_to_external_force")
+            except Exception:
+                pass
             return True
         except Exception:
             db.rollback()
@@ -194,6 +206,10 @@ class AuthService:
             for session in sessions:
                 session.is_active = False
             db.commit()
+            try:
+                sync_service.trigger_user_sync_background(direction="local_to_external_force")
+            except Exception:
+                pass
             return True
         except Exception:
             db.rollback()
@@ -221,6 +237,11 @@ class AuthService:
                 if exists:
                     raise ValueError("用户名已存在")
                 user.username = username
+                # push username change to external immediately
+                try:
+                    sync_service.trigger_user_sync_background(direction="local_to_external_force")
+                except Exception:
+                    pass
             if email is not None and email != user.email:
                 if email:
                     exists = db.query(User).filter(User.email == email).first()
@@ -244,6 +265,10 @@ class AuthService:
             # Delete user
             db.delete(user)
             db.commit()
+            try:
+                sync_service.trigger_user_sync_background(direction="local_to_external")
+            except Exception:
+                pass
             return True
         except Exception:
             db.rollback()

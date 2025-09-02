@@ -127,8 +127,21 @@ async def sync_to_r2():
     try:
         logger.info("☁️ Starting R2 sync...")
 
-        # 同步到R2
-        sync_info = await backup_service.sync_to_r2()
+        # 确保存在可同步的本地备份；若没有则先创建一个数据库备份（db_only）
+        backups = await list_backups()
+        if not backups:
+            logger.info("ℹ️ 没有找到本地备份，准备创建新的备份（db_only）并同步到R2...")
+            try:
+                new_backup_path = await create_backup("db_only")
+                logger.info(f"✅ 新备份已创建: {new_backup_path}")
+                from pathlib import Path
+                sync_info = await backup_service.sync_to_r2(Path(new_backup_path))
+            except Exception as e:
+                logger.error(f"❌ 创建或上传新备份失败: {e}")
+                raise
+        else:
+            # 同步到R2（使用最新备份）
+            sync_info = await backup_service.sync_to_r2()
 
         # 更新最后同步时间到环境变量
         import os

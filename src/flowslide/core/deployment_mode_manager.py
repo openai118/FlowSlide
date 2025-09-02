@@ -160,6 +160,36 @@ class DeploymentModeManager:
     def detect_current_mode(self) -> DeploymentMode:
         """检测当前部署模式"""
         logger.info("开始检测当前部署模式...")
+        # If operator set ACTIVE_DEPLOYMENT_MODE, respect it but still run auto-detection for info
+        # ACTIVE_DEPLOYMENT_MODE values: concrete modes (e.g., 'local', 'local_external', 'local_r2', 'local_external_r2') or 'none' to allow auto-detect
+        active_mode_env = os.getenv("ACTIVE_DEPLOYMENT_MODE")
+        if active_mode_env:
+            active_mode_val = active_mode_env.strip().lower()
+            # If ACTIVE_DEPLOYMENT_MODE explicitly set to a concrete mode (not 'none'),
+            # run auto-detection for informational purposes but do not override the active mode.
+            if active_mode_val != 'none':
+                try:
+                    from .auto_detection_service import AutoDetectionService
+                    detection_service = AutoDetectionService()
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            import concurrent.futures
+                            with concurrent.futures.ThreadPoolExecutor() as executor:
+                                future = executor.submit(asyncio.run, detection_service.detect_deployment_mode())
+                                _detected_mode = future.result(timeout=30)
+                        else:
+                            _detected_mode = loop.run_until_complete(detection_service.detect_deployment_mode())
+                    except RuntimeError:
+                        _detected_mode = asyncio.run(detection_service.detect_deployment_mode())
+                    logger.info(f"🔍 Auto-detection (informational) result while ACTIVE_DEPLOYMENT_MODE set: {_detected_mode.value}")
+                except Exception:
+                    logger.debug("Auto-detection (informational) failed while ACTIVE_DEPLOYMENT_MODE set; ignoring")
+                try:
+                    logger.info(f"ACTIVE_DEPLOYMENT_MODE environment variable set: {active_mode_val} - using as active mode and not overriding it")
+                    return DeploymentMode(active_mode_val)
+                except ValueError:
+                    logger.warning(f"ACTIVE_DEPLOYMENT_MODE has invalid value: {active_mode_env}, falling back to normal detection")
         
         # 首先检查配置文件中是否有用户保存的模式选择
         try:

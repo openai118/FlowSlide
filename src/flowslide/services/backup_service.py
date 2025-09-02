@@ -272,6 +272,8 @@ class BackupService:
                 "filename": backup_path.name,
                 "size": backup_path.stat().st_size,
                 "timestamp": datetime.now().isoformat(),
+                # created_at is the file mtime (when the backup file was created)
+                "created_at": datetime.fromtimestamp(backup_path.stat().st_mtime).isoformat(),
                 "success": True
             }
 

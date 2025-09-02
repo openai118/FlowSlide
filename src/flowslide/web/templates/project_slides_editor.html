@@ -4,7 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PPT编辑器 - {{ project.title }}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap CSS with fallback mirrors for regions where jsDelivr is blocked -->
+    <script>
+        (function(){
+            fetch('/static/config/static_cdn_mirrors.json').then(function(r){
+                return r.json();
+            }).then(function(cfg){
+                var cssMirrors = (cfg && cfg.bootstrap && cfg.bootstrap.css) || [];
+                function tryLoad(i){
+                    if(i>=cssMirrors.length) return;
+                    var l = document.createElement('link');
+                    l.rel='stylesheet';
+                    l.href = cssMirrors[i];
+                    l.onload = function(){ console.debug('Loaded bootstrap css from', cssMirrors[i]); };
+                    l.onerror = function(){ try { document.head.removeChild(l); } catch(e){}; tryLoad(i+1); };
+                    document.head.appendChild(l);
+                }
+                tryLoad(0);
+            }).catch(function(e){ console.warn('Failed to load CDN mirrors config', e); });
+        })();
+    </script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- CodeMirror CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
@@ -3661,7 +3680,25 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Bootstrap JS bundle with fallback mirrors -->
+    <script>
+        (function(){
+            fetch('/static/config/static_cdn_mirrors.json').then(function(r){ return r.json(); }).then(function(cfg){
+                var jsMirrors = (cfg && cfg.bootstrap && cfg.bootstrap.js) || [];
+                function tryLoad(i){
+                    if(i>=jsMirrors.length) return;
+                    var s = document.createElement('script');
+                    s.src = jsMirrors[i];
+                    s.defer = false;
+                    s.async = false;
+                    s.onload = function(){ console.debug('Loaded bootstrap js from', jsMirrors[i]); };
+                    s.onerror = function(){ try { s.parentNode && s.parentNode.removeChild(s); } catch(e){}; tryLoad(i+1); };
+                    document.body.appendChild(s);
+                }
+                tryLoad(0);
+            }).catch(function(e){ console.warn('Failed to load CDN mirrors config', e); });
+        })();
+    </script>
     <script>
         let currentSlideIndex = 0;
         let currentMode = 'preview';
