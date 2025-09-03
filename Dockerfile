@@ -76,7 +76,6 @@ RUN apt-get update && \
     curl \
     libmagic1 \
     libpq-dev \
-    postgresql-client \
     unzip \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -101,10 +100,39 @@ RUN apt-get update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install browser dependencies
+# Install browser/system dependencies required by Playwright Chromium (Debian/bookworm)
+# Ref: https://playwright.dev/docs/docker#install-system-dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    chromium \
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libatspi2.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxcb1 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    libxshmfence1 \
+    libx11-xcb1 \
+    libxss1 \
+    libdrm2 \
+    libegl1 \
+    libxkbcommon0 \
+    libglib2.0-0 \
+    libgtk-3-0 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libx11-6 \
+    libxext6 \
+    libvulkan1 \
+    libu2f-udev \
+    xdg-utils \
     libgomp1 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -120,23 +148,16 @@ RUN apt-get update && \
 # Create non-root user (for compatibility, but run as root)
 RUN groupadd -r flowslide && \
     useradd -r -g flowslide -m -d /home/flowslide flowslide && \
-    mkdir -p /home/flowslide/.cache/ms-playwright /root/.cache/ms-playwright
+    mkdir -p /home/flowslide/.cache/ms-playwright /root/.cache/ms-playwright && \
+    chown -R flowslide:flowslide /home/flowslide
 
 # Copy Python packages from builder
 # Note: Using system Python instead of virtual environment for simplicity
 
-# Install Playwright with minimal footprint (CPU-only browsers)
-RUN pip install --no-cache-dir playwright==1.40.0 && \
-    # Only install chromium browser with minimal dependencies
-    playwright install --with-deps chromium && \
-    # Clean up Playwright cache and temporary files
-    rm -rf /root/.cache/ms-playwright-download && \
+# Defer Playwright browser download until after venv is copied; we'll run it using the venv binary later
+RUN rm -rf /root/.cache/ms-playwright-download && \
     rm -rf /tmp/* /var/tmp/* && \
-    # Set proper ownership
-    chown -R flowslide:flowslide /home/flowslide && \
-    # Clean up apt cache from playwright install
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    chown -R flowslide:flowslide /home/flowslide || true
 
 # Set work directory
 WORKDIR /app
@@ -195,6 +216,13 @@ COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH" \
     VIRTUAL_ENV="/opt/venv"
 
+# Ensure Playwright Python package is present and download Chromium using the venv-managed CLI
+RUN /opt/venv/bin/python -c "import importlib, sys; importlib.import_module('playwright')" || \
+    /opt/venv/bin/pip install --no-cache-dir playwright && \
+    /opt/venv/bin/playwright --version && \
+    /opt/venv/bin/playwright install --with-deps chromium && \
+    rm -rf /root/.cache/ms-playwright-download
+
 # Keep flowslide user but run as root to handle file permissions
 # USER flowslide
 
@@ -217,4 +245,5 @@ LABEL maintainer="FlowSlide Team" \
       org.opencontainers.image.description="FlowSlide application with integrated database monitoring" \
       org.opencontainers.image.vendor="FlowSlide" \
       org.opencontainers.image.source="https://github.com/openai118/FlowSlide" \
-    org.opencontainers.image.licenses="Apache-2.0"
+    org.opencontainers.image.licenses="Apache-2.0" \
+    org.opencontainers.image.revision-date="2025-09-03"

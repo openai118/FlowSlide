@@ -846,6 +846,46 @@ async def test_ollama_provider_proxy(
             headers["X-Api-Key"] = use_key
 
         async with aiohttp.ClientSession() as session:
+            # 1) Quick ping Ollama (/api/tags) to avoid 500s when service is down
+            try:
+                tags_url = build_api_url(base_url, "api/tags")
+                async with session.get(tags_url, headers=headers or None, timeout=10) as ping:
+                    ping_text = await ping.text()
+                    if ping.status != 200:
+                        return JSONResponse({
+                            "success": False,
+                            "status": "error",
+                            "provider": "ollama",
+                            "error": f"无法连接到 Ollama ({ping.status})",
+                            "detail": ping_text[:500]
+                        }, status_code=200)
+
+                    # Validate model presence if parsable
+                    try:
+                        tags_json = json.loads(ping_text)
+                        if isinstance(tags_json, dict) and model:
+                            names = [m.get("name") or m.get("model") for m in tags_json.get("models", [])]
+                            if names and model not in names:
+                                return JSONResponse({
+                                    "success": False,
+                                    "status": "error",
+                                    "provider": "ollama",
+                                    "error": f"模型未找到: {model}",
+                                    "detail": f"已安装模型: {', '.join([n for n in names if n])}"
+                                }, status_code=200)
+                    except Exception:
+                        pass
+            except Exception as ping_err:
+                logger.info(f"Ollama ping failed: {ping_err}")
+                return JSONResponse({
+                    "success": False,
+                    "status": "error",
+                    "provider": "ollama",
+                    "error": "Ollama 服务未运行或无法连接",
+                    "detail": f"请确保服务可通过 {base_url} 访问，并已拉取模型 {model}"
+                }, status_code=200)
+
+            # 2) Generate test
             try:
                 logger.info(f"Calling Ollama generate URL: {gen_url} with model={model}")
                 async with session.post(gen_url, json=payload, headers=headers or None, timeout=30) as resp:
@@ -883,7 +923,6 @@ async def test_ollama_provider_proxy(
                 return JSONResponse({"success": False, "status": "error", "error": str(aio_err)}, status_code=200)
 
     except Exception as e:
-        # Log full traceback for server-side inspection and return stable JSON to client
         logger.exception(f"Error testing Ollama provider: {e}")
         return JSONResponse({"success": False, "status": "error", "error": str(e)}, status_code=200)
 

@@ -1306,14 +1306,23 @@
                             <span style="font-weight: 500; color: #495057;">同步文件大小:</span>
                             <span id="db-backup-size" style="color: #6c757d; font-size: 0.9em;">未知</span>
                         </div>
-                        <!-- DB backup file list selector (label on previous line, select + actions in flex row to match R2) -->
-                        <div style="margin-top:10px;">
-                            <label style="font-weight:500; color:#495057;">数据库备份:</label>
+                        <!-- External DB: adopt the same two-row layout as the R2 card for alignment -->
+                        <!-- Row 1: category select + generate -->
+                        <div style="margin-top:8px;">
+                            <label style="font-weight:500; color:#495057;">选择备份类别:</label>
                             <div style="display:flex; gap:8px; margin-top:6px;">
-                                <select id="db-file-list" style="flex:1; padding:6px; border-radius:6px; border:1px solid #ddd;">
+                                <select id="external-db-type" style="flex:1; min-width:180px; max-width:60%; padding:6px; border-radius:6px; border:1px solid #ddd;"></select>
+                                <button onclick="createExternalBackup()" class="btn btn-secondary" style="padding:6px 10px;">生成</button>
+                            </div>
+                        </div>
+
+                        <!-- Row 2: file list + actions -->
+                        <div style="margin-top:8px;">
+                            <label style="font-weight:500; color:#495057;">外数据库备份:</label>
+                            <div style="display:flex; gap:8px; margin-top:6px;">
+                                <select id="db-file-list" style="flex:1; min-width:180px; max-width:60%; padding:6px; border-radius:6px; border:1px solid #ddd; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                                     <option value="">-- 无可用文件 --</option>
                                 </select>
-                                <div id="db-empty-note" style="display:none; color:#6c757d; font-size:0.9em; margin-left:8px;">暂无本地备份。可点击“同步到外部”或运行手动备份。</div>
                                 <button onclick="restoreSelectedDB()" class="btn btn-warning" style="padding:6px 10px;">恢复</button>
                                 <button onclick="deleteSelectedDB()" class="btn btn-danger" style="padding:6px 10px;">删除</button>
                             </div>
@@ -1351,14 +1360,24 @@
                                 <span id="r2-backup-size" style="color: #6c757d; font-size: 0.9em;">未知</span>
                             </div>
 
+                        <!-- 分类选择与一键生成并同步 -->
+                        <div style="margin-top:8px;">
+                            <label style="font-weight:500; color:#495057;">选择备份类别:</label>
+                            <div style="display:flex; gap:8px; margin-top:6px;">
+                                <select id="r2-category-select" style="flex:1; min-width:180px; max-width:60%; padding:6px; border-radius:6px; border:1px solid #ddd;">
+                                    <option value="">-- 请选择类别 --</option>
+                                </select>
+                                <button onclick="syncCategoryToR2()" class="btn btn-primary" style="padding:6px 10px;">生成并同步该类别</button>
+                            </div>
+                        </div>
+
                         <!-- R2 file list selector -->
                         <div style="margin-top:8px;">
                             <label style="font-weight:500; color:#495057;">R2 文件备份:</label>
                             <div style="display:flex; gap:8px; margin-top:6px;">
-                                <select id="r2-file-list" style="flex:1; padding:6px; border-radius:6px; border:1px solid #ddd;">
+                                <select id="r2-file-list" style="flex:1; min-width:180px; max-width:60%; padding:6px; border-radius:6px; border:1px solid #ddd; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                                     <option value="">-- 无可用文件 --</option>
                                 </select>
-                                <div id="r2-empty-note" style="display:none; color:#6c757d; font-size:0.9em; margin-left:8px;">R2 上暂无备份文件。请确认 R2 配置并执行备份后重试。</div>
                                 <button onclick="restoreSelectedFromR2()" class="btn btn-warning" style="padding:6px 10px;">恢复</button>
                                 <button onclick="deleteSelectedFromR2()" class="btn btn-danger" style="padding:6px 10px;">删除</button>
                             </div>
@@ -6720,50 +6739,83 @@ async function syncFromExternal() {
     }
 }
 
-// 下载最新备份
+// 下载本地最新备份（或选择的本地备份）
 async function downloadLatestBackup() {
     try {
-        const response = await fetch('/api/backup/download/latest');
-        if (response.ok) {
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = `flowslide_backup_${new Date().toISOString().split('T')[0]}.sql`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-            showNotification('备份文件下载成功！', 'success');
-        } else {
-            showNotification('下载备份失败', 'error');
+        // 优先使用选择框中的值
+        const select = document.getElementById('db-file-list');
+        let backupName = select && select.value ? select.value : null;
+
+        // 如果下拉值是R2对象key（包含/），则忽略下拉值，回退到本地最新备份
+        if (backupName && backupName.includes('/')) {
+            backupName = null;
         }
+
+    if (!backupName) {
+            // 回退：获取本地列表的最新一个
+            const resp = await fetch('/api/backup/local/list');
+            if (resp.ok) {
+                const items = await resp.json();
+                if (items && items.length > 0) {
+                    backupName = items[0].name;
+                }
+            }
+        }
+
+        if (!backupName) {
+            showNotification('暂无可下载的本地备份', 'warning');
+            return;
+        }
+
+        const url = `/api/backup/local/download?backup_name=${encodeURIComponent(backupName)}`;
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = backupName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        showNotification('已开始下载本地备份', 'success');
     } catch (error) {
         console.error('下载备份失败:', error);
         showNotification('下载备份失败: ' + error.message, 'error');
     }
 }
 
-// 同步到R2
+// 同步到R2（可选：选择的本地备份，否则同步最新本地备份）
 async function syncToR2() {
     try {
         showNotification('正在同步到R2云存储...', 'info');
 
-        const response = await fetch('/api/backup/sync/r2', {
+        const select = document.getElementById('db-file-list');
+        let backupName = '';
+        // 仅当下拉里存的是本地文件名时才使用；若是R2对象key（包含/），则忽略，回退为同步最新本地备份
+        if (select && select.value && !select.value.includes('/')) {
+            backupName = select.value;
+        }
+
+        const url = backupName
+            ? `/api/backup/r2/sync?backup_name=${encodeURIComponent(backupName)}`
+            : '/api/backup/r2/sync';
+
+        const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             }
         });
 
-        if (response.ok) {
+    if (response.ok) {
             const result = await response.json();
-            if (result.success) {
+            // 后端直接返回 sync_info 字段集合，不包裹 success；视 presence of filename/size as成功
+            const ok = result && (result.success === true || result.filename || result.created_at || result.timestamp);
+            if (ok) {
                 showNotification('同步到R2成功！', 'success');
-                updateR2SyncStatus(result.sync_info);
-                // 刷新R2状态以获取最新的同步时间
+                updateR2SyncStatus(result);
+                // 刷新R2状态与下拉列表
                 await checkR2Status();
+                await loadR2FileList();
+        // 不再刷新外部数据库下拉，避免耦合
             } else {
                 showNotification('同步失败: ' + (result.error || '未知错误'), 'error');
             }
@@ -6776,7 +6828,7 @@ async function syncToR2() {
     }
 }
 
-// 从R2恢复
+// 从R2恢复（优先使用选择的对象；否则使用R2上最新的对象）
 async function restoreFromR2() {
     if (!confirm('确定要从R2云存储恢复数据吗？这将覆盖当前数据！')) {
         return;
@@ -6785,18 +6837,36 @@ async function restoreFromR2() {
     try {
         showNotification('正在从R2恢复数据...', 'info');
 
-        const response = await fetch('/api/backup/restore/r2', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
+        // 读取选择框
+        const select = document.getElementById('r2-file-list');
+        let key = select && select.value ? select.value : null;
+
+        // 如未选择，则拉取列表取最新
+        if (!key) {
+            const listResp = await fetch('/api/backup/r2/list');
+            if (listResp.ok) {
+                const listData = await listResp.json();
+                if (listData && listData.length) {
+                    // 兼容 items 或直接数组
+                    const items = Array.isArray(listData.items) ? listData.items : listData;
+                    if (items.length > 0) key = items[0].key;
+                }
             }
-        });
+        }
+
+        if (!key) {
+            showNotification('R2 上暂无可恢复的备份', 'warning');
+            return;
+        }
+
+        const response = await fetch(`/api/backup/r2/restore?key=${encodeURIComponent(key)}`, { method: 'POST' });
 
         if (response.ok) {
             const result = await response.json();
             if (result.success) {
-                showNotification('数据恢复成功！请刷新页面查看最新数据。', 'success');
-                updateR2SyncStatus(result.restore_info);
+                showNotification('数据恢复成功！', 'success');
+                updateR2SyncStatus(result.restore_info || result);
+                // 恢复后不刷新外部数据库下拉，保持解耦
             } else {
                 showNotification('恢复失败: ' + (result.error || '未知错误'), 'error');
             }
@@ -6809,15 +6879,29 @@ async function restoreFromR2() {
     }
 }
 
-// 从R2下载数据
+// 从R2下载数据（优先使用选择的对象；否则使用最新）
 async function downloadFromR2() {
     try {
         showNotification('正在从R2下载数据...', 'info');
 
-        // 创建一个临时的下载链接
-        const downloadUrl = '/api/backup/download/latest';
+        const select = document.getElementById('r2-file-list');
+        let key = select && select.value ? select.value : null;
 
-        // 创建一个隐藏的a标签来触发下载
+        if (!key) {
+            const listResp = await fetch('/api/backup/r2/list');
+            if (listResp.ok) {
+                const listData = await listResp.json();
+                const items = Array.isArray(listData.items) ? listData.items : listData;
+                if (items && items.length) key = items[0].key;
+            }
+        }
+
+        if (!key) {
+            showNotification('R2 上暂无可下载的备份', 'warning');
+            return;
+        }
+
+        const downloadUrl = `/api/backup/r2/download?key=${encodeURIComponent(key)}`;
         const link = document.createElement('a');
         link.href = downloadUrl;
         link.style.display = 'none';
@@ -6825,10 +6909,248 @@ async function downloadFromR2() {
         link.click();
         document.body.removeChild(link);
 
-        showNotification('数据下载已开始，请查看浏览器下载。', 'success');
+        showNotification('R2 备份下载已开始，请查看浏览器下载。', 'success');
     } catch (error) {
         console.error('从R2下载失败:', error);
         showNotification('下载失败: ' + error.message, 'error');
+    }
+}
+// 加载“外部数据库备份”列表到左侧数据库卡片的下拉框（来源：本地备份目录）
+async function loadExternalDBBackupList() {
+    try {
+        // 首先加载本地备份（更贴合“外部数据库”的独立性）
+        const localResp = await fetch('/api/backup/local/list');
+        const select = document.getElementById('db-file-list');
+        if (!select) return;
+
+        let items = [];
+    if (localResp.ok) {
+            const local = await localResp.json();
+            // 仅展示与数据库相关的本地备份
+            items = (local || []).filter(it => {
+                const name = it.name || '';
+        // 外部数据库备份仅展示 external_sql_only 产物
+        return name.startsWith('flowslide_external_sql_');
+            }).map(it => ({ key: it.name, size: it.size, last_modified: it.created }));
+        }
+
+        // 重置并填充
+        select.innerHTML = '';
+        if (items && items.length) {
+            items.forEach(obj => {
+                const opt = document.createElement('option');
+                opt.value = obj.key; // 对本地，存储 name 即可
+                const filename = (obj.key || '').split('/').pop() || obj.key;
+                const dateStr = obj.last_modified ? new Date(obj.last_modified).toLocaleString() : '';
+                const sizeStr = obj.size ? ` · ${formatFileSize(obj.size)}` : '';
+                opt.textContent = `${filename}${dateStr ? ' (' + dateStr + ')' : ''}${sizeStr}`;
+                select.appendChild(opt);
+            });
+
+            // 更新“最后同步时间/大小”（基于R2的最新数据库备份）
+            const latest = items[0];
+            if (latest) {
+                const timeElement = document.getElementById('last-db-backup');
+                const sizeElement = document.getElementById('db-backup-size');
+                if (timeElement) {
+                    const dt = latest.last_modified || latest.created || latest.created_at || latest.timestamp;
+                    if (dt) timeElement.textContent = new Date(dt).toLocaleString();
+                }
+                if (sizeElement && latest.size) {
+                    sizeElement.textContent = formatFileSize(latest.size);
+                }
+            }
+        } else {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = '暂无外数据库备份';
+            select.appendChild(opt);
+        }
+    } catch (e) {
+        console.warn('加载外部数据库备份列表失败', e);
+    }
+}
+
+// 加载外部数据库备份类型
+async function loadExternalDBTypes() {
+    try {
+        const sel = document.getElementById('external-db-type');
+        if (!sel) return;
+        const resp = await fetch('/api/backup/external/types');
+        let types = ['db_only','external_sql_only'];
+        if (resp.ok) {
+            const data = await resp.json();
+            if (Array.isArray(data.types)) types = data.types;
+        }
+        sel.innerHTML = types.map(t=>`<option value="${t}">${t}</option>`).join('');
+    } catch(e) {
+        console.warn('加载外部数据库类型失败', e);
+    }
+}
+
+// 生成外部数据库备份（不上传到R2）
+async function createExternalBackup() {
+    try {
+        const sel = document.getElementById('external-db-type');
+        const btype = sel && sel.value ? sel.value : 'db_only';
+        showNotification('正在生成外部数据库备份...', 'info');
+        const resp = await fetch('/api/backup/external/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ backup_type: btype })
+        });
+        const data = await resp.json().catch(()=>({}));
+        if (resp.ok && data.success) {
+            showNotification('生成成功', 'success');
+            await loadExternalDBBackupList();
+        } else {
+            showNotification('生成失败: ' + (data.error || data.detail || '未知错误'), 'error');
+        }
+    } catch(e) {
+        showNotification('生成失败: ' + e.message, 'error');
+    }
+}
+
+// 加载 R2 备份列表并刷新下拉框/提示
+async function loadR2FileList() {
+    try {
+    const catSel = document.getElementById('r2-category-select');
+    const selType = catSel && catSel.value ? catSel.value : '';
+    let url = '/api/backup/r2/list';
+    if (selType) {
+        // categories/{type} 前缀
+        const prefix = 'backups/categories/' + selType + '/';
+        url += `?prefix=${encodeURIComponent(prefix)}`;
+    } else {
+        // 默认仅列出 categories 下的所有类型，避免与数据库备份混淆
+        url += '?prefix=' + encodeURIComponent('backups/categories/');
+    }
+    const resp = await fetch(url);
+        const select = document.getElementById('r2-file-list');
+    if (!select) return;
+
+        if (!resp.ok) throw new Error('获取 R2 列表失败');
+        const listData = await resp.json();
+        const items = Array.isArray(listData.items) ? listData.items : listData;
+
+        // 重置
+        select.innerHTML = '';
+        if (items && items.length) {
+            items.forEach(obj => {
+                const opt = document.createElement('option');
+                opt.value = obj.key;
+                const dateStr = obj.last_modified ? new Date(obj.last_modified).toLocaleString() : '';
+                const filename = obj.key?.split('/').pop() || obj.key;
+                opt.textContent = `${filename} ${dateStr ? '(' + dateStr + ')' : ''}`;
+                select.appendChild(opt);
+            });
+            // nothing else
+
+            // 更新右侧“最后同步时间/大小”展示
+            const latest = items[0];
+            const timeEl = document.getElementById('last-r2-backup');
+            const sizeEl = document.getElementById('r2-backup-size');
+            if (latest && timeEl) {
+                const dt = latest.last_modified || latest.backup_date || latest.timestamp;
+                if (dt) timeEl.textContent = new Date(dt).toLocaleString();
+            }
+            if (latest && sizeEl && latest.size) {
+                sizeEl.textContent = formatFileSize(latest.size);
+            }
+        } else {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'R2 上暂无备份';
+            select.appendChild(opt);
+            // keep layout clean; no inline help text
+        }
+    } catch (e) {
+        console.warn('加载 R2 文件列表失败', e);
+    }
+}
+
+// 加载备份类别
+async function loadBackupCategories() {
+    try {
+    const resp = await fetch('/api/backup/categories');
+        const sel = document.getElementById('r2-category-select');
+        if (!sel || !resp.ok) return;
+        const data = await resp.json();
+        let cats = (data && data.categories) || [];
+        if (!cats || cats.length === 0) {
+            // 后端不可用时的兜底
+            cats = ['db_only','config_only','media_only','templates_only','reports_only','scripts_only','data_only','full'];
+        }
+        sel.innerHTML = '<option value="">-- 请选择类别 --</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+        sel.onchange = async ()=>{ await loadR2FileList(); };
+    } catch (e) {
+        console.warn('加载备份类别失败', e);
+    }
+}
+
+// 一键生成并同步选中类别
+async function syncCategoryToR2() {
+    const sel = document.getElementById('r2-category-select');
+    const type = sel && sel.value ? sel.value : '';
+    if (!type) return alert('请先选择备份类别');
+    try {
+        showNotification('正在生成并同步所选类别到R2...', 'info');
+        const resp = await fetch('/api/backup/r2/sync-type', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ backup_type: type })
+        });
+        const data = await resp.json().catch(()=>({}));
+        if (resp.ok && (data.success || data.filename)) {
+            showNotification('生成并同步成功', 'success');
+            updateR2SyncStatus(data);
+            await checkR2Status();
+            await loadR2FileList();
+        } else {
+            showNotification('生成/同步失败: ' + (data.error || data.detail || '未知错误'), 'error');
+        }
+    } catch (e) {
+        showNotification('生成/同步失败: ' + e.message, 'error');
+    }
+}
+
+// 使用当前选择的 R2 对象恢复
+async function restoreSelectedFromR2() {
+    const select = document.getElementById('r2-file-list');
+    const key = select && select.value ? select.value : '';
+    if (!key) return alert('请先选择一个 R2 备份');
+    if (!confirm('确定使用所选 R2 备份进行恢复吗？此操作将覆盖当前数据。')) return;
+
+    try {
+        const resp = await fetch(`/api/backup/r2/restore?key=${encodeURIComponent(key)}`, { method: 'POST' });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && (data.success || data.filename)) {
+            showNotification('恢复成功', 'success');
+        } else {
+            showNotification('恢复失败: ' + (data.detail || data.error || '未知错误'), 'error');
+        }
+    } catch (e) {
+        showNotification('恢复失败: ' + e.message, 'error');
+    }
+}
+
+// 删除当前选择的 R2 对象
+async function deleteSelectedFromR2() {
+    const select = document.getElementById('r2-file-list');
+    const key = select && select.value ? select.value : '';
+    if (!key) return alert('请先选择一个 R2 备份');
+    if (!confirm('确定删除所选 R2 对象吗？此操作不可恢复。')) return;
+    try {
+        const resp = await fetch(`/api/backup/r2/object?key=${encodeURIComponent(key)}`, { method: 'DELETE' });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && data.success) {
+            showNotification('删除成功', 'success');
+            await loadR2FileList();
+        } else {
+            showNotification('删除失败: ' + (data.detail || data.error || '未知错误'), 'error');
+        }
+    } catch (e) {
+        showNotification('删除失败: ' + e.message, 'error');
     }
 }
 async function testDatabaseConnection() {
@@ -7231,8 +7553,8 @@ async function initDataBackupPage() {
         // 加载备份配置
         await loadBackupConfig();
 
-        // 刷新同步历史
-        await refreshBackupHistory();
+    // 刷新同步历史（如果后端未实现，可忽略错误）
+    try { await refreshBackupHistory(); } catch(_) {}
 
         // 加载系统资源信息
         await loadSystemResources();
@@ -7240,6 +7562,9 @@ async function initDataBackupPage() {
     // 检查R2和数据库配置状态
     console.log('🔍 调用状态检查函数...');
     await checkR2Status();
+    await loadBackupCategories();
+    await loadExternalDBBackupList();
+    await loadR2FileList();
     await checkDatabaseStatus();
 
     // 非阻塞：在后台触发 R2 与 数据库 连接测试，避免阻塞页面加载
@@ -7530,6 +7855,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // 标签页已激活，立即初始化
         setTimeout(() => {
             initDataBackupPage();
+            loadExternalDBTypes();
         }, 500);
     }
     // 如果不在数据备份标签页，不需要初始化，会在切换时初始化
@@ -7541,9 +7867,54 @@ document.addEventListener('click', function(e) {
         // 切换到数据备份标签页时初始化
         setTimeout(() => {
             initDataBackupPage();
+            loadExternalDBTypes();
         }, 100);
     }
 });
+
+// 注意：本页面的“数据库备份”下拉展示外部（R2）数据库备份列表，已不提供本地创建入口。
+
+// 使用下拉框选择的“外部数据库备份”（本地文件）进行恢复
+async function restoreSelectedDB() {
+    const select = document.getElementById('db-file-list');
+    const key = select && select.value ? select.value : '';
+    if (!key) return alert('请先选择一个外部数据库备份');
+    if (!confirm('确定要使用所选外部数据库备份进行恢复吗？此操作将覆盖当前数据。')) return;
+    try {
+        // 通过本地恢复接口恢复（文件名即本地备份名）
+        const params = new URLSearchParams({ backup_name: key });
+        const resp = await fetch(`/api/backup/local/restore?${params.toString()}`, { method: 'POST' });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && (data.success || data.filename)) {
+            showNotification('恢复成功', 'success');
+        } else {
+            showNotification('恢复失败: ' + (data.detail || data.error || '未知错误'), 'error');
+        }
+    } catch (e) {
+        showNotification('恢复失败: ' + e.message, 'error');
+    }
+}
+
+// 删除选择的“外部数据库备份”（本地文件）
+async function deleteSelectedDB() {
+    const select = document.getElementById('db-file-list');
+    const key = select && select.value ? select.value : '';
+    if (!key) return alert('请先选择一个外部数据库备份');
+    if (!confirm('确定删除所选外部数据库备份吗？此操作不可恢复。')) return;
+    try {
+        const params = new URLSearchParams({ backup_name: key });
+        const resp = await fetch(`/api/backup/local?${params.toString()}`, { method: 'DELETE' });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && data.success) {
+            showNotification('删除成功', 'success');
+            await loadExternalDBBackupList();
+        } else {
+            showNotification('删除失败: ' + (data.detail || data.error || '未知错误'), 'error');
+        }
+    } catch (e) {
+        showNotification('删除失败: ' + e.message, 'error');
+    }
+}
 
 // 监听页面可见性变化，当用户回到页面时重新检查数据库连接
 document.addEventListener('visibilitychange', function() {

@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import shutil
+import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -40,7 +41,7 @@ class BackupService:
         self.retention_days = int(os.getenv("BACKUP_RETENTION_DAYS", "30"))
         self.webhook_url = os.getenv("BACKUP_WEBHOOK_URL")
 
-    async def create_backup(self, backup_type: str = "full") -> str:
+    async def create_backup(self, backup_type: str = "full", upload_to_r2: bool = True) -> str:
         """创建备份
 
         Args:
@@ -57,20 +58,30 @@ class BackupService:
         try:
             logger.info(f"📦 Creating {backup_type} backup: {backup_name}")
 
-            if backup_type in ["full", "db_only"]:
+            if backup_type in ["full", "db_only", "data_only"]:
                 await self._backup_database(backup_path)
 
             if backup_type in ["full", "config_only"]:
                 await self._backup_config(backup_path)
 
-            if backup_type == "full":
+            if backup_type in ["full", "media_only"]:
                 await self._backup_uploads(backup_path)
+
+            # Additional categorized content
+            if backup_type in ["full", "templates_only"]:
+                await self._backup_templates(backup_path)
+
+            if backup_type in ["full", "reports_only"]:
+                await self._backup_reports(backup_path)
+
+            if backup_type in ["full", "scripts_only"]:
+                await self._backup_scripts(backup_path)
 
             # 压缩备份
             archive_path = await self._compress_backup(backup_path)
 
-            # 上传到R2（如果配置了）
-            if self._is_r2_configured():
+            # 上传到R2（如果配置了且未禁用）
+            if upload_to_r2 and self._is_r2_configured():
                 await self._upload_to_r2(archive_path)
 
             # 清理旧备份
@@ -89,30 +100,260 @@ class BackupService:
                 await self._send_notification(backup_name, "failed", str(e))
             raise
 
+    async def create_external_sql_backup(self) -> str:
+        """仅导出外部数据库的 SQL（不上传到 R2）。
+
+        Returns:
+            生成的 zip 文件路径
+        """
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_name = f"flowslide_external_sql_{timestamp}"
+        backup_path = self.backup_dir / backup_name
+        backup_path.mkdir(exist_ok=True)
+
+        try:
+            # strict=True: external SQL-only requires pg_dump to succeed
+            await self._backup_external_database(backup_path, None, strict=True)
+            archive_path = await self._compress_backup(backup_path)
+            # 不上传到 R2
+            return str(archive_path)
+        except Exception as e:
+            logger.error(f"❌ External SQL-only backup failed: {e}")
+            raise
+
     async def _backup_database(self, backup_path: Path):
         """备份数据库"""
         try:
-            from ..database import db_manager
+            # 总是优先备份本地SQLite（如果存在）
+            db_file = Path("./data/flowslide.db")
+            if db_file.exists():
+                shutil.copy2(db_file, backup_path / "flowslide.db")
+                logger.info("💾 Local SQLite database backup completed")
 
-            if db_manager.database_type == "sqlite":
-                # SQLite数据库备份
-                db_file = Path("./data/flowslide.db")
-                if db_file.exists():
-                    shutil.copy2(db_file, backup_path / "flowslide.db")
-                    logger.info("💾 Database backup completed")
-            else:
-                # 外部数据库备份
-                await self._backup_external_database(backup_path)
+            # 如配置了外部数据库，则额外备份外部数据库
+            try:
+                from ..core.simple_config import EXTERNAL_DATABASE_URL
+            except Exception:
+                EXTERNAL_DATABASE_URL = os.getenv("DATABASE_URL", "")
+
+            if EXTERNAL_DATABASE_URL and EXTERNAL_DATABASE_URL.startswith("postgres"):
+                # strict=False: 常规备份中缺少 pg_dump 不应导致整个备份失败
+                await self._backup_external_database(backup_path, EXTERNAL_DATABASE_URL, strict=False)
 
         except Exception as e:
             logger.error(f"❌ Database backup failed: {e}")
             raise
 
-    async def _backup_external_database(self, backup_path: Path):
-        """备份外部数据库"""
-        # 这里可以实现外部数据库的备份逻辑
-        # 例如使用pg_dump for PostgreSQL
-        logger.info("💾 External database backup (not implemented)")
+    async def _backup_external_database(self, backup_path: Path, external_url: Optional[str] = None, strict: bool = False):
+        """备份外部数据库
+
+        Behavior:
+        - Prefer pg_dump for PostgreSQL.
+        - If pg_dump is unavailable or fails and strict=True, fallback to Python-native COPY CSV export via psycopg2.
+        - When strict=False, quietly skip external export on errors to not block other backup content.
+        """
+        try:
+            # 优先使用传入URL，其次从配置获取
+            if not external_url:
+                try:
+                    from ..core.simple_config import EXTERNAL_DATABASE_URL as CFG_URL
+                    external_url = CFG_URL
+                except Exception:
+                    external_url = os.getenv("DATABASE_URL", "")
+
+            if not external_url:
+                msg = "ℹ️ No EXTERNAL_DATABASE_URL configured; skipping external DB backup"
+                if strict:
+                    raise RuntimeError("EXTERNAL_DATABASE_URL not configured for external SQL backup")
+                logger.info(msg)
+                return
+
+            if not (external_url.startswith("postgresql://") or external_url.startswith("postgres://")):
+                msg = "ℹ️ External DB URL is not PostgreSQL; skipping pg_dump backup"
+                if strict:
+                    raise RuntimeError("External SQL backup only supports PostgreSQL URLs")
+                logger.info(msg)
+                return
+
+            # 尝试定位 pg_dump
+            pg_dump_path = os.getenv("PG_DUMP_PATH")  # 可显式配置
+            # 如果显式设置了路径但文件不存在，则视为未找到
+            if pg_dump_path and not os.path.isfile(pg_dump_path):
+                pg_dump_path = None
+            if not pg_dump_path:
+                # 使用系统PATH查找
+                pg_dump_path = shutil.which("pg_dump")
+
+            if not pg_dump_path:
+                msg = (
+                    "pg_dump not found. Please install PostgreSQL client tools and set PG_DUMP_PATH, or add pg_dump to PATH."
+                )
+                if strict:
+                    logger.warning(f"{msg} Attempting Python-native COPY CSV fallback...")
+                    try:
+                        await self._export_external_postgres_copy(backup_path, external_url)
+                        logger.info("✅ External database exported via COPY CSV fallback")
+                        return
+                    except Exception as fallback_err:
+                        raise RuntimeError(f"External export failed and no pg_dump: {fallback_err}")
+                logger.warning(f"{msg} Skipping external SQL export for this backup.")
+                return
+
+            # 解析URL，尽量避免将密码暴露在命令行（使用环境变量PGPASSWORD）
+            from urllib.parse import urlparse, parse_qs
+
+            parsed = urlparse(external_url)
+            username = parsed.username or "postgres"
+            password = parsed.password or ""
+            host = parsed.hostname or "localhost"
+            port = str(parsed.port or 5432)
+            dbname = parsed.path.lstrip("/") or "postgres"
+            qs = parse_qs(parsed.query or "")
+            sslmode = (qs.get("sslmode", [None])[0]) or ("require" if ("supabase" in (parsed.hostname or "") or "pooler.supabase.com" in external_url) else None)
+
+            # Supabase 提示：pg_dump 需要直连数据库实例，不建议使用 pooler 主机
+            if parsed.hostname and "pooler.supabase.com" in parsed.hostname:
+                logger.warning("⚠️ Detected Supabase pooler host; pg_dump may fail. Prefer the direct db.<project>.supabase.co host for dumps.")
+
+            # 输出文件
+            out_file = backup_path / f"external_{dbname}.sql"
+
+            # 构建命令
+            cmd = [
+                pg_dump_path,
+                "-h", host,
+                "-p", port,
+                "-U", username,
+                "-d", dbname,
+                "-F", "p",  # plain SQL
+                "--no-owner",
+                "--no-privileges",
+                "-f", str(out_file),
+            ]
+
+            # 环境变量：PGPASSWORD / PGSSLMODE
+            env = os.environ.copy()
+            if password:
+                env["PGPASSWORD"] = password
+            if sslmode:
+                env["PGSSLMODE"] = sslmode
+
+            logger.info(f"🛸 Running pg_dump for external DB '{dbname}' on {host}:{port} -> {out_file.name}")
+
+            def _run_dump():
+                result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+                return result
+
+            result = await asyncio.to_thread(_run_dump)
+
+            if result.returncode != 0:
+                stderr = (result.stderr or "").strip()
+                stdout = (result.stdout or "").strip()
+                if strict:
+                    logger.warning(f"pg_dump failed (code {result.returncode}): {stderr or stdout}. Attempting COPY CSV fallback...")
+                    try:
+                        await self._export_external_postgres_copy(backup_path, external_url)
+                        logger.info("✅ External database exported via COPY CSV fallback")
+                        return
+                    except Exception as fallback_err:
+                        raise RuntimeError(f"pg_dump failed and COPY fallback failed: {fallback_err}")
+                logger.warning(f"pg_dump failed (code {result.returncode}), skipping external SQL export: {stderr or stdout}")
+                return
+
+            if not out_file.exists() or out_file.stat().st_size == 0:
+                if strict:
+                    logger.warning("pg_dump produced no output file; attempting COPY CSV fallback...")
+                    try:
+                        await self._export_external_postgres_copy(backup_path, external_url)
+                        logger.info("✅ External database exported via COPY CSV fallback")
+                        return
+                    except Exception as fallback_err:
+                        raise RuntimeError(f"pg_dump produced no output and COPY fallback failed: {fallback_err}")
+                logger.warning("pg_dump produced no output file; skipping external SQL export")
+                return
+
+            logger.info(f"✅ External PostgreSQL dump completed: {out_file} ({out_file.stat().st_size} bytes)")
+
+        except Exception as e:
+            logger.error(f"❌ External database backup failed: {e}")
+            # 抛出异常，让调用方决定是否继续
+            raise
+
+    async def _export_external_postgres_copy(self, backup_path: Path, external_url: str) -> None:
+        """使用 psycopg2 执行 PostgreSQL 的 CSV 导出（数据-only，schema 不包含）。
+
+        生成文件：
+        - tables/<schema>.<table>.csv 每个表一份 CSV（UTF-8，带表头）
+        - external_copy_manifest.json 元数据（表清单、导出时间、连接主机/库名）
+        """
+        import json
+        from urllib.parse import urlparse, parse_qs
+        try:
+            import psycopg2
+        except Exception as ie:
+            raise RuntimeError(f"psycopg2 not available: {ie}")
+
+        parsed = urlparse(external_url)
+        username = parsed.username or "postgres"
+        password = parsed.password or ""
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 5432
+        dbname = parsed.path.lstrip("/") or "postgres"
+        qs = parse_qs(parsed.query or "")
+        sslmode = (qs.get("sslmode", [None])[0]) or None
+
+        conn_kwargs = {
+            "user": username,
+            "password": password,
+            "host": host,
+            "port": port,
+            "dbname": dbname,
+        }
+        if sslmode:
+            conn_kwargs["sslmode"] = sslmode
+
+        tables_dir = backup_path / "tables"
+        tables_dir.mkdir(exist_ok=True)
+
+        def _run_copy():
+            with psycopg2.connect(**conn_kwargs) as conn:
+                conn.autocommit = True
+                with conn.cursor() as cur:
+                    # 获取用户表列表（排除系统 schema）
+                    cur.execute(
+                        """
+                        SELECT table_schema, table_name
+                        FROM information_schema.tables
+                        WHERE table_type='BASE TABLE'
+                          AND table_schema NOT IN ('pg_catalog','information_schema')
+                        ORDER BY table_schema, table_name
+                        """
+                    )
+                    rows = cur.fetchall()
+                    exported = []
+                    for schema, table in rows:
+                        safe_name = f"{schema}.{table}"
+                        out_path = tables_dir / f"{schema}.{table}.csv"
+                        sql = f"COPY \"{schema}\".\"{table}\" TO STDOUT WITH CSV HEADER"
+                        with open(out_path, "w", encoding="utf-8", newline="") as f:
+                            cur.copy_expert(sql, f)
+                        exported.append({"schema": schema, "table": table, "file": out_path.name})
+
+            # 写入清单
+            manifest = {
+                "database": dbname,
+                "host": host,
+                "port": port,
+                "exported_tables": exported,
+                "exported_at": datetime.now().isoformat(),
+                "format": "csv",
+                "note": "Data-only export; schema DDL not included."
+            }
+            with open(backup_path / "external_copy_manifest.json", "w", encoding="utf-8") as mf:
+                json.dump(manifest, mf, ensure_ascii=False, indent=2)
+
+        # Run in thread to avoid blocking loop
+        await asyncio.to_thread(_run_copy)
 
     async def _backup_config(self, backup_path: Path):
         """备份配置文件"""
@@ -124,12 +365,40 @@ class BackupService:
 
         logger.info("⚙️ Config backup completed")
 
+        # 附加：复制 src/config 下的配置（若存在）
+        cfg_dir = Path("./src/config")
+        if cfg_dir.exists() and cfg_dir.is_dir():
+            dest = backup_path / "src_config"
+            shutil.copytree(cfg_dir, dest, dirs_exist_ok=True)
+            logger.info("📁 src/config included in config backup")
+
     async def _backup_uploads(self, backup_path: Path):
         """备份上传文件"""
         uploads_dir = Path("./uploads")
         if uploads_dir.exists():
             shutil.copytree(uploads_dir, backup_path / "uploads", dirs_exist_ok=True)
             logger.info("📁 Uploads backup completed")
+
+    async def _backup_templates(self, backup_path: Path):
+        """备份模板示例"""
+        t_dir = Path("./template_examples")
+        if t_dir.exists():
+            shutil.copytree(t_dir, backup_path / "template_examples", dirs_exist_ok=True)
+            logger.info("📚 Template examples backup completed")
+
+    async def _backup_reports(self, backup_path: Path):
+        """备份研究报告"""
+        r_dir = Path("./research_reports")
+        if r_dir.exists():
+            shutil.copytree(r_dir, backup_path / "research_reports", dirs_exist_ok=True)
+            logger.info("📑 Research reports backup completed")
+
+    async def _backup_scripts(self, backup_path: Path):
+        """备份脚本"""
+        s_dir = Path("./scripts")
+        if s_dir.exists():
+            shutil.copytree(s_dir, backup_path / "scripts", dirs_exist_ok=True)
+            logger.info("🔧 Scripts backup completed")
 
     async def _compress_backup(self, backup_path: Path) -> Path:
         """压缩备份文件"""
@@ -175,9 +444,23 @@ class BackupService:
                 config=config
             )
 
-            # 生成备份日期目录
+            # 生成按类别的前缀与日期目录
             backup_date = datetime.now().strftime("%Y-%m-%d")
-            s3_key = f"backups/{backup_date}/{backup_path.name}"
+            # 期望文件名格式：flowslide_backup_{type}_YYYYMMDD_HHMMSS.zip
+            name = backup_path.name
+            type_segment = "misc"
+            try:
+                # flowslide_backup_ + rest
+                rest = name[len("flowslide_backup_"):]
+                type_segment = rest.split("_")[0] or "misc"
+            except Exception:
+                type_segment = "misc"
+
+            # 将 db_only 归类到 database 前缀；其他走 categories/{type}
+            if type_segment == "db_only":
+                s3_key = f"backups/database/{backup_date}/{backup_path.name}"
+            else:
+                s3_key = f"backups/categories/{type_segment}/{backup_date}/{backup_path.name}"
 
             # 上传文件
             logger.info(f"Uploading to R2: {self.r2_config['bucket']}/{s3_key}")
@@ -609,18 +892,26 @@ class BackupService:
 backup_service = BackupService()
 
 
-async def create_backup(backup_type: str = "full") -> str:
+async def create_backup(backup_type: str = "full", upload_to_r2: bool = True) -> str:
     """创建备份"""
-    return await backup_service.create_backup(backup_type)
+    return await backup_service.create_backup(backup_type, upload_to_r2)
 
 
 async def list_backups() -> list:
     """列出备份"""
     return backup_service.list_backups()
 
+async def create_external_sql_backup() -> str:
+    """Module-level helper: 仅导出外部数据库 SQL 到本地备份。"""
+    return await backup_service.create_external_sql_backup()
 
-async def list_r2_files() -> list:
-    """Module-level helper: 列出R2中 backups/ 前缀下的对象（返回 key/name, size, last_modified）"""
+
+async def list_r2_files(prefix: Optional[str] = None) -> list:
+    """Module-level helper: 列出R2中指定前缀下的对象（返回 key/name, size, last_modified）
+
+    Args:
+        prefix: 仅列出该前缀下的对象；默认列出 backups/
+    """
     # use global backup_service instance
     if not backup_service._is_r2_configured():
         return []
@@ -635,8 +926,11 @@ async def list_r2_files() -> list:
             endpoint_url=backup_service.r2_config['endpoint'],
             config=config
         )
-
-        response = s3_client.list_objects_v2(Bucket=backup_service.r2_config['bucket'], Prefix='backups/')
+        effective_prefix = prefix or 'backups/'
+        response = s3_client.list_objects_v2(
+            Bucket=backup_service.r2_config['bucket'],
+            Prefix=effective_prefix
+        )
         items = []
         if 'Contents' in response and response['Contents']:
             for obj in response['Contents']:

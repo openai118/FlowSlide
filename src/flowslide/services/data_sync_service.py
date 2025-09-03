@@ -261,10 +261,11 @@ class DataSyncService:
                                         external_timestamp = max(existing_by_id.created_at, existing_by_id.updated_at or 0, existing_by_id.last_login or 0)
 
                                         if local_timestamp > external_timestamp:
+                                            # Update external row by id with latest local fields
                                             external_conn.execute(
                                                 text("""
-                                                        external_conn.execute(text("DELETE FROM users WHERE id = :id"), {"id": ext_id})
-                                                        logger.info(f"🗑️ Hard-deleted external user id={ext_id} username={uname}")
+                                                    UPDATE users SET
+                                                        username = :username,
                                                         email = :email,
                                                         password_hash = :password_hash,
                                                         is_active = :is_active,
