@@ -41,15 +41,23 @@ RUN python -m venv /opt/venv && \
     # Install CPU-only PyTorch wheels first to avoid pulling CUDA libs into the venv
     # This uses the official CPU wheel index and prevents pip from selecting CUDA-enabled
     # manylinux wheels which are very large and can exhaust buildkit temporary storage.
-    /opt/venv/bin/pip install --no-cache-dir torch torchvision torchaudio -f https://download.pytorch.org/whl/cpu/torch_stable.html && \
+    /opt/venv/bin/pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+    # Clean up pip cache immediately after PyTorch install
+    rm -rf /root/.cache/pip && \
     # Install the project and development extras into the venv.
     # Do not pass pyproject.toml to pip -r (that's for requirements files).
     /opt/venv/bin/pip install --no-cache-dir -e '.[dev]' --extra-index-url https://pypi.apryse.com && \
+    # Clean up pip cache again
+    rm -rf /root/.cache/pip && \
     echo "✅ All dependencies installed successfully into /opt/venv"
 
-# Clean up build artifacts
+# Clean up build artifacts aggressively
 RUN find /opt/venv -name "*.pyc" -delete && \
-    find /opt/venv -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+    find /opt/venv -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true && \
+    find /opt/venv -name "*.so" -exec strip {} + 2>/dev/null || true && \
+    rm -rf /opt/venv/lib/python*/site-packages/pip/_vendor/distlib/t* && \
+    rm -rf /opt/venv/share && \
+    rm -rf /tmp/* /var/tmp/* /root/.cache/*
 
 # Production stage
 FROM python:3.11-slim AS production
@@ -117,11 +125,18 @@ RUN groupadd -r flowslide && \
 # Copy Python packages from builder
 # Note: Using system Python instead of virtual environment for simplicity
 
-# Install Playwright with minimal footprint (like LandPPT)
+# Install Playwright with minimal footprint (CPU-only browsers)
 RUN pip install --no-cache-dir playwright==1.40.0 && \
-    playwright install chromium && \
+    # Only install chromium browser with minimal dependencies
+    playwright install --with-deps chromium && \
+    # Clean up Playwright cache and temporary files
+    rm -rf /root/.cache/ms-playwright-download && \
+    rm -rf /tmp/* /var/tmp/* && \
+    # Set proper ownership
     chown -R flowslide:flowslide /home/flowslide && \
-    rm -rf /tmp/* /var/tmp/*
+    # Clean up apt cache from playwright install
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set work directory
 WORKDIR /app
