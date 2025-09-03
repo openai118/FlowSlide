@@ -38,6 +38,10 @@ RUN echo "Cache bust: ${CACHE_BUST}" > /build-cache-bust
 # We install into /opt/venv in the builder stage and copy that venv to the final image.
 RUN python -m venv /opt/venv && \
     /opt/venv/bin/pip install --upgrade pip setuptools wheel && \
+    # Install CPU-only PyTorch wheels first to avoid pulling CUDA libs into the venv
+    # This uses the official CPU wheel index and prevents pip from selecting CUDA-enabled
+    # manylinux wheels which are very large and can exhaust buildkit temporary storage.
+    /opt/venv/bin/pip install --no-cache-dir torch torchvision torchaudio -f https://download.pytorch.org/whl/cpu/torch_stable.html && \
     # Install the project and development extras into the venv.
     # Do not pass pyproject.toml to pip -r (that's for requirements files).
     /opt/venv/bin/pip install --no-cache-dir -e '.[dev]' --extra-index-url https://pypi.apryse.com && \
