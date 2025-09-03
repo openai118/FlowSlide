@@ -22,9 +22,9 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Aggressive disk cleanup for CI
+    - name: Smart disk cleanup for CI
       run: |
-        echo "🧹 Aggressive disk cleanup for CI environment..."
+        echo "🧹 Smart disk cleanup for CI environment..."
         
         # 显示初始磁盘使用情况
         echo "Initial disk usage:"
@@ -34,46 +34,53 @@ jobs:
         sudo rm -rf /home/runner/actions-runner/_diag/* || true
         sudo rm -rf /home/runner/actions-runner/_work/_temp/* || true
         
-        # 删除不需要的软件包（更激进的清理）
+        # 只删除确认不需要的软件包
+        # 保留 MySQL/PostgreSQL 客户端（项目支持外部数据库）
+        # 保留基础网络工具（Cloudflare R2需要）
         sudo apt-get remove -y --purge \
           '^dotnet-.*' \
           '^llvm-.*' \
           '^mongodb-.*' \
-          '^mysql-.*' \
           azure-cli \
           google-cloud-sdk \
           firefox \
           powershell \
           microsoft-edge-stable \
           google-chrome-stable \
+          snapd \
           || true
+        
+        echo "ℹ️  Keeping database clients (MySQL/PostgreSQL) - project supports external databases"
+        echo "ℹ️  Keeping network tools - needed for R2 cloud storage functionality"
+        echo "ℹ️  Keeping build tools - needed for Python packages compilation"
         
         # 清理包管理器
         sudo apt-get autoremove -y --purge || true
         sudo apt-get autoclean || true
         sudo apt-get clean || true
         
-        # 清理 Docker 系统（更激进）
+        # 清理 Docker 系统
         docker system prune -af --volumes || true
         docker builder prune -af || true
         
-        # 清理系统临时文件和缓存
+        # 清理系统临时文件和缓存（保守清理）
         sudo rm -rf /tmp/* /var/tmp/* || true
         sudo rm -rf /var/cache/apt/archives/* || true
-        sudo rm -rf /var/lib/apt/lists/* || true
         sudo rm -rf /usr/share/dotnet || true
         sudo rm -rf /opt/ghc || true
         sudo rm -rf /usr/local/.ghcup || true
         sudo rm -rf /usr/local/share/boost || true
         sudo rm -rf /usr/local/lib/android || true
-        sudo rm -rf /opt/hostedtoolcache || true
+        # 保留 /opt/hostedtoolcache 中可能需要的工具
         
-        # 清理 snap 包
-        sudo snap list --all | awk '/disabled/{print $1, $3}' | while read snapname revision; do
-          sudo snap remove "$snapname" --revision="$revision" || true
-        done
+        # 清理 snap 包（更保守）
+        if command -v snap >/dev/null 2>&1; then
+          sudo snap list --all | awk '/disabled/{print $1, $3}' | while read snapname revision; do
+            sudo snap remove "$snapname" --revision="$revision" || true
+          done
+        fi
         
-        echo "Disk usage after aggressive cleanup:"
+        echo "Disk usage after smart cleanup:"
         df -h
 
     - name: Set up Docker Buildx
