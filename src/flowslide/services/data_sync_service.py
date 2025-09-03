@@ -66,6 +66,22 @@ class DataSyncService:
 
     async def start_sync_service(self):
         """启动数据同步服务"""
+        # Re-evaluate directions and authoritative source at startup because
+        # db_manager may have been initialized after this service instance was created.
+        try:
+            self.sync_directions = self._determine_sync_directions()
+        except Exception:
+            # keep previous value if determination fails
+            pass
+
+        try:
+            self.authoritative_source = os.getenv(
+                "SYNC_AUTHORITATIVE",
+                "external" if db_manager.external_engine else "local",
+            ).lower()
+        except Exception:
+            pass
+
         if not self.sync_directions:
             logger.info("🔄 Data sync disabled - no external database configured")
             return

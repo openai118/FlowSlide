@@ -11,6 +11,7 @@ from typing import Dict, Any
 from fastapi import APIRouter, HTTPException
 
 from ..database import db_manager
+from ..services.backup_service import backup_service
 
 router = APIRouter(prefix="/api/system", tags=["System Monitoring"])
 logger = logging.getLogger(__name__)
@@ -22,18 +23,23 @@ async def get_database_status():
     try:
         logger.info("�️ Checking database status...")
 
-        # 检查数据库配置
+        # 检查数据库配置：优先使用运行时的 db_manager 信息（应用中保存的配置），回退到环境变量
+        db_type = getattr(db_manager, 'database_type', None)
         db_url = os.getenv("DATABASE_URL")
-        is_configured = bool(db_url and db_url.strip())
+        # 当 db_manager 指明为 sqlite 时我们认为本地数据库可用
+        if db_type:
+            is_configured = True
+        else:
+            is_configured = bool(db_url and db_url.strip())
 
         status_info = {
             "configured": is_configured,
             "timestamp": datetime.now().isoformat(),
-            "database_type": db_manager.database_type if hasattr(db_manager, 'database_type') else 'unknown'
+            "database_type": db_type if db_type else ('sqlite' if (db_url and db_url.startswith('sqlite')) else 'unknown')
         }
 
-        if is_configured and db_url:
-            # 解析数据库URL类型（不包含敏感信息）
+        # 解析db_url类型作为补充信息
+        if db_url:
             if db_url.startswith("sqlite"):
                 status_info["db_type"] = "SQLite"
             elif db_url.startswith("postgresql"):
@@ -60,29 +66,40 @@ async def get_r2_status():
     try:
         logger.info("☁️ Checking R2 status...")
 
-        # 检查R2配置
-        r2_config = {
-            "access_key": os.getenv("R2_ACCESS_KEY_ID"),
-            "secret_key": os.getenv("R2_SECRET_ACCESS_KEY"),
-            "endpoint": os.getenv("R2_ENDPOINT"),
-            "bucket": os.getenv("R2_BUCKET_NAME")
-        }
+        # 检查R2配置：优先使用运行时 backup_service 中的 r2_config（管理员通过 UI 保存后会写入 .env 并同步到 runtime），
+        # 如果 backup_service 未配置再回退到环境变量
+        r2_runtime = getattr(backup_service, 'r2_config', None)
+        if r2_runtime and any(r2_runtime.values()):
+            r2_config = r2_runtime
+        else:
+            r2_config = {
+                "access_key": os.getenv("R2_ACCESS_KEY_ID"),
+                "secret_key": os.getenv("R2_SECRET_ACCESS_KEY"),
+                "endpoint": os.getenv("R2_ENDPOINT"),
+                "bucket": os.getenv("R2_BUCKET_NAME")
+            }
 
         # 检查配置完整性
-        is_configured = all(r2_config.values())
+        is_configured = all((v for v in (r2_config.get('access_key'), r2_config.get('secret_key'), r2_config.get('endpoint'), r2_config.get('bucket'))))
 
         status_info = {
             "configured": is_configured,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "provider_info": None
         }
 
         if is_configured:
             # 解析endpoint类型（不包含敏感信息）
-            endpoint = r2_config["endpoint"]
+            endpoint = r2_config.get("endpoint")
             if endpoint and "cloudflarestorage.com" in endpoint:
                 status_info["provider"] = "Cloudflare R2"
             else:
                 status_info["provider"] = "Unknown"
+            # include a small, non-sensitive provider hint
+            status_info["provider_info"] = {
+                "endpoint": endpoint,
+                "bucket": r2_config.get('bucket')
+            }
 
         logger.info(f"✅ R2 status checked: {'configured' if is_configured else 'not configured'}")
         return {

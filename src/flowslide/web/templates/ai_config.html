@@ -7023,22 +7023,25 @@ function updateDatabaseConfigStatus(statusInfo) {
     const badgeElement = document.getElementById('db-config-badge');
     const statusElement = document.getElementById('db-connection-status');
 
-    if (badgeElement) {
-        console.log('📍 找到数据库徽章元素:', badgeElement);
-        if (statusInfo.configured === false) {
-            badgeElement.textContent = '❌ 未配置';
-            badgeElement.style.background = '#6c757d'; // 灰色
-        } else if (statusInfo.configured === true && statusInfo.tested === false) {
-            badgeElement.textContent = '⏳ 未验证';
-            badgeElement.style.background = '#f39c12'; // 橙色
-        } else if (statusInfo.configured === true && statusInfo.tested === true && statusInfo.available === true) {
-            badgeElement.textContent = '✅ 已配置且可用';
-            badgeElement.style.background = '#27ae60'; // 绿色
-        } else if (statusInfo.configured === true && statusInfo.tested === true && statusInfo.available === false) {
-            badgeElement.textContent = '⚠️ 已配置但不可用';
-            badgeElement.style.background = '#e74c3c'; // 红色
-        }
-        console.log('✅ 数据库徽章已更新为:', badgeElement.textContent);
+    // 支持页面中可能存在重复的徽章元素（不同卡片），对所有匹配元素进行更新
+    const badgeElements = document.querySelectorAll('#db-config-badge');
+    if (badgeElements && badgeElements.length > 0) {
+        badgeElements.forEach((el) => {
+            if (statusInfo.configured === false) {
+                el.textContent = '❌ 未配置';
+                el.style.background = '#6c757d'; // 灰色
+            } else if (statusInfo.configured === true && statusInfo.tested === false) {
+                el.textContent = '⏳ 未验证';
+                el.style.background = '#f39c12'; // 橙色
+            } else if (statusInfo.configured === true && statusInfo.tested === true && statusInfo.available === true) {
+                el.textContent = '✅ 已配置且可用';
+                el.style.background = '#27ae60'; // 绿色
+            } else if (statusInfo.configured === true && statusInfo.tested === true && statusInfo.available === false) {
+                el.textContent = '⚠️ 已配置但不可用';
+                el.style.background = '#e74c3c'; // 红色
+            }
+        });
+        console.log('✅ 数据库徽章已更新 (多个元素)');
     } else {
         console.error('❌ 找不到数据库徽章元素 #db-config-badge');
     }
@@ -7046,7 +7049,8 @@ function updateDatabaseConfigStatus(statusInfo) {
     if (statusElement) {
         if (statusInfo.tested === true) {
             if (statusInfo.available === true) {
-                statusElement.textContent = '✅ 正常';
+                // 统一为“可用”以与 R2 文案保持一致
+                statusElement.textContent = '✅ 可用';
                 statusElement.style.background = '#27ae60';
             } else {
                 statusElement.textContent = '❌ 异常';
@@ -7065,22 +7069,25 @@ function updateR2ConfigStatus(statusInfo) {
     const badgeElement = document.getElementById('r2-config-badge');
     const statusElement = document.getElementById('r2-sync-status');
 
-    if (badgeElement) {
-        console.log('📍 找到R2徽章元素:', badgeElement);
-        if (statusInfo.configured === false) {
-            badgeElement.textContent = '❌ 未配置';
-            badgeElement.style.background = '#6c757d'; // 灰色
-        } else if (statusInfo.configured === true && statusInfo.tested === false) {
-            badgeElement.textContent = '⏳ 未验证';
-            badgeElement.style.background = '#f39c12'; // 橙色
-        } else if (statusInfo.configured === true && statusInfo.tested === true && statusInfo.available === true) {
-            badgeElement.textContent = '✅ 已配置且可用';
-            badgeElement.style.background = '#27ae60'; // 绿色
-        } else if (statusInfo.configured === true && statusInfo.tested === true && statusInfo.available === false) {
-            badgeElement.textContent = '⚠️ 已配置但不可用';
-            badgeElement.style.background = '#e74c3c'; // 红色
-        }
-        console.log('✅ R2徽章已更新为:', badgeElement.textContent);
+    // 支持页面中可能存在重复的R2徽章元素，更新所有匹配元素
+    const r2BadgeElements = document.querySelectorAll('#r2-config-badge');
+    if (r2BadgeElements && r2BadgeElements.length > 0) {
+        r2BadgeElements.forEach((el) => {
+            if (statusInfo.configured === false) {
+                el.textContent = '❌ 未配置';
+                el.style.background = '#6c757d'; // 灰色
+            } else if (statusInfo.configured === true && statusInfo.tested === false) {
+                el.textContent = '⏳ 未验证';
+                el.style.background = '#f39c12'; // 橙色
+            } else if (statusInfo.configured === true && statusInfo.tested === true && statusInfo.available === true) {
+                el.textContent = '✅ 已配置且可用';
+                el.style.background = '#27ae60'; // 绿色
+            } else if (statusInfo.configured === true && statusInfo.tested === true && statusInfo.available === false) {
+                el.textContent = '⚠️ 已配置但不可用';
+                el.style.background = '#e74c3c'; // 红色
+            }
+        });
+        console.log('✅ R2徽章已更新 (多个元素)');
     } else {
         console.error('❌ 找不到R2徽章元素 #r2-config-badge');
     }
@@ -7230,13 +7237,23 @@ async function initDataBackupPage() {
         // 加载系统资源信息
         await loadSystemResources();
 
-        // 检查R2和数据库配置状态
-        console.log('🔍 调用状态检查函数...');
-        await checkR2Status();
-        await checkDatabaseStatus();
+    // 检查R2和数据库配置状态
+    console.log('🔍 调用状态检查函数...');
+    await checkR2Status();
+    await checkDatabaseStatus();
 
-        // 自动检查数据库连接状态
-        await testDatabaseConnection();
+    // 非阻塞：在后台触发 R2 与 数据库 连接测试，避免阻塞页面加载
+    try{
+        // 将状态标记为检测中
+        updateR2ConfigStatus({ configured: true, tested: false, available: false });
+        updateDatabaseConfigStatus({ configured: true, tested: false, available: false });
+
+        // Fire-and-forget tests (they will update the UI when done)
+        testR2Connection().catch(e=>console.warn('后台R2检测失败', e));
+        testDatabaseConnection().catch(e=>console.warn('后台DB检测失败', e));
+    }catch(e){
+        console.warn('启动后台检测失败', e);
+    }
 
         console.log('✅ 数据备份页面初始化完成');
     } catch (error) {
