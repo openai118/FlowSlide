@@ -19,14 +19,14 @@ jobs:
       packages: write
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up QEMU (for multi-arch emulation)
-      uses: docker/setup-qemu-action@v3
+      - name: Set up QEMU (for multi-arch emulation)
+        uses: docker/setup-qemu-action@v3
 
-    - name: Smart disk cleanup for CI
-      run: |
+      - name: Smart disk cleanup for CI
+        run: |
         echo "🧹 Smart disk cleanup for CI environment..."
         
         # 显示初始磁盘使用情况
@@ -86,20 +86,20 @@ jobs:
         echo "Disk usage after smart cleanup:"
         df -h
 
-  - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      with:
-        driver-opts: |
-          image=moby/buildkit:v0.12.0
-          network=host
-        config-inline: |
-          [worker.oci]
-            max-parallelism = 1
-          [worker.containerd]
-            max-parallelism = 1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:v0.12.0
+            network=host
+          config-inline: |
+            [worker.oci]
+              max-parallelism = 1
+            [worker.containerd]
+              max-parallelism = 1
 
-    - name: Intermediate cleanup before build
-      run: |
+      - name: Intermediate cleanup before build
+        run: |
         echo "🧹 Pre-build cleanup..."
         # Clean up any existing Docker resources
         docker system prune -af --volumes || true
@@ -111,61 +111,61 @@ jobs:
         echo "Disk usage before build:"
         df -h
 
-    - name: Log in to Docker Hub
-      if: github.event_name != 'pull_request'
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ secrets.DOCKER_HUB_USERNAME }}
-        password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-    - name: Extract metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-        tags: |
-          type=raw,value=latest,enable={{is_default_branch}}
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
 
     # PR: build single-arch amd64 and load locally for tests (no push)
-    - name: Build (PR) - amd64 load-only
-      if: github.event_name == 'pull_request'
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        platforms: linux/amd64
-        push: false
-        load: true
-        tags: flowslide:pr-${{ github.sha }}
-        labels: |
-          ${{ steps.meta.outputs.labels }}
-          org.opencontainers.image.licenses=Apache-2.0
-        build-args: |
-          BUILDKIT_INLINE_CACHE=0
-          CACHE_BUST=${{ github.sha }}
+      - name: Build (PR) - amd64 load-only
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: flowslide:pr-${{ github.sha }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.opencontainers.image.licenses=Apache-2.0
+          build-args: |
+            BUILDKIT_INLINE_CACHE=0
+            CACHE_BUST=${{ github.sha }}
 
     # Push events: build and push multi-arch (amd64 + arm64)
-    - name: Build and push (multi-arch)
-      if: github.event_name != 'pull_request'
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        platforms: linux/amd64,linux/arm64
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: |
-          ${{ steps.meta.outputs.labels }}
-          org.opencontainers.image.licenses=Apache-2.0
-        build-args: |
-          BUILDKIT_INLINE_CACHE=0
-          CACHE_BUST=${{ github.sha }}
+      - name: Build and push (multi-arch)
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.opencontainers.image.licenses=Apache-2.0
+          build-args: |
+            BUILDKIT_INLINE_CACHE=0
+            CACHE_BUST=${{ github.sha }}
         
   # Note: No explicit load step needed; image is pushed directly when not a PR.
 
     # Test for PR: run local image
-    - name: Test Docker image (PR)
-      if: github.event_name == 'pull_request'
-      run: |
+      - name: Test Docker image (PR)
+        if: github.event_name == 'pull_request'
+        run: |
         echo "🧪 Testing local PR image (amd64)..."
         docker run --rm flowslide:pr-${{ github.sha }} python -c "
         import playwright
@@ -173,9 +173,9 @@ jobs:
         "
 
     # Test for pushed image: pull and run
-    - name: Test Docker image (pushed)
-      if: github.event_name != 'pull_request'
-      run: |
+      - name: Test Docker image (pushed)
+        if: github.event_name != 'pull_request'
+        run: |
         echo "🧪 Testing the pushed multi-arch image (this runner pulls amd64 variant)..."
         docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest python -c "
         import playwright
@@ -183,21 +183,21 @@ jobs:
         "
 
     # Verify multi-arch manifest after push
-    - name: Verify multi-arch manifest
-      if: github.event_name != 'pull_request'
-      run: |
+      - name: Verify multi-arch manifest
+        if: github.event_name != 'pull_request'
+        run: |
         echo "🔍 Inspecting image manifest for platforms..."
         docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-    - name: Generate deployment summary
-      if: github.event_name != 'pull_request'
-      run: |
+      - name: Generate deployment summary
+        if: github.event_name != 'pull_request'
+        run: |
         echo "## Docker Image Built Successfully! 🚀" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Image Details:" >> $GITHUB_STEP_SUMMARY
         echo "- **Repository**: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Tags**: ${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Platforms**: linux/amd64" >> $GITHUB_STEP_SUMMARY
+          echo "- **Platforms**: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Quick Start:" >> $GITHUB_STEP_SUMMARY
         echo '```bash' >> $GITHUB_STEP_SUMMARY
@@ -205,9 +205,9 @@ jobs:
         echo "docker run -p 8000:8000 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
 
-    - name: Clean up after build
-      if: always()
-      run: |
+      - name: Clean up after build
+        if: always()
+        run: |
         echo "🧹 Final cleanup..."
         # Clean up Docker resources
         docker system prune -f || true
@@ -219,5 +219,5 @@ jobs:
         sudo rm -rf /var/tmp/* || true
         
         # Show final disk usage
-        echo "Final disk usage:"
-        df -h
+  echo "Final disk usage:"
+  df -h
