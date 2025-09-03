@@ -22,6 +22,9 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Set up QEMU (for multi-arch emulation)
+      uses: docker/setup-qemu-action@v3
+
     - name: Smart disk cleanup for CI
       run: |
         echo "🧹 Smart disk cleanup for CI environment..."
@@ -83,7 +86,7 @@ jobs:
         echo "Disk usage after smart cleanup:"
         df -h
 
-    - name: Set up Docker Buildx
+  - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
       with:
         driver-opts: |
@@ -124,49 +127,67 @@ jobs:
         tags: |
           type=raw,value=latest,enable={{is_default_branch}}
 
-    - name: Build and push Docker image
+    # PR: build single-arch amd64 and load locally for tests (no push)
+    - name: Build (PR) - amd64 load-only
+      if: github.event_name == 'pull_request'
       uses: docker/build-push-action@v5
       with:
         context: .
-        # Build for amd64 only to avoid Playwright compatibility issues
         platforms: linux/amd64
-        push: ${{ github.event_name != 'pull_request' }}
+        push: false
+        load: true
+        tags: flowslide:pr-${{ github.sha }}
+        labels: |
+          ${{ steps.meta.outputs.labels }}
+          org.opencontainers.image.licenses=Apache-2.0
+        build-args: |
+          BUILDKIT_INLINE_CACHE=0
+          CACHE_BUST=${{ github.sha }}
+
+    # Push events: build and push multi-arch (amd64 + arm64)
+    - name: Build and push (multi-arch)
+      if: github.event_name != 'pull_request'
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: |
           ${{ steps.meta.outputs.labels }}
           org.opencontainers.image.licenses=Apache-2.0
-        # Disable cache completely to save maximum disk space
-        # cache-from: type=gha
-        # cache-to: type=gha,mode=max
         build-args: |
           BUILDKIT_INLINE_CACHE=0
           CACHE_BUST=${{ github.sha }}
-        # Use smaller build context and aggressive pruning
-        outputs: type=docker,dest=/tmp/image.tar
         
-    - name: Load and push image
-      if: github.event_name != 'pull_request'
-      run: |
-        # Load the image from tar
-        docker load -i /tmp/image.tar
-        
-        # Push the image
-        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-        
-        # Clean up the tar file immediately
-        rm -f /tmp/image.tar
-        
-        # Clean up any remaining build cache
-        docker builder prune -af || true
+  # Note: No explicit load step needed; image is pushed directly when not a PR.
 
-    - name: Test Docker image
+    # Test for PR: run local image
+    - name: Test Docker image (PR)
+      if: github.event_name == 'pull_request'
+      run: |
+        echo "🧪 Testing local PR image (amd64)..."
+        docker run --rm flowslide:pr-${{ github.sha }} python -c "
+        import playwright
+        print('✅ Playwright import successful')
+        "
+
+    # Test for pushed image: pull and run
+    - name: Test Docker image (pushed)
       if: github.event_name != 'pull_request'
       run: |
-        echo "🧪 Testing the built Docker image..."
+        echo "🧪 Testing the pushed multi-arch image (this runner pulls amd64 variant)..."
         docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest python -c "
         import playwright
         print('✅ Playwright import successful')
         "
+
+    # Verify multi-arch manifest after push
+    - name: Verify multi-arch manifest
+      if: github.event_name != 'pull_request'
+      run: |
+        echo "🔍 Inspecting image manifest for platforms..."
+        docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
     - name: Generate deployment summary
       if: github.event_name != 'pull_request'
