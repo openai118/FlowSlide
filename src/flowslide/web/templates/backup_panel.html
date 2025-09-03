@@ -1,0 +1,112 @@
+<!-- Backup & Sync Panel - include this fragment where the red box should be -->
+<div id="backup-panel" class="backup-panel">
+    <div class="tabs">
+        <button class="tab-btn active" data-type="db">Database Backups</button>
+        <button class="tab-btn" data-type="artifact">Generated Artifacts</button>
+        <button class="tab-btn" data-type="media">User Uploads</button>
+        <button class="tab-btn" data-type="cache">Cache / Intermediates</button>
+    </div>
+
+    <div class="controls">
+        <input id="backup-search" placeholder="Search name or id" />
+        <button id="btn-create-backup">Create Backup</button>
+        <button id="btn-sync-selected">Sync Selected to R2</button>
+        <button id="btn-restore-selected">Restore Selected</button>
+        <button id="btn-download-selected">Download</button>
+        <button id="btn-delete-selected">Delete</button>
+    </div>
+
+    <table id="backup-table" class="table table-sm">
+        <thead>
+            <tr>
+                <th><input type="checkbox" id="chk-all"/></th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Project</th>
+                <th>Size</th>
+                <th>Created</th>
+                <th>Storage</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <script>
+    (function(){
+        const panel = document.getElementById('backup-panel');
+        let currentType = 'db';
+
+        function qs(sel, el=document) { return el.querySelector(sel); }
+        function qsa(sel, el=document) { return Array.from(el.querySelectorAll(sel)); }
+
+        qsa('.tab-btn').forEach(b=>b.addEventListener('click', (ev)=>{
+            qsa('.tab-btn').forEach(x=>x.classList.remove('active'));
+            ev.target.classList.add('active');
+            currentType = ev.target.dataset.type;
+            fetchList();
+        }));
+
+        qs('#btn-create-backup').addEventListener('click', async ()=>{
+            const name = prompt('Backup name (optional)');
+            const resp = await fetch('/api/backups/create', {
+                method: 'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({type: currentType, name})
+            });
+            const j = await resp.json();
+            alert('Backup created: '+(j.id || JSON.stringify(j)));
+            fetchList();
+        });
+
+        qs('#chk-all').addEventListener('change', (ev)=>{
+            qsa('#backup-table tbody input.row-chk').forEach(c=>c.checked = ev.target.checked);
+        });
+
+        async function fetchList(){
+            const tbody = qs('#backup-table tbody');
+            tbody.innerHTML = '<tr><td colspan="8">Loading...</td></tr>';
+            const resp = await fetch(`/api/backups?type=${encodeURIComponent(currentType)}`);
+            const list = await resp.json();
+            tbody.innerHTML = '';
+            for(const r of list){
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><input class="row-chk" data-id="${r.id}" type="checkbox"/></td>
+                    <td>${r.name||''}</td>
+                    <td>${r.type||''}</td>
+                    <td>${r.project_id||''}</td>
+                    <td>${r.size||''}</td>
+                    <td>${r.created_at?new Date(r.created_at*1000).toLocaleString():''}</td>
+                    <td>${r.storage_key||''}</td>
+                    <td><button data-id="${r.id}" class="btn-download">Download</button>
+                        <button data-id="${r.id}" class="btn-sync">Sync</button>
+                        <button data-id="${r.id}" class="btn-restore">Restore</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            }
+
+            qsa('.btn-download').forEach(b=>b.addEventListener('click', (ev)=>{
+                const id = ev.target.dataset.id;
+                window.location = `/api/backups/${id}/download`;
+            }));
+            qsa('.btn-sync').forEach(b=>b.addEventListener('click', async (ev)=>{
+                const id = ev.target.dataset.id;
+                await fetch(`/api/backups/${id}/sync-to-r2`, {method:'POST'});
+                alert('sync enqueued');
+                fetchList();
+            }));
+            qsa('.btn-restore').forEach(b=>b.addEventListener('click', async (ev)=>{
+                const id = ev.target.dataset.id;
+                const resp = await fetch(`/api/backups/${id}/restore`, {method:'POST'});
+                const j = await resp.json();
+                alert('restore started: '+JSON.stringify(j));
+            }));
+        }
+
+        // initial load
+        fetchList();
+    })();
+    </script>
+
+</div>

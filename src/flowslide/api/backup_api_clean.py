@@ -5,7 +5,7 @@ from typing import Optional, List
 import os
 
 from ..auth.middleware import require_admin
-from ..services.backup_manager import BackupManager, ensure_schema, get_conn
+from src.flowslide.services.backup_manager import BackupManager, ensure_schema, get_conn
 
 router = APIRouter()
 ensure_schema()
@@ -100,3 +100,4 @@ def download_backup(backup_id: str, admin=Depends(require_admin)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
