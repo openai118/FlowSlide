@@ -24,7 +24,10 @@ from .api.image_api import router as image_router
 from .api.openai_compat import router as openai_router
 from .api.system_api import router as system_router
 from .auth import auth_router, create_auth_middleware
-from .database.create_default_template import ensure_default_templates_exist_first_time
+from .database.create_default_template import (
+    ensure_default_templates_exist_first_time,
+    ensure_default_templates_exist,
+)
 from .database.database import init_db
 from .web import router as web_router
 
@@ -151,15 +154,23 @@ async def startup_event():
             from .services.backup_service import create_backup
             asyncio.create_task(schedule_backup(create_backup))
 
-        # Only import templates if database file didn't exist before (first time setup)
+        # Import templates on first-time SQLite setup, otherwise ensure templates exist (for external DB or existing DB)
         if not db_exists and db_mgr.database_type == "sqlite":
-            logger.info("First time setup detected - importing templates from examples...")
+            logger.info("First time setup detected - importing templates from examples (force)...")
             template_ids = await ensure_default_templates_exist_first_time()
             logger.info(
                 f"Template initialization completed. {len(template_ids)} templates available."
             )
         else:
-            logger.info("Database already exists or using external DB - skipping template import")
+            # Ensure at least one template exists; will no-op if already present
+            logger.info("Ensuring global master templates exist (no-force import if empty)...")
+            ensured_ids = await ensure_default_templates_exist()
+            if ensured_ids:
+                logger.info(
+                    f"Ensured {len(ensured_ids)} global master templates are available."
+                )
+            else:
+                logger.info("Global master templates already present; no import needed")
 
     except Exception as e:
         logger.error(f"Failed to initialize application: {e}")

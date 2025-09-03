@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from ..services.global_master_template_service import GlobalMasterTemplateService
+from ..database.create_default_template import ensure_default_templates_exist
 from .models import (
     GlobalMasterTemplateCreate,
     GlobalMasterTemplateDetailResponse,
@@ -69,6 +70,21 @@ async def get_all_templates(
     except Exception as e:
         logger.error(f"Failed to get templates: {e}")
         raise HTTPException(status_code=500, detail="Failed to get templates")
+
+@router.post("/seed", response_model=dict)
+async def seed_templates(force: bool = Query(False, description="Force import from examples")):
+    """Seed global master templates if missing (optionally force import)."""
+    try:
+        ids = await ensure_default_templates_exist(force_import=force)
+        return {
+            "success": True,
+            "imported_count": len(ids),
+            "template_ids": ids,
+            "message": ("Imported from examples" if ids else "No import needed or failed"),
+        }
+    except Exception as e:
+        logger.error(f"Failed to seed templates: {e}")
+        raise HTTPException(status_code=500, detail="Failed to seed templates")
 
 
 @router.get("/{template_id}", response_model=GlobalMasterTemplateDetailResponse)
