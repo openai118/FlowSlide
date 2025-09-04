@@ -703,7 +703,7 @@
                             <div style="display:flex; flex-direction:column; gap:10px;">
                                 <div class="form-group">
                                     <label>DATABASE_URL</label>
-                                    <input type="{{ 'text' if is_admin else 'password' }}" name="database_url" placeholder="sqlite:///./flowslide.db" data-sensitive="true" value="{{ current_config.get('database_url','') }}" autocomplete="off">
+                                    <input type="{{ 'text' if is_admin else 'password' }}" name="database_url" placeholder="DATABASE_URL" data-sensitive="true" value="{{ current_config.get('database_url','') }}" autocomplete="off">
                                 </div>
                                 <div class="form-group">
                                     <label>API_URL</label>
@@ -1152,7 +1152,7 @@
                 </label>
                 <div class="textarea-container" style="position: relative;">
                     <textarea id="bulk-paste-text"
-                              placeholder="粘贴环境变量或键值对，每行一个或用分号分隔&#10;&#10;例如：&#10;R2_ACCESS_KEY_ID=your_key&#10;R2_SECRET_ACCESS_KEY=your_secret&#10;R2_ENDPOINT=https://your-account.r2.cloudflarestorage.com&#10;R2_BUCKET_NAME=your-bucket&#10;DATABASE_URL=sqlite:///./flowslide.db&#10;API_URL=https://your-api.com&#10;API_ANON_KEY=your-anon-key&#10;API_SERVICE_KEY=your-service-key"
+                              placeholder="粘贴环境变量或键值对，每行一个或用分号分隔&#10;&#10;例如：&#10;R2_ACCESS_KEY_ID=your_key&#10;R2_SECRET_ACCESS_KEY=your_secret&#10;R2_ENDPOINT=https://your-account.r2.cloudflarestorage.com&#10;R2_BUCKET_NAME=your-bucket&#10;DATABASE_URL=YOUR_DATABASE_URL&#10;API_URL=https://your-api.com&#10;API_ANON_KEY=your-anon-key&#10;API_SERVICE_KEY=your-service-key"
                               style="width: 100%; height: 250px; padding: 15px; border: 2px solid #d1d5db; border-radius: 10px; background: #ffffff; color: #24292f; font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace; font-size: 13px; line-height: 1.5; resize: vertical; transition: all 0.3s ease; outline: none; overflow: auto;"
                               onfocus="this.style.borderColor = '#0366d6'; this.style.boxShadow = '0 0 0 3px rgba(3, 102, 214, 0.1)';"
                               onblur="this.style.borderColor = '#d1d5db'; this.style.boxShadow = 'none';">
