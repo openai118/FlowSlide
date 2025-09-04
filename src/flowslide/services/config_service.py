@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from dotenv import load_dotenv, set_key
+from dotenv import load_dotenv, set_key, unset_key
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +260,7 @@ class ConfigService:
             "access_token_expire_minutes": {
                 "type": "number",
                 "category": "app_config",
-                "default": "30",
+                "default": "0",
             },
             "max_file_size": {
                 "type": "number",
@@ -496,6 +496,16 @@ class ConfigService:
             logger.debug(f"Error reloading .env file {self.env_file}: {e}")
 
         config = {}
+        # 与 get_all_config 一致：这些键在未设置时返回空字符串
+        always_empty_when_unset = {
+            "database_url",
+            "api_anon_key",
+            "api_service_key",
+            "r2_access_key_id",
+            "r2_secret_access_key",
+            "r2_endpoint",
+            "r2_bucket_name",
+        }
 
         for key, schema in self.config_schema.items():
             if schema["category"] == category:
@@ -503,7 +513,10 @@ class ConfigService:
                 value = os.getenv(env_key)
 
                 if value is None:
-                    value = schema.get("default", "")
+                    if key in always_empty_when_unset:
+                        value = ""
+                    else:
+                        value = schema.get("default", "")
 
                 # Convert boolean strings
                 if schema["type"] == "boolean":
@@ -521,17 +534,36 @@ class ConfigService:
                 if key in self.config_schema:
                     env_key = key.upper()
 
-                    # Convert boolean values to strings
-                    if isinstance(value, bool):
-                        value = "true" if value else "false"
+                    # If the value is cleared (empty string/None), or for
+                    # access_token_expire_minutes explicitly set to 0, remove it from .env and process env
+                    should_unset = value is None or (isinstance(value, str) and value.strip() == "")
+                    if not should_unset and key == "access_token_expire_minutes":
+                        try:
+                            # interpret numeric '0' as removal
+                            should_unset = float(value) == 0
+                        except (TypeError, ValueError):
+                            should_unset = False
+
+                    if should_unset:
+                        try:
+                            # Remove from .env
+                            unset_key(self.env_file, env_key)
+                        except Exception as e:
+                            logger.debug(f"unset_key failed for {env_key}: {e}")
+                        # Remove from current environment
+                        os.environ.pop(env_key, None)
                     else:
-                        value = str(value)
+                        # Convert boolean values to strings
+                        if isinstance(value, bool):
+                            value = "true" if value else "false"
+                        else:
+                            value = str(value)
 
-                    # Update .env file (without quotes)
-                    set_key(self.env_file, env_key, value, quote_mode="never")
+                        # Update .env file (without quotes)
+                        set_key(self.env_file, env_key, value, quote_mode="never")
 
-                    # Update current environment
-                    os.environ[env_key] = value
+                        # Update current environment
+                        os.environ[env_key] = value
 
             # Reload environment variables with error handling
             try:
@@ -699,6 +731,13 @@ class ConfigService:
 
             schema = self.config_schema[key]
             field_errors = []
+
+            # Treat empty string/None as an explicit request to clear the env var.
+            # In this case we skip type validation here; update_config will handle unsetting.
+            if value is None or (isinstance(value, str) and value.strip() == ""):
+                if field_errors:
+                    errors[key] = field_errors
+                continue
 
             # Type validation
             if schema["type"] == "number":

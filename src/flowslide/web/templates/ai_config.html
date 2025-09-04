@@ -619,6 +619,9 @@
                         <button type="button" onclick="saveSecurityConfig()" class="btn btn-success" style="padding: 8px 20px; font-size: 0.9em;">
                             💾 保存安全配置
                         </button>
+                        <div style="margin-top: 6px;">
+                            <small style="color:#7f8c8d;">仅保存本区域的安全项；不会保存下方“文件上传配置”。如更改“最大文件大小”，请使用页面底部“保存应用配置”。</small>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -628,9 +631,11 @@
 
                 <div class="form-group">
                     <label>最大文件大小 (MAX_FILE_SIZE):</label>
-                    <input type="number" name="max_file_size" min="1048576" max="104857600"
-                           placeholder="10485760">
-                    <small style="color: #7f8c8d;">单位：字节 (10MB = 10485760)</small>
+                    <input type="number" name="max_file_size" min="1" max="10240" step="1" placeholder="50" autocomplete="off">
+                    <div style="display:flex; flex-direction:column; gap:2px;">
+                        <small style="color: #7f8c8d;">单位：MB</small>
+                        <small style="color: #7f8c8d;">修改后请点击下方“保存应用配置”生效；点击“保存安全配置”不会保存该项。</small>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -1312,7 +1317,7 @@
                             <label style="font-weight:500; color:#495057;">选择备份类别:</label>
                             <div style="display:flex; gap:8px; margin-top:6px;">
                                 <select id="external-db-type" style="flex:1; min-width:180px; max-width:60%; padding:6px; border-radius:6px; border:1px solid #ddd;"></select>
-                                <button onclick="createExternalBackup()" class="btn btn-secondary" style="padding:6px 10px;">生成</button>
+                                <button onclick="syncCategoryToExternalDB()" class="btn btn-primary" style="padding:6px 10px;">生成并同步该类别</button>
                             </div>
                         </div>
 
@@ -1326,6 +1331,7 @@
                                 <button onclick="restoreSelectedDB()" class="btn btn-warning" style="padding:6px 10px;">恢复</button>
                                 <button onclick="deleteSelectedDB()" class="btn btn-danger" style="padding:6px 10px;">删除</button>
                             </div>
+                            <small style="display:block; margin-top:6px; color:#6c757d;">提示：此处列出存储在外部数据库中的备份文件；实时同步操作与该列表无关。</small>
                         </div>
 
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px;">
@@ -1381,6 +1387,7 @@
                                 <button onclick="restoreSelectedFromR2()" class="btn btn-warning" style="padding:6px 10px;">恢复</button>
                                 <button onclick="deleteSelectedFromR2()" class="btn btn-danger" style="padding:6px 10px;">删除</button>
                             </div>
+                            <small style="display:block; margin-top:6px; color:#6c757d;">提示：此处列出存储在 R2 云存储中的备份文件；实时同步操作与该列表无关。</small>
                         </div>
 
                         <!-- DB backup file list selector (for database card) -->
@@ -1407,10 +1414,10 @@
             </h4>
 
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
-                <!-- 数据库连接状态 -->
+                <!-- 外部数据库与R2云存储连接（合并显示） -->
                 <div style="background: var(--glass-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--glass-border);">
                     <h5 style="color: #f39c12; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                        <span>🗄️</span> 数据库连接
+                        <span>🗄️</span> 外部数据库与R2云存储连接
                     </h5>
                     <div style="display: flex; align-items: center; gap: 15px;">
                         <span id="db-connection-status" style="background: #95a5a6; color: white; padding: 6px 14px; border-radius: 20px; font-size: 0.85em; font-weight: 500;">
@@ -1420,20 +1427,11 @@
                             --
                         </span>
                         <button onclick="testDatabaseConnection()" style="padding: 6px 12px; background: var(--accent-gradient); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85em;">
-                            🔍 测试
+                🔍 DB测试
                         </button>
                     </div>
-                    <p style="margin-top: 10px; color: #6c757d; font-size: 0.85em;">
-                        检查数据库连接状态和响应时间
-                    </p>
-                </div>
-
-                <!-- R2 云存储连接（集中显示） -->
-                <div style="background: var(--glass-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--glass-border);">
-                    <h5 style="color: #17a2b8; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                        <span>☁️</span> R2 云存储
-                    </h5>
-                    <div style="display: flex; align-items: center; gap: 15px;">
+                    <!-- 合并 R2 状态行到该卡片内 -->
+                    <div style="display: flex; align-items: center; gap: 15px; margin-top: 12px;">
                         <span id="r2-sync-status" style="background: #95a5a6; color: white; padding: 6px 14px; border-radius: 20px; font-size: 0.85em; font-weight: 500;">
                             未测试
                         </span>
@@ -1441,12 +1439,11 @@
                             --
                         </span>
                         <button onclick="testR2Connection()" style="padding: 6px 12px; background: var(--accent-gradient); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85em;">
-                            🔍 测试
+                            🔍 R2测试
                         </button>
                     </div>
-                        <!-- R2 最后同步时间放置在数据备份的 R2 云存储同步区块下方 -->
                     <p style="margin-top: 10px; color: #6c757d; font-size: 0.85em;">
-                        检查 R2 云存储连接状态和响应时间
+                        检查外部数据库与R2连接状态和响应时间
                     </p>
                 </div>
 
@@ -1476,6 +1473,8 @@
                     <h5 style="color: #f39c12; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
                         <span>📋</span> 同步历史
                     </h5>
+                    <!-- 删除了概要信息展示（最新备份/备份时间/最新同步/同步时间） -->
+
                     <div id="backup-history" style="max-height: 120px; overflow-y: auto; color: #6c757d; font-size: 0.85em;">
                         加载同步历史...
                     </div>
@@ -1516,6 +1515,18 @@
                                 <option value="weekly">每周</option>
                                 <option value="monthly">每月</option>
                             </select>
+                        </div>
+
+                        <!-- 移动过来的：本地备份文件列表与操作 -->
+                        <div>
+                            <div style="display:flex; gap:8px; margin-top:6px; align-items:center;">
+                                <select id="local-backup-list" style="flex:1; min-width:180px; max-width:60%; padding:6px; border-radius:6px; border:1px solid #ddd; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                    <option value="">-- 暂无本地备份 --</option>
+                                </select>
+                                <button type="button" onclick="restoreLocalBackup()" class="btn btn-warning" style="padding:6px 10px;">恢复</button>
+                                <button type="button" onclick="deleteLocalBackup()" class="btn btn-danger" style="padding:6px 10px;">删除</button>
+                                <button type="button" onclick="downloadLocalBackup()" class="btn btn-info" style="padding:6px 10px;">下载</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2804,7 +2815,34 @@ function toggleSecretVisibility(fieldName, btn){
 document.addEventListener('DOMContentLoaded', function() {
     // 关键：尽快返回以提升页面响应性。非关键工作在空闲时运行。
     // 触发配置加载，但不要在此处 await（避免在DOMContentLoaded阶段顺序阻塞）
-    loadAllConfigs().then(() => {
+    loadAllConfigs().then(async () => {
+        // 刷新 R2/数据库配置徽章，避免刷新后仍显示“未配置”
+        try {
+            await Promise.allSettled([
+                checkR2Status(),
+                checkDatabaseStatus()
+            ]);
+        } catch (e) {
+            window.__ai_log && window.__ai_log.warn && window.__ai_log.warn('初始化状态检查失败', e);
+        }
+
+        // 若已配置，则在首页也自动发起一次连接测试，避免一直停留在“未验证”
+        try {
+            if (!window.__connectivityTestedOnce) {
+                const r2Badge = document.getElementById('r2-config-badge');
+                const dbBadge = document.getElementById('db-config-badge');
+                const r2Configured = r2Badge && !/未配置/.test(r2Badge.textContent || '');
+                const dbConfigured = dbBadge && !/未配置/.test(dbBadge.textContent || '');
+                const tests = [];
+                if (r2Configured) tests.push(ensureR2TestWithCache());
+                if (dbConfigured) tests.push(ensureDBTestWithCache());
+                if (tests.length) await Promise.allSettled(tests);
+                window.__connectivityTestedOnce = true;
+            }
+        } catch (e) {
+            window.__ai_log && window.__ai_log.warn && window.__ai_log.warn('初始化连接测试失败', e);
+        }
+
         // 在短延迟后初始化会话相关UI（仍较为重要）
         setTimeout(async () => {
             try {
@@ -3175,7 +3213,17 @@ function populateTabForm(tabName, config) {
                     }
                 }
             } else {
-                input.value = config[name];
+                // 在 app-config 标签中，max_file_size 需要以 MB 显示
+                if (tabName === 'app-config' && name === 'max_file_size') {
+                    const bytes = parseInt(config[name], 10);
+                    if (!isNaN(bytes) && bytes > 0) {
+                        input.value = Math.max(1, Math.round(bytes / 1048576));
+                    } else {
+                        input.value = '';
+                    }
+                } else {
+                    input.value = config[name];
+                }
             }
         }
     });
@@ -3185,6 +3233,12 @@ function populateTabForm(tabName, config) {
         setTimeout(() => {
             toggleImageServiceOptions();
         }, 100);
+    }
+
+    // 如果是应用配置标签，进一步规范 MAX_FILE_SIZE 的显示
+    if (tabName === 'app-config') {
+        normalizeMaxFileSizeInput();
+        setTimeout(normalizeMaxFileSizeInput, 0);
     }
 }
 
@@ -4032,6 +4086,29 @@ function populateAllForms() {
 
     // 填充图片服务配置
     populateImageServiceConfig();
+
+    // 最后强制规范 max_file_size 的显示为 MB，防止其他填充流程覆盖为字节值
+    normalizeMaxFileSizeInput();
+    // 再次异步兜底一次（处理可能的后续异步UI更新）
+    setTimeout(normalizeMaxFileSizeInput, 0);
+}
+
+// 确保“最大文件大小”输入框始终以 MB 显示
+function normalizeMaxFileSizeInput() {
+    try {
+        const el = document.querySelector('#app-config input[name="max_file_size"]');
+        if (!el) return;
+        const raw = currentConfig && currentConfig.max_file_size;
+        const bytes = parseInt(raw, 10);
+        if (!isNaN(bytes) && bytes > 0) {
+            const mb = Math.max(1, Math.round(bytes / 1048576));
+            if (String(el.value) !== String(mb)) {
+                el.value = mb;
+            }
+        }
+    } catch (e) {
+        console.warn('normalizeMaxFileSizeInput failed:', e);
+    }
 }
 
 function populateProviderForms() {
@@ -4115,8 +4192,17 @@ function populateAppConfig() {
                     input.placeholder = '••••••••';
                 }
             } else {
-                // 只有当输入框为空时才设置值，避免覆盖模板中已设置的值
-                if (!input.value && currentConfig[configKey]) {
+                // max_file_size: always display in MB, overriding any stale value
+                if (configKey === 'max_file_size') {
+                    const bytes = parseInt(currentConfig[configKey], 10);
+                    if (!isNaN(bytes) && bytes > 0) {
+                        input.value = Math.max(1, Math.round(bytes / 1048576));
+                    } else {
+                        // fallback to default placeholder if invalid
+                        input.value = '';
+                    }
+                } else if (!input.value && currentConfig[configKey]) {
+                    // 其他字段：仅当为空时填充，避免覆盖用户未保存的输入
                     input.value = currentConfig[configKey];
                 }
             }
@@ -4393,7 +4479,16 @@ async function saveGenerationParams() {
             if (input.type === 'checkbox') {
                 config[input.name] = input.checked;
             } else if (input.value) {
-                config[input.name] = input.value;
+                if (input.name === 'max_file_size') {
+                    // UI is MB; store as bytes
+                    const mb = parseInt(input.value, 10);
+                    if (!isNaN(mb) && mb > 0) {
+                        const clamped = Math.min(Math.max(mb, 1), 10240); // 1MB..10GB
+                        config[input.name] = String(clamped * 1048576);
+                    }
+                } else {
+                    config[input.name] = input.value;
+                }
             }
         }
     });
@@ -4439,10 +4534,35 @@ async function saveAppConfig() {
             if (input.type === 'checkbox') {
                 config[input.name] = input.checked;
             } else if (input.value) {
-                config[input.name] = input.value;
+                if (input.name === 'max_file_size') {
+                    // UI uses MB; persist as bytes
+                    const mb = parseInt(input.value, 10);
+                    if (!isNaN(mb) && mb > 0) {
+                        const clamped = Math.min(Math.max(mb, 1), 10240); // 1MB..10GB
+                        config[input.name] = String(clamped * 1048576);
+                    }
+                } else {
+                    config[input.name] = input.value;
+                }
             }
         }
     });
+
+    // 先根据当前表单值，乐观更新徽章为“已配置/未配置”（未验证），提升即时反馈
+    try {
+        const r2Configured = !!(
+            config.r2_access_key_id &&
+            config.r2_secret_access_key &&
+            config.r2_endpoint &&
+            config.r2_bucket_name
+        );
+        updateR2ConfigStatus({ configured: r2Configured, tested: false, available: false });
+
+        const dbConfigured = !!config.database_url;
+        updateDatabaseConfigStatus({ configured: dbConfigured, tested: false, available: false });
+    } catch (e) {
+        console.warn('预更新徽章失败（可忽略）:', e);
+    }
 
     try {
         const response = await fetch('/api/config/category/app_config', {
@@ -4458,7 +4578,32 @@ async function saveAppConfig() {
             if (result.success) {
                 showNotification('应用配置保存成功，已实时生效', 'success');
                 // 重新加载配置
-                loadAllConfigs();
+                await loadAllConfigs();
+
+                // 保存成功后，调用后端状态检查以确认徽章状态
+                try {
+                    await Promise.allSettled([
+                        checkR2Status(),
+                        checkDatabaseStatus()
+                    ]);
+                } catch (e) {
+                    console.warn('保存后状态检查失败:', e);
+                }
+
+                // 若表单显示为已配置，则进一步发起连接测试，给出最终可用性
+                try {
+                    const r2BadgeNow = document.getElementById('r2-config-badge');
+                    const dbBadgeNow = document.getElementById('db-config-badge');
+                    const r2LooksConfigured = r2BadgeNow && !/未配置/.test(r2BadgeNow.textContent || '');
+                    const dbLooksConfigured = dbBadgeNow && !/未配置/.test(dbBadgeNow.textContent || '');
+
+                    const tests = [];
+                    if (r2LooksConfigured) tests.push(ensureR2TestWithCache());
+                    if (dbLooksConfigured) tests.push(ensureDBTestWithCache());
+                    if (tests.length) await Promise.allSettled(tests);
+                } catch (e) {
+                    console.warn('保存后连接测试失败（忽略）:', e);
+                }
             } else {
                 showNotification('应用配置保存失败: ' + (result.errors || '未知错误'), 'error');
             }
@@ -4502,7 +4647,16 @@ async function saveAllConfigs() {
                         if (input.type === 'checkbox') {
                             allConfig[input.name] = input.checked;
                         } else if (input.value) {
-                            allConfig[input.name] = input.value;
+                            if (input.name === 'max_file_size') {
+                                // Convert MB -> bytes for persistence
+                                const mb = parseInt(input.value, 10);
+                                if (!isNaN(mb) && mb > 0) {
+                                    const clamped = Math.min(Math.max(mb, 1), 10240); // 1MB..10GB
+                                    allConfig[input.name] = String(clamped * 1048576);
+                                }
+                            } else {
+                                allConfig[input.name] = input.value;
+                            }
                         }
                     }
                 });
@@ -4521,6 +4675,47 @@ async function saveAllConfigs() {
             const result = await response.json();
             if (result.success) {
                 showNotification('所有配置保存成功', 'success');
+
+                // 乐观更新徽章（基于刚提交的 allConfig 值）
+                try {
+                    const r2Configured = !!(
+                        allConfig.r2_access_key_id &&
+                        allConfig.r2_secret_access_key &&
+                        allConfig.r2_endpoint &&
+                        allConfig.r2_bucket_name
+                    );
+                    updateR2ConfigStatus({ configured: r2Configured, tested: false, available: false });
+
+                    const dbConfigured = !!allConfig.database_url;
+                    updateDatabaseConfigStatus({ configured: dbConfigured, tested: false, available: false });
+                } catch (e) {
+                    console.warn('预更新徽章失败（可忽略）:', e);
+                }
+
+                // 后端确认当前真实状态
+                try {
+                    await Promise.allSettled([
+                        checkR2Status(),
+                        checkDatabaseStatus()
+                    ]);
+                } catch (e) {
+                    console.warn('保存后状态检查失败:', e);
+                }
+
+                // 保存所有配置后，同样根据徽章触发一次连接测试
+                try {
+                    const r2BadgeNow = document.getElementById('r2-config-badge');
+                    const dbBadgeNow = document.getElementById('db-config-badge');
+                    const r2LooksConfigured = r2BadgeNow && !/未配置/.test(r2BadgeNow.textContent || '');
+                    const dbLooksConfigured = dbBadgeNow && !/未配置/.test(dbBadgeNow.textContent || '');
+
+                    const tests = [];
+                    if (r2LooksConfigured) tests.push(ensureR2TestWithCache());
+                    if (dbLooksConfigured) tests.push(ensureDBTestWithCache());
+                    if (tests.length) await Promise.allSettled(tests);
+                } catch (e) {
+                    console.warn('保存后连接测试失败（忽略）:', e);
+                }
             } else {
                 showNotification('配置保存失败: ' + (result.errors || '未知错误'), 'error');
             }
@@ -5093,6 +5288,60 @@ async function saveImageServiceConfigWithProgress() {
     } finally {
         // 隐藏进度
         hideButtonProgress('save-image-service-btn', 'save-image-service-progress', 'save-image-service-text');
+    }
+}
+
+// 保存安全配置（补充缺失的函数，避免控制台报错）
+async function saveSecurityConfig() {
+    const form = document.getElementById('security-config-form');
+    if (!form) return;
+    const payload = {};
+    const inputs = form.querySelectorAll('input');
+    inputs.forEach(input => {
+        if (!input.name) return;
+        payload[input.name] = input.type === 'checkbox' ? input.checked : input.value;
+    });
+
+    // 仅提交相关字段（支持清空：空字符串也要传递，让后端删除对应环境变量）
+    const config = {};
+    if (payload.secret_key !== undefined) config.secret_key = payload.secret_key;
+    if (payload.access_token_expire_minutes !== undefined) config.access_token_expire_minutes = payload.access_token_expire_minutes;
+
+    try {
+        const resp = await fetch('/api/config/category/app_config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ config })
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const result = await resp.json();
+        if (result.success) {
+            showNotification('安全配置保存成功', 'success');
+            await loadAllConfigs();
+        } else {
+            // 友好格式化后端 errors 对象，避免显示 [object Object]
+            let errMsg = '';
+            if (result.errors) {
+                if (typeof result.errors === 'string') {
+                    errMsg = result.errors;
+                } else {
+                    try {
+                        errMsg = Object.entries(result.errors)
+                          .map(([k,v]) => `${k}: ${Array.isArray(v) ? v.join('; ') : String(v)}`)
+                          .join(' | ');
+                    } catch (e) {
+                        errMsg = JSON.stringify(result.errors);
+                    }
+                }
+            } else if (result.message) {
+                errMsg = result.message;
+            } else {
+                errMsg = '未知错误';
+            }
+            showNotification('安全配置保存失败: ' + errMsg, 'error');
+        }
+    } catch (e) {
+        showNotification('保存失败: ' + e.message, 'error');
     }
 }
 
@@ -6330,7 +6579,19 @@ function displayAvailableModes(data, selectedMode = null) {
 
     // 如果有当前模式，显示其信息
     if (data.current_mode) {
-        showSelectedModeInfo(data.available_modes.find(m => m.mode === data.current_mode), data.current_mode);
+        const current = Array.isArray(data.available_modes)
+            ? data.available_modes.find(m => m && m.mode === data.current_mode)
+            : null;
+        if (current) {
+            showSelectedModeInfo(current, data.current_mode);
+        } else {
+            // 当前模式未出现在可用列表（可能由环境变量或配置文件强制指定），使用降级信息展示
+            showSelectedModeInfo({
+                mode: data.current_mode,
+                name: (data.current_mode || '').toUpperCase(),
+                description: '该模式未在可选列表中，可能由环境变量或配置文件强制设置。'
+            }, data.current_mode);
+        }
     }
 }
 
@@ -6462,13 +6723,21 @@ function showSelectedModeInfo(mode, currentMode) {
     const container = document.getElementById('selected-mode-info');
     if (!container) return;
 
-    const isCurrent = mode.mode === currentMode;
+    if (!mode) {
+        container.style.display = 'none';
+        return;
+    }
+
+    const candidateMode = (mode && typeof mode === 'object') ? (mode.mode || '') : (typeof mode === 'string' ? mode : '');
+    const isCurrent = candidateMode === currentMode;
+    const safeName = (mode && mode.name) ? mode.name : (candidateMode || '未知模式');
+    const safeDesc = (mode && mode.description) ? mode.description : '当前模式未在可用列表中，可能由环境变量或配置文件强制指定。';
 
     let html = '<div style="font-size: 0.85em; color: #6c757d;">';
-    html += `<strong>模式:</strong> ${mode.name}<br>`;
-    html += `<strong>描述:</strong> ${mode.description}<br>`;
+    html += `<strong>模式:</strong> ${safeName}<br>`;
+    html += `<strong>描述:</strong> ${safeDesc}<br>`;
 
-    if (mode.recommended) {
+    if (mode && mode.recommended) {
         html += '<strong>状态:</strong> <span style="color: #f39c12;">⭐ 推荐模式</span><br>';
     }
 
@@ -6691,6 +6960,9 @@ async function syncToExternal() {
                 showNotification('同步到外部数据库成功！', 'success');
                 // 刷新同步状态
                 await refreshBackupHistory();
+                // 同步到外部并不会自动生成“外数据库备份（本地文件）”，
+                // 但为了避免用户困惑，仍刷新一次下拉以显示最新的本地文件（若有）
+                await loadExternalDBBackupList();
             } else {
                 showNotification('同步失败: ' + (result.detail || '未知错误'), 'error');
             }
@@ -6726,6 +6998,7 @@ async function syncFromExternal() {
                 showNotification('从外部数据库恢复成功！', 'success');
                 // 刷新同步状态
                 await refreshBackupHistory();
+                await loadExternalDBBackupList();
             } else {
                 showNotification('恢复失败: ' + (result.detail || '未知错误'), 'error');
             }
@@ -6739,83 +7012,48 @@ async function syncFromExternal() {
     }
 }
 
-// 下载本地最新备份（或选择的本地备份）
+// 下载外数据库备份（选择的外部数据库文件）
 async function downloadLatestBackup() {
     try {
-        // 优先使用选择框中的值
         const select = document.getElementById('db-file-list');
-        let backupName = select && select.value ? select.value : null;
-
-        // 如果下拉值是R2对象key（包含/），则忽略下拉值，回退到本地最新备份
-        if (backupName && backupName.includes('/')) {
-            backupName = null;
-        }
-
-    if (!backupName) {
-            // 回退：获取本地列表的最新一个
-            const resp = await fetch('/api/backup/local/list');
-            if (resp.ok) {
-                const items = await resp.json();
-                if (items && items.length > 0) {
-                    backupName = items[0].name;
-                }
-            }
-        }
-
-        if (!backupName) {
-            showNotification('暂无可下载的本地备份', 'warning');
+        const id = select && select.value ? select.value : '';
+        if (!id) {
+            showNotification('请先选择一个外数据库备份', 'warning');
             return;
         }
-
-        const url = `/api/backup/local/download?backup_name=${encodeURIComponent(backupName)}`;
+        const url = `/api/backup/external/download?id=${encodeURIComponent(id)}`;
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = url;
-        a.download = backupName;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        showNotification('已开始下载本地备份', 'success');
+        showNotification('已开始下载外数据库备份', 'success');
     } catch (error) {
         console.error('下载备份失败:', error);
         showNotification('下载备份失败: ' + error.message, 'error');
     }
 }
 
-// 同步到R2（可选：选择的本地备份，否则同步最新本地备份）
+// 同步到R2（与下拉选择解耦：始终使用“最新的本地备份”进行同步）
 async function syncToR2() {
     try {
         showNotification('正在同步到R2云存储...', 'info');
 
-        const select = document.getElementById('db-file-list');
-        let backupName = '';
-        // 仅当下拉里存的是本地文件名时才使用；若是R2对象key（包含/），则忽略，回退为同步最新本地备份
-        if (select && select.value && !select.value.includes('/')) {
-            backupName = select.value;
-        }
-
-        const url = backupName
-            ? `/api/backup/r2/sync?backup_name=${encodeURIComponent(backupName)}`
-            : '/api/backup/r2/sync';
-
-        const response = await fetch(url, {
+        // 设计约定：实时“同步到R2”与任何下拉选择解耦，直接让后端选取最新本地备份
+        const response = await fetch('/api/backup/r2/sync', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
+            headers: { 'Content-Type': 'application/json' }
         });
 
-    if (response.ok) {
+        if (response.ok) {
             const result = await response.json();
-            // 后端直接返回 sync_info 字段集合，不包裹 success；视 presence of filename/size as成功
             const ok = result && (result.success === true || result.filename || result.created_at || result.timestamp);
             if (ok) {
                 showNotification('同步到R2成功！', 'success');
                 updateR2SyncStatus(result);
-                // 刷新R2状态与下拉列表
                 await checkR2Status();
                 await loadR2FileList();
-        // 不再刷新外部数据库下拉，避免耦合
             } else {
                 showNotification('同步失败: ' + (result.error || '未知错误'), 'error');
             }
@@ -6915,23 +7153,17 @@ async function downloadFromR2() {
         showNotification('下载失败: ' + error.message, 'error');
     }
 }
-// 加载“外部数据库备份”列表到左侧数据库卡片的下拉框（来源：本地备份目录）
+// 加载“外部数据库备份”列表到左侧数据库卡片的下拉框（来源：外部数据库）
 async function loadExternalDBBackupList() {
     try {
-        // 首先加载本地备份（更贴合“外部数据库”的独立性）
-        const localResp = await fetch('/api/backup/local/list');
+        const resp = await fetch('/api/backup/external/list');
         const select = document.getElementById('db-file-list');
         if (!select) return;
 
         let items = [];
-    if (localResp.ok) {
-            const local = await localResp.json();
-            // 仅展示与数据库相关的本地备份
-            items = (local || []).filter(it => {
-                const name = it.name || '';
-        // 外部数据库备份仅展示 external_sql_only 产物
-        return name.startsWith('flowslide_external_sql_');
-            }).map(it => ({ key: it.name, size: it.size, last_modified: it.created }));
+        if (resp.ok) {
+            const data = await resp.json();
+            items = (data || []).map(it => ({ id: it.id, name: it.name, size: it.size, last_modified: it.created_at }));
         }
 
         // 重置并填充
@@ -6939,8 +7171,8 @@ async function loadExternalDBBackupList() {
         if (items && items.length) {
             items.forEach(obj => {
                 const opt = document.createElement('option');
-                opt.value = obj.key; // 对本地，存储 name 即可
-                const filename = (obj.key || '').split('/').pop() || obj.key;
+                opt.value = obj.id; // 存储外部数据库记录ID
+                const filename = (obj.name || '').split('/').pop() || obj.name;
                 const dateStr = obj.last_modified ? new Date(obj.last_modified).toLocaleString() : '';
                 const sizeStr = obj.size ? ` · ${formatFileSize(obj.size)}` : '';
                 opt.textContent = `${filename}${dateStr ? ' (' + dateStr + ')' : ''}${sizeStr}`;
@@ -6971,13 +7203,93 @@ async function loadExternalDBBackupList() {
     }
 }
 
+// —— 本地备份（显示在“备份存储设置”里） ——
+async function loadLocalBackupList(){
+    try{
+        const resp = await fetch('/api/backup/local/list');
+        const select = document.getElementById('local-backup-list');
+        if(!select) return;
+        let items = [];
+        if(resp.ok){
+            const data = await resp.json();
+            items = (data||[]).map(it=>({
+                name: it.name || it.filename || '',
+                size: it.size,
+                created_at: it.created || it.created_at
+            }));
+        }
+        select.innerHTML = '';
+        if(items && items.length){
+            items.forEach(obj=>{
+                const opt = document.createElement('option');
+                opt.value = obj.name;
+                const dateStr = obj.created_at ? new Date(obj.created_at).toLocaleString() : '';
+                const sizeStr = obj.size ? ` · ${formatFileSize(obj.size)}` : '';
+                opt.textContent = `${obj.name}${dateStr? ' ('+dateStr+')':''}${sizeStr}`;
+                select.appendChild(opt);
+            });
+        }else{
+            const opt = document.createElement('option');
+            opt.value='';
+            opt.textContent='暂无本地备份';
+            select.appendChild(opt);
+        }
+    }catch(e){ console.warn('加载本地备份失败', e); }
+}
+
+async function restoreLocalBackup(){
+    const select = document.getElementById('local-backup-list');
+    const name = select && select.value ? select.value : '';
+    if(!name) return alert('请选择一个本地备份');
+    if(!confirm('确定使用所选本地备份进行恢复吗？此操作将覆盖当前数据。')) return;
+    try{
+        const resp = await fetch(`/api/backup/local/restore?backup_name=${encodeURIComponent(name)}`,{ method:'POST' });
+        const data = await resp.json().catch(()=>({}));
+        if(resp.ok && data.success){
+            showNotification('本地备份恢复成功', 'success');
+        }else{
+            showNotification('恢复失败: ' + (data.detail || data.error || '未知错误'), 'error');
+        }
+    }catch(e){ showNotification('恢复失败: ' + e.message, 'error'); }
+}
+
+async function deleteLocalBackup(){
+    const select = document.getElementById('local-backup-list');
+    const name = select && select.value ? select.value : '';
+    if(!name) return alert('请选择一个本地备份');
+    if(!confirm('确定删除所选本地备份吗？此操作不可恢复。')) return;
+    try{
+        const resp = await fetch(`/api/backup/local?backup_name=${encodeURIComponent(name)}`, { method:'DELETE' });
+        const data = await resp.json().catch(()=>({}));
+        if(resp.ok && data.success){
+            showNotification('删除成功', 'success');
+            await loadLocalBackupList();
+        }else{
+            showNotification('删除失败: ' + (data.detail || data.error || '未知错误'), 'error');
+        }
+    }catch(e){ showNotification('删除失败: ' + e.message, 'error'); }
+}
+
+function downloadLocalBackup(){
+    const select = document.getElementById('local-backup-list');
+    const name = select && select.value ? select.value : '';
+    if(!name) return alert('请选择一个本地备份');
+    const url = `/api/backup/local/download?backup_name=${encodeURIComponent(name)}`;
+    const a = document.createElement('a');
+    a.style.display='none';
+    a.href = url;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
 // 加载外部数据库备份类型
 async function loadExternalDBTypes() {
     try {
         const sel = document.getElementById('external-db-type');
         if (!sel) return;
         const resp = await fetch('/api/backup/external/types');
-        let types = ['db_only','external_sql_only'];
+        let types = ['db_only','config_only','media_only','templates_only','reports_only','scripts_only','data_only','full'];
         if (resp.ok) {
             const data = await resp.json();
             if (Array.isArray(data.types)) types = data.types;
@@ -6988,26 +7300,26 @@ async function loadExternalDBTypes() {
     }
 }
 
-// 生成外部数据库备份（不上传到R2）
-async function createExternalBackup() {
+// 生成并同步所选类别到外部数据库（以文件存储在外部数据库表中）
+async function syncCategoryToExternalDB() {
     try {
         const sel = document.getElementById('external-db-type');
         const btype = sel && sel.value ? sel.value : 'db_only';
-        showNotification('正在生成外部数据库备份...', 'info');
-        const resp = await fetch('/api/backup/external/create', {
+        showNotification('正在生成并同步到外部数据库...', 'info');
+        const resp = await fetch('/api/backup/external/sync-type', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ backup_type: btype })
         });
         const data = await resp.json().catch(()=>({}));
         if (resp.ok && data.success) {
-            showNotification('生成成功', 'success');
+            showNotification('生成并同步成功', 'success');
             await loadExternalDBBackupList();
         } else {
-            showNotification('生成失败: ' + (data.error || data.detail || '未知错误'), 'error');
+            showNotification('生成/同步失败: ' + (data.error || data.detail || '未知错误'), 'error');
         }
     } catch(e) {
-        showNotification('生成失败: ' + e.message, 'error');
+        showNotification('生成/同步失败: ' + e.message, 'error');
     }
 }
 
@@ -7153,7 +7465,68 @@ async function deleteSelectedFromR2() {
         showNotification('删除失败: ' + e.message, 'error');
     }
 }
-async function testDatabaseConnection() {
+
+// --- Connectivity test cache and helpers ---
+const CONN_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+function __simpleHash(str){
+    try{
+        let h = 0;
+        for(let i=0;i<str.length;i++){ h = ((h<<5)-h) + str.charCodeAt(i); h|=0; }
+        return String(h);
+    }catch(e){ return String(Date.now()); }
+}
+function getAppField(name){
+    const el = document.querySelector(`#app-config [name="${name}"]`);
+    return el && typeof el.value === 'string' ? el.value : '';
+}
+function computeR2SigFromForm(){
+    return __simpleHash([
+        getAppField('r2_access_key_id')||'',
+        getAppField('r2_secret_access_key')||'',
+        getAppField('r2_endpoint')||'',
+        getAppField('r2_bucket_name')||''
+    ].join('|'));
+}
+function computeDBSigFromForm(){
+    return __simpleHash(getAppField('database_url')||'');
+}
+function setConnSig(kind, sig){ try{ localStorage.setItem(`conn_sig_${kind}`, sig || ''); }catch(_){} }
+function getConnSig(kind){ try{ return localStorage.getItem(`conn_sig_${kind}`) || ''; }catch(_){ return ''; } }
+function setConnResult(kind, obj){ try{ const o = Object.assign({}, obj||{}, { ts: Date.now() }); localStorage.setItem(`conn_result_${kind}`, JSON.stringify(o)); }catch(_){} }
+function getConnResult(kind){ try{ const v = localStorage.getItem(`conn_result_${kind}`); return v? JSON.parse(v): null; }catch(_){ return null; } }
+function getFreshCachedResult(kind, sig){
+    const cached = getConnResult(kind);
+    if(!cached) return null;
+    if(sig && cached.sig && sig !== cached.sig) return null;
+    if(typeof cached.ts !== 'number') return null;
+    if(Date.now() - cached.ts > CONN_CACHE_TTL_MS) return null;
+    return cached;
+}
+async function ensureR2TestWithCache(opts={}){
+    const sig = computeR2SigFromForm();
+    const cached = getFreshCachedResult('r2', sig);
+    if(cached){
+        updateR2ConfigStatus({ configured: !!cached.configured, tested: true, available: !!cached.available });
+        const timeElement = document.getElementById('r2-response-time');
+        if(timeElement) timeElement.textContent = cached.response_time_ms? `${cached.response_time_ms}ms` : '--';
+        return { fromCache: true, cached };
+    }
+    return testR2Connection({ silent: true, sig });
+}
+async function ensureDBTestWithCache(opts={}){
+    const sig = computeDBSigFromForm();
+    const cached = getFreshCachedResult('db', sig);
+    if(cached){
+        updateDatabaseConfigStatus({ configured: !!cached.configured, tested: true, available: !!cached.available });
+        const timeElement = document.getElementById('db-response-time');
+        if(timeElement) timeElement.textContent = cached.response_time_ms? `${cached.response_time_ms}ms` : '--';
+        return { fromCache: true, cached };
+    }
+    return testDatabaseConnection({ silent: true, sig });
+}
+async function testDatabaseConnection(options = {}) {
+    const silent = !!(options && options.silent);
+    const sig = options && options.sig;
     const statusElement = document.getElementById('db-connection-status');
     const timeElement = document.getElementById('db-response-time');
 
@@ -7187,7 +7560,10 @@ async function testDatabaseConnection() {
                         tested: true,
                         available: true
                     });
-                    showNotification('数据库连接正常！', 'success');
+                    if(!silent) showNotification('数据库连接正常！', 'success');
+                    // cache
+                    setConnResult('db', { configured: true, available: true, tested: true, sig, response_time_ms: result.response_time_ms });
+                    if(sig) setConnSig('db', sig);
                 } else {
                     // 未配置外部数据库：显示未配置，不提示成功
                     if (statusElement) {
@@ -7202,7 +7578,9 @@ async function testDatabaseConnection() {
                         tested: false,
                         available: false
                     });
-                    showNotification('未配置外部数据库，当前使用本地SQLite', 'info');
+                    if(!silent) showNotification('未配置外部数据库，当前使用本地SQLite', 'info');
+                    setConnResult('db', { configured: false, available: false, tested: false, sig, response_time_ms: null });
+                    if(sig) setConnSig('db', sig);
                 }
             } else {
                 if (statusElement) {
@@ -7220,8 +7598,9 @@ async function testDatabaseConnection() {
                     tested: configured,
                     available: false
                 });
-
-                showNotification('数据库连接异常: ' + (result.message || '未知错误'), 'error');
+                if(!silent) showNotification('数据库连接异常: ' + (result.message || '未知错误'), 'error');
+                setConnResult('db', { configured, available: false, tested: !!configured, sig, response_time_ms: result.response_time_ms });
+                if(sig) setConnSig('db', sig);
             }
         } else {
             if (statusElement) {
@@ -7238,8 +7617,9 @@ async function testDatabaseConnection() {
                 tested: false,
                 available: false
             });
-
-            showNotification('数据库连接测试失败', 'error');
+            if(!silent) showNotification('数据库连接测试失败', 'error');
+            setConnResult('db', { configured: false, available: false, tested: false, sig, response_time_ms: null });
+            if(sig) setConnSig('db', sig);
         }
     } catch (error) {
         console.error('测试数据库连接失败:', error);
@@ -7257,17 +7637,22 @@ async function testDatabaseConnection() {
             tested: false,
             available: false
         });
-
-        showNotification('测试失败: ' + error.message, 'error');
+        if(!silent) showNotification('测试失败: ' + error.message, 'error');
+        setConnResult('db', { configured: false, available: false, tested: false, sig, response_time_ms: null });
+        if(sig) setConnSig('db', sig);
     }
 }
 
 // 刷新同步历史
 async function refreshBackupHistory() {
     try {
-        const response = await fetch('/api/backup/history');
-        if (response.ok) {
-            const result = await response.json();
+        // Fetch local backup history and r2/local status in parallel for summary
+        const [respHistory, respStatus] = await Promise.all([
+            fetch('/api/backup/history'),
+            fetch('/api/backup/status')
+        ]);
+        if (respHistory.ok) {
+            const result = await respHistory.json();
             if (result.success) {
                 const backups = result.backups || [];
                 updateBackupHistory(backups);
@@ -7279,9 +7664,27 @@ async function refreshBackupHistory() {
                         created_at: latestBackup.created_at,
                         size: latestBackup.size
                     });
+                    // 填充“最新备份（文件名）/备份时间”
+                    const nameEl = document.getElementById('summary-latest-local-name');
+                    const timeEl = document.getElementById('summary-latest-local-time');
+                    if (nameEl) nameEl.textContent = latestBackup.filename || '--';
+                    if (timeEl) timeEl.textContent = latestBackup.created_at ? new Date(latestBackup.created_at).toLocaleString() : '--';
                 }
             } else {
                 console.error('获取同步历史失败:', result.error);
+            }
+        }
+
+        // 使用 /api/backup/status 获取 R2 最近对象（若可用）
+        if (respStatus.ok) {
+            const status = await respStatus.json();
+            const r2Latest = status && status.r2_latest ? status.r2_latest : null;
+            const r2NameEl = document.getElementById('summary-latest-r2-name');
+            const r2TimeEl = document.getElementById('summary-latest-r2-time');
+            if (r2NameEl) r2NameEl.textContent = (r2Latest && (r2Latest.key || r2Latest.name)) ? (r2Latest.key || r2Latest.name) : '--';
+            if (r2TimeEl) {
+                const t = r2Latest && (r2Latest.last_modified || r2Latest.created_at);
+                r2TimeEl.textContent = t ? new Date(t).toLocaleString() : '--';
             }
         }
     } catch (error) {
@@ -7583,6 +7986,7 @@ async function initDataBackupPage() {
     await loadBackupCategories();
     await loadExternalDBBackupList();
     await loadR2FileList();
+    await loadLocalBackupList();
     await checkDatabaseStatus();
 
     // 非阻塞：在后台触发 R2 与 数据库 连接测试（仅在已配置时），避免阻塞页面加载
@@ -7596,11 +8000,11 @@ async function initDataBackupPage() {
 
         if (r2Configured) {
             updateR2ConfigStatus({ configured: true, tested: false, available: false });
-            testR2Connection().catch(e=>console.warn('后台R2检测失败', e));
+            ensureR2TestWithCache().catch(e=>console.warn('后台R2检测失败', e));
         }
         if (dbConfigured) {
             updateDatabaseConfigStatus({ configured: true, tested: false, available: false });
-            testDatabaseConnection().catch(e=>console.warn('后台DB检测失败', e));
+            ensureDBTestWithCache().catch(e=>console.warn('后台DB检测失败', e));
         }
     }catch(e){
         console.warn('启动后台检测失败', e);
@@ -7696,13 +8100,36 @@ async function checkR2Status() {
                 const r2Status = result.r2_status;
                 console.log('📊 R2状态信息:', r2Status);
 
-                // 更新R2配置状态
-                updateR2ConfigStatus({
-                    configured: r2Status.configured,
-                    tested: false, // 配置检查不进行连接测试
-                    available: false // 配置检查不进行连接测试
-                });
-                console.log('✅ R2状态已更新到UI');
+                // 优先使用最近一次的连接测试缓存，避免徽章反复回到“未验证”
+                try {
+                    const sig = computeR2SigFromForm();
+                    const cached = getFreshCachedResult('r2', sig);
+                    if (r2Status.configured && cached) {
+                        updateR2ConfigStatus({
+                            configured: true,
+                            tested: true,
+                            available: !!cached.available
+                        });
+                        const timeElement = document.getElementById('r2-response-time');
+                        if (timeElement) timeElement.textContent = cached.response_time_ms ? `${cached.response_time_ms}ms` : '--';
+                        console.log('✅ R2状态已用缓存结果更新到UI');
+                    } else {
+                        // 无缓存或未配置，仅显示配置状态
+                        updateR2ConfigStatus({
+                            configured: !!r2Status.configured,
+                            tested: false,
+                            available: false
+                        });
+                        console.log('✅ R2状态（配置级）已更新到UI');
+                    }
+                } catch (e) {
+                    console.warn('读取R2缓存失败，回退为配置级状态', e);
+                    updateR2ConfigStatus({
+                        configured: !!r2Status.configured,
+                        tested: false,
+                        available: false
+                    });
+                }
             }
         } else {
             console.error('❌ R2 API请求失败:', response.status);
@@ -7753,13 +8180,35 @@ async function checkDatabaseStatus() {
                 const dbStatus = result.db_status;
                 console.log('📊 数据库状态信息:', dbStatus);
 
-                // 更新数据库配置状态
-                updateDatabaseConfigStatus({
-                    configured: dbStatus.configured,
-                    tested: false, // 配置检查不进行连接测试
-                    available: false // 配置检查不进行连接测试
-                });
-                console.log('✅ 数据库状态已更新到UI');
+                // 优先使用最近一次的连接测试缓存
+                try {
+                    const sig = computeDBSigFromForm();
+                    const cached = getFreshCachedResult('db', sig);
+                    if (dbStatus.configured && cached) {
+                        updateDatabaseConfigStatus({
+                            configured: true,
+                            tested: true,
+                            available: !!cached.available
+                        });
+                        const timeElement = document.getElementById('db-response-time');
+                        if (timeElement) timeElement.textContent = cached.response_time_ms ? `${cached.response_time_ms}ms` : '--';
+                        console.log('✅ 数据库状态已用缓存结果更新到UI');
+                    } else {
+                        updateDatabaseConfigStatus({
+                            configured: !!dbStatus.configured,
+                            tested: false,
+                            available: false
+                        });
+                        console.log('✅ 数据库状态（配置级）已更新到UI');
+                    }
+                } catch (e) {
+                    console.warn('读取数据库缓存失败，回退为配置级状态', e);
+                    updateDatabaseConfigStatus({
+                        configured: !!dbStatus.configured,
+                        tested: false,
+                        available: false
+                    });
+                }
             }
         } else {
             console.error('❌ 数据库API请求失败:', response.status);
@@ -7777,7 +8226,9 @@ async function checkDatabaseStatus() {
 }
 
 // 测试R2连接
-async function testR2Connection() {
+async function testR2Connection(options = {}) {
+    const silent = !!(options && options.silent);
+    const sig = options && options.sig;
     const statusElement = document.getElementById('r2-sync-status');
 
     if (statusElement) {
@@ -7803,8 +8254,9 @@ async function testR2Connection() {
                 if (timeElement && result.response_time_ms) {
                     timeElement.textContent = `${result.response_time_ms}ms`;
                 }
-
-                showNotification('R2连接正常！', 'success');
+                if(!silent) showNotification('R2连接正常！', 'success');
+                setConnResult('r2', { configured, available: !!configured, tested: !!configured, sig, response_time_ms: result.response_time_ms });
+                if(sig) setConnSig('r2', sig);
             } else {
                 const configured = typeof result.configured === 'boolean' ? result.configured : false;
                 updateR2ConfigStatus({
@@ -7820,8 +8272,9 @@ async function testR2Connection() {
                 } else {
                     timeElement.textContent = '--';
                 }
-
-                showNotification('R2连接异常: ' + (result.message || '未知错误'), 'error');
+                if(!silent) showNotification('R2连接异常: ' + (result.message || '未知错误'), 'error');
+                setConnResult('r2', { configured, available: false, tested: !!configured, sig, response_time_ms: result.response_time_ms });
+                if(sig) setConnSig('r2', sig);
             }
         } else {
             // 请求失败，显示未配置
@@ -7836,8 +8289,9 @@ async function testR2Connection() {
             if (timeElement) {
                 timeElement.textContent = '--';
             }
-
-            showNotification('R2连接测试失败', 'error');
+            if(!silent) showNotification('R2连接测试失败', 'error');
+            setConnResult('r2', { configured: false, available: false, tested: false, sig, response_time_ms: null });
+            if(sig) setConnSig('r2', sig);
         }
     } catch (error) {
         console.error('测试R2连接失败:', error);
@@ -7854,8 +8308,9 @@ async function testR2Connection() {
         if (timeElement) {
             timeElement.textContent = '--';
         }
-
-        showNotification('测试失败: ' + error.message, 'error');
+        if(!silent) showNotification('测试失败: ' + error.message, 'error');
+        setConnResult('r2', { configured: false, available: false, tested: false, sig, response_time_ms: null });
+        if(sig) setConnSig('r2', sig);
     }
 }
 
@@ -7901,16 +8356,14 @@ document.addEventListener('click', function(e) {
 
 // 注意：本页面的“数据库备份”下拉展示外部（R2）数据库备份列表，已不提供本地创建入口。
 
-// 使用下拉框选择的“外部数据库备份”（本地文件）进行恢复
+// 使用下拉框选择的“外部数据库备份”进行恢复
 async function restoreSelectedDB() {
     const select = document.getElementById('db-file-list');
-    const key = select && select.value ? select.value : '';
-    if (!key) return alert('请先选择一个外部数据库备份');
-    if (!confirm('确定要使用所选外部数据库备份进行恢复吗？此操作将覆盖当前数据。')) return;
+    const id = select && select.value ? select.value : '';
+    if (!id) return alert('请先选择一个外数据库备份');
+    if (!confirm('确定要使用所选外数据库备份进行恢复吗？此操作将覆盖当前数据。')) return;
     try {
-        // 通过本地恢复接口恢复（文件名即本地备份名）
-        const params = new URLSearchParams({ backup_name: key });
-        const resp = await fetch(`/api/backup/local/restore?${params.toString()}`, { method: 'POST' });
+        const resp = await fetch(`/api/backup/external/restore?id=${encodeURIComponent(id)}`, { method: 'POST' });
         const data = await resp.json().catch(() => ({}));
         if (resp.ok && (data.success || data.filename)) {
             showNotification('恢复成功', 'success');
@@ -7922,15 +8375,14 @@ async function restoreSelectedDB() {
     }
 }
 
-// 删除选择的“外部数据库备份”（本地文件）
+// 删除选择的“外部数据库备份”
 async function deleteSelectedDB() {
     const select = document.getElementById('db-file-list');
-    const key = select && select.value ? select.value : '';
-    if (!key) return alert('请先选择一个外部数据库备份');
-    if (!confirm('确定删除所选外部数据库备份吗？此操作不可恢复。')) return;
+    const id = select && select.value ? select.value : '';
+    if (!id) return alert('请先选择一个外数据库备份');
+    if (!confirm('确定删除所选外数据库备份吗？此操作不可恢复。')) return;
     try {
-        const params = new URLSearchParams({ backup_name: key });
-        const resp = await fetch(`/api/backup/local?${params.toString()}`, { method: 'DELETE' });
+        const resp = await fetch(`/api/backup/external/object?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
         const data = await resp.json().catch(() => ({}));
         if (resp.ok && data.success) {
             showNotification('删除成功', 'success');
@@ -7951,7 +8403,7 @@ document.addEventListener('visibilitychange', function() {
         if (dataBackupTab && dataBackupTab.classList.contains('active')) {
             // 只有在数据备份标签页激活时才检查
             setTimeout(() => {
-                testDatabaseConnection();
+                ensureDBTestWithCache();
             }, 500);
         }
     }

@@ -4,6 +4,9 @@ from pydantic import BaseModel
 from typing import Optional, List
 import os
 import tempfile
+import uuid
+from datetime import datetime
+from sqlalchemy import text
 
 from ..auth.middleware import require_admin, require_auth
 from ..services.backup_manager import BackupManager, ensure_schema, get_conn
@@ -196,9 +199,18 @@ async def create_local_backup(req: LocalBackupCreate, user=Depends(require_auth)
 
 # ---- External DB specific backups (independent from R2) ----
 
+from ..database.database import db_manager
+
+# Reuse the same categories supported by R2 for external DB file artifacts
 EXTERNAL_DB_BACKUP_TYPES = [
-    "db_only",            # SQLite + optional external pg_dump inside zip
-    "external_sql_only",  # Only external pg_dump SQL inside zip
+    "full",
+    "db_only",
+    "config_only",
+    "media_only",
+    "templates_only",
+    "reports_only",
+    "scripts_only",
+    "data_only",
 ]
 
 
@@ -214,14 +226,15 @@ class ExternalBackupCreate(BaseModel):
 @router.post("/api/backup/external/create")
 async def create_external_backup(req: ExternalBackupCreate, user=Depends(require_auth)):
     try:
+        # Backward-compatible endpoint: still create local files only
         btype = (req.backup_type or "").strip()
-        if btype not in EXTERNAL_DB_BACKUP_TYPES:
-            return {"success": False, "error": f"Unsupported external backup_type: {btype}"}
         if btype == "external_sql_only":
             path = await svc_create_external_sql()  # type: ignore[misc]
         else:
-            # db_only but do NOT upload to R2 by default here
-            path = await svc_create_backup("db_only", upload_to_r2=False)  # type: ignore[misc]
+            # default to creating categorized local backup without uploading to R2
+            if btype not in SUPPORTED_TYPES:
+                btype = "db_only"
+            path = await svc_create_backup(btype, upload_to_r2=False)  # type: ignore[misc]
         return {"success": True, "path": path}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -263,6 +276,198 @@ def delete_local_backup(backup_name: str, user=Depends(require_auth)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ---- New: store backup artifacts in external database (BLOB/bytea) ----
+
+def _ensure_external_backups_table():
+    """Create a table on the configured external database to store backup files if it doesn't exist."""
+    if not getattr(db_manager, "external_engine", None):
+        raise HTTPException(status_code=400, detail="External database not configured")
+    dialect = db_manager.external_engine.dialect.name  # 'postgresql' | 'mysql' | others
+    if dialect == "postgresql":
+        ddl = (
+            "CREATE TABLE IF NOT EXISTS flowslide_backups ("
+            " id TEXT PRIMARY KEY,"
+            " name TEXT NOT NULL,"
+            " type TEXT NOT NULL,"
+            " size BIGINT,"
+            " checksum TEXT,"
+            " created_at TIMESTAMP DEFAULT NOW(),"
+            " data BYTEA NOT NULL"
+            ")"
+        )
+    else:
+        # default to MySQL-compatible DDL; LONGBLOB to hold large files
+        ddl = (
+            "CREATE TABLE IF NOT EXISTS flowslide_backups ("
+            " id VARCHAR(64) PRIMARY KEY,"
+            " name VARCHAR(255) NOT NULL,"
+            " type VARCHAR(64) NOT NULL,"
+            " size BIGINT,"
+            " checksum VARCHAR(128),"
+            " created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+            " data LONGBLOB NOT NULL"
+            ")"
+        )
+    with db_manager.external_engine.begin() as conn:
+        conn.exec_driver_sql(ddl)
+
+
+class ExternalSyncTypeRequest(BaseModel):
+    backup_type: str
+
+
+@router.post("/api/backup/external/sync-type")
+async def sync_type_to_external_db(req: ExternalSyncTypeRequest, user=Depends(require_auth)):
+    """Create a categorized backup and push it into the external database table as a file artifact."""
+    if not getattr(db_manager, "external_engine", None):
+        return {"success": False, "error": "External database not configured"}
+    try:
+        btype = (req.backup_type or "").strip()
+        if btype not in EXTERNAL_DB_BACKUP_TYPES:
+            return {"success": False, "error": f"Unsupported backup_type: {btype}"}
+
+        # Create a local backup of the specified type
+        path = await backup_service.create_backup(btype)  # type: ignore[misc]
+        # Read file bytes and store in external DB
+        file_name = os.path.basename(path)
+        file_size = os.path.getsize(path) if os.path.exists(path) else None
+        file_id = uuid.uuid4().hex
+
+        _ensure_external_backups_table()
+        with open(path, "rb") as f:
+            data = f.read()
+        # Use DEFAULT for created_at in both dialects; bind parameters safely
+        with db_manager.external_engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO flowslide_backups (id, name, type, size, checksum, data)
+                    VALUES (:id, :name, :type, :size, :checksum, :data)
+                    """
+                ),
+                {
+                    "id": file_id,
+                    "name": file_name,
+                    "type": btype,
+                    "size": file_size,
+                    "checksum": None,
+                    "data": data,
+                },
+            )
+        return {"success": True, "id": file_id, "name": file_name, "type": btype, "size": file_size}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/api/backup/external/list")
+def list_external_db_backups(user=Depends(require_auth)):
+    if not getattr(db_manager, "external_engine", None):
+        return []
+    try:
+        _ensure_external_backups_table()
+        with db_manager.external_engine.connect() as conn:
+            rows = conn.execute(
+                text("SELECT id, name, type, size, created_at FROM flowslide_backups ORDER BY created_at DESC")
+            ).fetchall()
+            items = []
+            for r in rows:
+                try:
+                    d = dict(r)
+                except Exception:
+                    # fallback tuple mapping
+                    d = {
+                        "id": r[0],
+                        "name": r[1],
+                        "type": r[2],
+                        "size": r[3],
+                        "created_at": r[4],
+                    }
+                items.append(d)
+            return items
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/backup/external/restore")
+async def restore_from_external_db(id: str = Query(..., description="External backup id"), user=Depends(require_auth)):
+    if not getattr(db_manager, "external_engine", None):
+        raise HTTPException(status_code=400, detail="External database not configured")
+    try:
+        _ensure_external_backups_table()
+        with db_manager.external_engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT name, data FROM flowslide_backups WHERE id = :id"),
+                {"id": id},
+            ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="backup not found")
+        try:
+            name, data = row[0], row[1]
+        except Exception:
+            m = dict(row)
+            name, data = m.get("name"), m.get("data")
+        if not name or not data:
+            raise HTTPException(status_code=404, detail="invalid backup record")
+
+        # Write to local backups dir
+        os.makedirs("backups", exist_ok=True)
+        local_path = os.path.join("backups", name)
+        with open(local_path, "wb") as f:
+            f.write(data)
+        # Reuse local restore service
+        ok = await svc_restore_local_backup(name)  # type: ignore[misc]
+        return {"success": bool(ok)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/api/backup/external/object")
+def delete_external_db_backup(id: str, user=Depends(require_auth)):
+    if not getattr(db_manager, "external_engine", None):
+        raise HTTPException(status_code=400, detail="External database not configured")
+    try:
+        _ensure_external_backups_table()
+        with db_manager.external_engine.begin() as conn:
+            conn.execute(text("DELETE FROM flowslide_backups WHERE id = :id"), {"id": id})
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/backup/external/download")
+def download_external_db_backup(id: str, user=Depends(require_auth)):
+    if not getattr(db_manager, "external_engine", None):
+        raise HTTPException(status_code=400, detail="External database not configured")
+    try:
+        _ensure_external_backups_table()
+        with db_manager.external_engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT name, data FROM flowslide_backups WHERE id = :id"),
+                {"id": id},
+            ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="backup not found")
+        try:
+            name, data = row[0], row[1]
+        except Exception:
+            m = dict(row)
+            name, data = m.get("name"), m.get("data")
+        if not name or not data:
+            raise HTTPException(status_code=404, detail="invalid backup record")
+
+        tmp = tempfile.NamedTemporaryFile(delete=False)
+        tmp.write(data)
+        tmp.flush()
+        tmp.close()
+        return FileResponse(path=tmp.name, filename=name, media_type="application/zip")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/backup/r2/list")
 async def list_r2(type: Optional[str] = Query(None, description="Filter by backup type contained in filename"), prefix: Optional[str] = Query(None, description="S3 key prefix to list (e.g., backups/database/ or backups/categories/<type>/)")):
     try:
@@ -283,17 +488,44 @@ async def sync_latest_to_r2(backup_name: Optional[str] = None, user=Depends(requ
         # Pre-check R2 configuration to avoid hard 500s
         if not backup_service._is_r2_configured():
             return {"success": False, "error": "R2 not configured. Please set R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT, R2_BUCKET_NAME."}
-        # Reuse service method which accepts optional path: we pick path by name if provided
+
+        # Resolve path to upload. If no valid local zip is specified and none exist, create one temporarily.
         from pathlib import Path
-        target_path = None
+        target_path: Optional[Path] = None
+        created_temp_file: Optional[Path] = None  # track if we created a new local .zip just for this sync
+
         if backup_name:
             p = os.path.join("backups", backup_name)
-            if not os.path.exists(p):
-                return {"success": False, "error": "Local backup not found"}
-            target_path = Path(p)
+            # 仅当给定名称对应的本地 .zip 文件真实存在时才使用；否则回退为“最新本地备份”
+            if os.path.exists(p) and p.lower().endswith(".zip"):
+                target_path = Path(p)
+
+        # 若未指定具体文件且本地没有任何备份文件，则自动创建一份“全量”备份再上传，
+        # 以满足“无需本地已有备份也能一键同步到R2”的需求（与“同步到外部”保持一致）。
+        if target_path is None:
+            try:
+                existing = await svc_list_local_backups()  # type: ignore[misc]
+            except Exception:
+                existing = []
+            if not existing:
+                # 生成包含数据库、配置等内容的备份，但先不直接上传到R2，避免重复上传
+                created_path = await backup_service.create_backup("full", upload_to_r2=False)  # type: ignore[misc]
+                if created_path and os.path.exists(created_path):
+                    target_path = Path(created_path)
+                    created_temp_file = target_path
+
         info = await backup_service.sync_to_r2(target_path)  # type: ignore[misc]
         # Normalize success payload for UI
         info["success"] = True
+
+        # 如果本次为“无本地备份时临时创建再上传”的场景，上传成功后删除该本地.zip，不在 backups 目录中留下文件
+        try:
+            if created_temp_file and created_temp_file.exists():
+                os.remove(created_temp_file)
+        except Exception:
+            # best-effort cleanup; ignore failures
+            pass
+
         return info
     except HTTPException:
         raise
@@ -335,11 +567,19 @@ async def sync_type_to_r2(req: SyncTypeRequest, user=Depends(require_auth)):
             return {"success": False, "error": f"Unsupported backup_type: {btype}"}
 
         # Create categorized backup on the fly
-        path = await backup_service.create_backup(btype)  # type: ignore[misc]
+        # Avoid auto-upload here to prevent double upload and to control cleanup
+        path = await backup_service.create_backup(btype, upload_to_r2=False)  # type: ignore[misc]
         from pathlib import Path
-        info = await backup_service.sync_to_r2(Path(path))  # type: ignore[misc]
+        p = Path(path)
+        info = await backup_service.sync_to_r2(p)  # type: ignore[misc]
         info["success"] = True
         info["backup_type"] = btype
+        # Delete the local zip after successful upload to avoid leaving artifacts
+        try:
+            if p.exists():
+                os.remove(p)
+        except Exception:
+            pass
         return info
     except Exception as e:
         return {"success": False, "error": str(e)}

@@ -79,7 +79,10 @@ class SimpleConfig:
                 "Using default SECRET_KEY! Please set a secure SECRET_KEY environment variable in production.",
                 UserWarning,
             )
-        self.access_token_expire_minutes = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+        # 如果未设置则采用 0（永不过期）；UI清空或填 0 会从 .env 删除该变量
+        self.access_token_expire_minutes = int(
+            os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "0")
+        )
 
         # Uploads
         max_file_size_env = os.getenv("MAX_FILE_SIZE")

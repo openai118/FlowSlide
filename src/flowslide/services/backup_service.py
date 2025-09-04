@@ -793,6 +793,7 @@ class BackupService:
                 s3_client.download_file,
                 self.r2_config['bucket'],
                 backup_key,
+            # Cache of R2 config; will be refreshed on demand from env
                 str(local_backup_path)
             )
             logger.info("✅ 文件下载完成")
@@ -801,7 +802,26 @@ class BackupService:
             error_msg = e.response['Error']['Message']
             logger.error(f"❌ 下载失败 (AWS Error {error_code}): {error_msg}")
             raise Exception(f"从R2下载备份失败: {error_msg}")
-        except Exception as e:
+            """Return True if R2 env is present. Always refresh from env first.
+
+            This allows updates made via the UI (which writes .env and calls load_dotenv)
+            to be recognized without restarting the app.
+            """
+            try:
+                # Reload .env into process env and refresh cached config
+                load_dotenv(override=True)
+            except Exception:
+                # Best-effort; even if reload fails, try reading current process env
+                pass
+
+            self.r2_config.update({
+                "access_key": os.getenv("R2_ACCESS_KEY_ID"),
+                "secret_key": os.getenv("R2_SECRET_ACCESS_KEY"),
+                "endpoint": os.getenv("R2_ENDPOINT"),
+                "bucket": os.getenv("R2_BUCKET_NAME")
+            })
+
+            return all(self.r2_config.values())
             error_msg = f"下载备份文件时发生错误: {str(e)}"
             logger.error(f"❌ {error_msg}")
             raise Exception(error_msg)

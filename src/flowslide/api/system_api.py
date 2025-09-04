@@ -67,18 +67,27 @@ async def get_r2_status():
     try:
         logger.info("☁️ Checking R2 status...")
 
-        # 检查R2配置：优先使用运行时 backup_service 中的 r2_config（管理员通过 UI 保存后会写入 .env 并同步到 runtime），
-        # 如果 backup_service 未配置再回退到环境变量
+        # 选择配置来源策略：
+        # - 若 runtime 内的 r2_config 已“完整配置”（四项均非空），优先使用 runtime；
+        # - 否则优先使用当前环境变量（UI 保存后 .env 和 os.environ 已更新）；
+        # - 最后兜底使用 runtime（即使不完整），避免返回空结构。
         r2_runtime = getattr(backup_service, 'r2_config', None)
-        if r2_runtime and any(r2_runtime.values()):
-            r2_config = r2_runtime
+        runtime_has_all = bool(r2_runtime and all(r2_runtime.get(k) for k in ("access_key", "secret_key", "endpoint", "bucket")))
+
+        env_config = {
+            "access_key": os.getenv("R2_ACCESS_KEY_ID"),
+            "secret_key": os.getenv("R2_SECRET_ACCESS_KEY"),
+            "endpoint": os.getenv("R2_ENDPOINT"),
+            "bucket": os.getenv("R2_BUCKET_NAME")
+        }
+        env_has_any = any(env_config.values())
+
+        if runtime_has_all:
+            r2_config = r2_runtime  # 完整的运行时配置
+        elif env_has_any:
+            r2_config = env_config   # 使用最新环境变量（来自 UI 保存）
         else:
-            r2_config = {
-                "access_key": os.getenv("R2_ACCESS_KEY_ID"),
-                "secret_key": os.getenv("R2_SECRET_ACCESS_KEY"),
-                "endpoint": os.getenv("R2_ENDPOINT"),
-                "bucket": os.getenv("R2_BUCKET_NAME")
-            }
+            r2_config = r2_runtime or env_config  # 兜底
 
         # 检查配置完整性
         is_configured = all((v for v in (r2_config.get('access_key'), r2_config.get('secret_key'), r2_config.get('endpoint'), r2_config.get('bucket'))))
@@ -267,33 +276,49 @@ async def test_database_connection():
 
 @router.get("/r2-test")
 async def test_r2_connection():
-    """测试R2云存储连接"""
+    """测试R2云存储连接
+    优先使用运行时 backup_service.r2_config（若完整），否则回退到环境变量。
+    """
     import time
-    import boto3
-    from botocore.exceptions import NoCredentialsError, ClientError
 
     try:
+        # 延迟导入以更好地处理缺失依赖
+        try:
+            import boto3  # type: ignore
+            from botocore.exceptions import NoCredentialsError, ClientError  # type: ignore
+        except Exception as import_err:
+            logger.error(f"❌ boto3 未安装或导入失败: {import_err}")
+            return {
+                "success": False,
+                "configured": False,
+                "message": "缺少boto3依赖，无法测试R2连接",
+                "response_time_ms": None
+            }
+
         logger.info("☁️ Testing R2 connection...")
 
         # 记录开始时间
         start_time = time.time()
 
-        # 检查R2配置
-        r2_config = {
+        # 选择配置来源（与 /r2-status 保持一致）
+        r2_runtime = getattr(backup_service, 'r2_config', None) or {}
+        runtime_has_all = all(r2_runtime.get(k) for k in ("access_key", "secret_key", "endpoint", "bucket"))
+        env_config = {
             "access_key": os.getenv("R2_ACCESS_KEY_ID"),
             "secret_key": os.getenv("R2_SECRET_ACCESS_KEY"),
             "endpoint": os.getenv("R2_ENDPOINT"),
             "bucket": os.getenv("R2_BUCKET_NAME")
         }
+        env_has_all = all(env_config.get(k) for k in ("access_key", "secret_key", "endpoint", "bucket"))
 
-        # 检查配置完整性
-        is_configured = all(r2_config.values())
+        r2_config = r2_runtime if runtime_has_all else env_config
+        is_configured = all(r2_config.get(k) for k in ("access_key", "secret_key", "endpoint", "bucket"))
 
         if not is_configured:
             return {
                 "success": False,
                 "configured": False,
-                "message": "R2配置不完整，请检查所有必需的环境变量",
+                "message": "R2配置不完整，请在设置中填写并保存 Access Key/Secret/Endpoint/Bucket",
                 "response_time_ms": round((time.time() - start_time) * 1000, 2)
             }
 
@@ -308,7 +333,7 @@ async def test_r2_connection():
 
         # 测试连接：尝试列出bucket中的对象（最多1个）
         try:
-            response = s3_client.list_objects_v2(
+            _ = s3_client.list_objects_v2(
                 Bucket=r2_config["bucket"],
                 MaxKeys=1
             )
@@ -335,11 +360,9 @@ async def test_r2_connection():
                 "message": "R2凭据无效，请检查Access Key和Secret Key",
                 "response_time_ms": response_time
             }
-
         except ClientError as e:
             response_time = round((time.time() - start_time) * 1000, 2)
             error_code = e.response.get('Error', {}).get('Code', 'Unknown')
-
             if error_code == 'NoSuchBucket':
                 logger.error("❌ R2 bucket does not exist")
                 return {
@@ -364,7 +387,6 @@ async def test_r2_connection():
                     "message": f"R2连接失败: {error_code}",
                     "response_time_ms": response_time
                 }
-
         except Exception as e:
             response_time = round((time.time() - start_time) * 1000, 2)
             logger.error(f"❌ R2 connection test failed: {e}")
