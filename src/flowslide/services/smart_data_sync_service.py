@@ -267,7 +267,10 @@ class DataSyncManager:
         targets = []
 
         # 检查外部数据库
-        if db_manager.external_url and db_manager.sync_enabled:
+        has_external = bool(getattr(db_manager, "external_engine", None)) and isinstance(db_manager.external_url, str) and (
+            db_manager.external_url.startswith("postgresql://") or db_manager.external_url.startswith("mysql://")
+        )
+        if has_external and db_manager.sync_enabled:
             targets.append("external")
 
         # 检查R2
@@ -284,7 +287,10 @@ class DataSyncManager:
         enable_sync = os.getenv("ENABLE_DATA_SYNC", "false").lower() == "true"
         sync_directions = os.getenv("SYNC_DIRECTIONS", "local_to_external,external_to_local")
 
-        if db_manager.external_url:
+        has_external = bool(getattr(db_manager, "external_engine", None)) and isinstance(db_manager.external_url, str) and (
+            db_manager.external_url.startswith("postgresql://") or db_manager.external_url.startswith("mysql://")
+        )
+        if has_external:
             # 如果明确启用了同步，或者是混合模式
             if enable_sync or db_manager.sync_enabled:
                 # 解析同步方向配置
@@ -297,29 +303,6 @@ class DataSyncManager:
                 directions.append("external_to_local")
 
         logger.info(f"🔄 Sync directions determined: {directions} (enable_sync: {enable_sync}, db_sync_enabled: {db_manager.sync_enabled})")
-        return directions
-        """根据配置确定同步方向"""
-        directions = []
-
-        # 检查外部数据库配置
-        has_external_db = bool(db_manager.external_url)
-        # 检查R2配置
-        has_r2 = bool(os.getenv("R2_ACCESS_KEY_ID"))
-
-        if has_external_db:
-            enable_sync = os.getenv("ENABLE_DATA_SYNC", "false").lower() == "true"
-            sync_directions = os.getenv("SYNC_DIRECTIONS", "local_to_external,external_to_local")
-
-            if enable_sync or db_manager.sync_enabled:
-                if "local_to_external" in sync_directions:
-                    directions.append("local_to_external")
-                if "external_to_local" in sync_directions:
-                    directions.append("external_to_local")
-            elif db_manager.database_type == "postgresql":
-                directions.append("external_to_local")
-
-        logger.info(f"🔄 Sync directions: {directions}")
-        logger.info(f"🔄 External DB: {has_external_db}, R2: {has_r2}")
         return directions
 
     async def start_smart_sync(self):

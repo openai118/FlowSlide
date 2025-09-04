@@ -453,12 +453,28 @@ class ConfigService:
 
         config = {}
 
+        # 对某些敏感/引导性字段，如果环境变量未设置，则不要使用 schema 默认值去“填充”，避免页面误以为已配置
+        # 注：应用运行时的数据库仍使用 simple_config 中的 LOCAL_DATABASE_URL，不受这里影响
+        always_empty_when_unset = {
+            "database_url",  # 不预填 sqlite://...，仅作 placeholder 提示
+            # 下面这些默认本就为空，这里列出以示明确
+            "api_anon_key",
+            "api_service_key",
+            "r2_access_key_id",
+            "r2_secret_access_key",
+            "r2_endpoint",
+            "r2_bucket_name",
+        }
+
         for key, schema in self.config_schema.items():
             env_key = key.upper()
             value = os.getenv(env_key)
 
             if value is None:
-                value = schema.get("default", "")
+                if key in always_empty_when_unset:
+                    value = ""
+                else:
+                    value = schema.get("default", "")
 
             # Convert boolean strings
             if schema["type"] == "boolean":

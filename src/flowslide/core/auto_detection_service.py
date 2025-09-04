@@ -74,11 +74,11 @@ class AutoDetectionService:
             # 动态导入配置以避免循环导入
             from .simple_config import DATABASE_URL, LOCAL_DATABASE_URL, DATABASE_MODE
             
-            database_url = DATABASE_URL
+            database_url = (DATABASE_URL or "").strip()
             database_mode = DATABASE_MODE
             
             # 如果使用的是本地数据库URL，则认为是本地模式
-            if database_url == LOCAL_DATABASE_URL or database_url.startswith("sqlite:///"):
+            if (not database_url) or database_url == LOCAL_DATABASE_URL or database_url.startswith("sqlite:///"):
                 result = ServiceCheckResult(
                     status=ServiceStatus.UNAVAILABLE,
                     message="使用的是本地SQLite数据库"
@@ -86,8 +86,8 @@ class AutoDetectionService:
                 self._cache_result("external_db", result)
                 return result
 
-            # 如果数据库模式是local，则认为是本地数据库
-            if database_mode == "local":
+            # 如果数据库模式显式为 local，则强制认为是本地数据库
+            if (database_mode or "").strip().lower() == "local":
                 result = ServiceCheckResult(
                     status=ServiceStatus.UNAVAILABLE,
                     message="数据库模式设置为local，使用本地数据库"
@@ -104,7 +104,7 @@ class AutoDetectionService:
                 self._cache_result("external_db", result)
                 return result
 
-            # 尝试连接数据库
+            # 尝试连接数据库（只有连接成功才算 AVAILABLE）
             import time
             start_time = time.time()
 

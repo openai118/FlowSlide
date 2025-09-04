@@ -101,9 +101,17 @@ async def get_available_modes_based_on_config():
     """根据环境变量配置获取可用的部署模式"""
     import os
 
-    # 检查环境变量配置
-    has_external_db = bool(os.getenv("DATABASE_URL"))
-    has_r2 = bool(os.getenv("R2_ACCESS_KEY_ID"))
+    # 检查环境变量配置（更严格判定）
+    db_url = (os.getenv("DATABASE_URL") or "").strip()
+    # 仅当为非SQLite且为常见外部驱动时视为外部数据库
+    has_external_db = db_url.startswith("postgresql://") or db_url.startswith("mysql://")
+
+    # R2 需关键配置齐全才视为可用
+    r2_access_key = (os.getenv("R2_ACCESS_KEY_ID") or "").strip()
+    r2_secret = (os.getenv("R2_SECRET_ACCESS_KEY") or "").strip()
+    r2_endpoint = (os.getenv("R2_ENDPOINT") or "").strip()
+    r2_bucket = (os.getenv("R2_BUCKET_NAME") or "").strip()
+    has_r2 = all([r2_access_key, r2_secret, r2_endpoint, r2_bucket])
 
     # 根据配置情况确定可用的模式
     available_modes = []
@@ -148,6 +156,7 @@ async def get_available_modes_based_on_config():
         })
 
     # 获取当前模式
+    # 使用已初始化的当前模式，避免在此处重复触发检测导致界面闪烁
     current_mode = get_current_deployment_mode().value
 
     return {

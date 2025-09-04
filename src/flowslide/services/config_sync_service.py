@@ -28,8 +28,9 @@ class ConfigSyncService:
 
     def _check_sync_enabled(self) -> bool:
         """检查是否启用配置同步"""
-        # 配置同步需要在有外部数据库时启用
-        has_external_db = bool(os.getenv("DATABASE_URL"))
+        # 配置同步需要在外部数据库配置完整且指向非SQLite时启用
+        db_url = (os.getenv("DATABASE_URL") or "").strip()
+        has_external_db = db_url.startswith("postgresql://") or db_url.startswith("mysql://")
         sync_enabled = os.getenv("ENABLE_CONFIG_SYNC", "true").lower() == "true"
         return has_external_db and sync_enabled
 
@@ -38,17 +39,24 @@ class ConfigSyncService:
         try:
             logger.info("🔄 Syncing system configs from environment variables")
 
+            # 解析外部数据库URL，仅当为标准外部前缀时才视为有效
+            ext_db_url = (os.getenv("DATABASE_URL") or "").strip()
+            ext_db_url_is_valid = ext_db_url.startswith("postgresql://") or ext_db_url.startswith("mysql://")
+
             system_configs = [
                 # 数据库配置
-                {
-                    "config_key": "database_url",
-                    "config_value": os.getenv("DATABASE_URL"),
-                    "config_type": "password",
-                    "category": "database",
-                    "description": "外部数据库连接URL",
-                    "is_sensitive": True,
-                    "is_system": True
-                },
+                # 仅在外部数据库配置为标准前缀时写入
+                *([
+                    {
+                        "config_key": "database_url",
+                        "config_value": ext_db_url,
+                        "config_type": "password",
+                        "category": "database",
+                        "description": "外部数据库连接URL",
+                        "is_sensitive": True,
+                        "is_system": True
+                    }
+                ] if ext_db_url_is_valid else []),
                 # 安全配置
                 {
                     "config_key": "admin_username",

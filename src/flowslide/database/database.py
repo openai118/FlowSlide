@@ -29,8 +29,21 @@ class DatabaseManager:
     def __init__(self):
         self.local_url = LOCAL_DATABASE_URL
         self.local_async_url = LOCAL_DATABASE_URL.replace("sqlite:///", "sqlite+aiosqlite:///")
-        self.external_url = EXTERNAL_DATABASE_URL
-        self.external_async_url = EXTERNAL_DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://") if EXTERNAL_DATABASE_URL.startswith("postgresql://") else ""
+        # 仅接受真正的外部数据库URL（postgresql/mysql），否则视为未配置
+        _raw_ext = (EXTERNAL_DATABASE_URL or "").strip()
+        if _raw_ext.startswith("postgresql://") or _raw_ext.startswith("mysql://"):
+            self.external_url = _raw_ext
+            if _raw_ext.startswith("postgresql://"):
+                self.external_async_url = _raw_ext.replace("postgresql://", "postgresql+asyncpg://")
+            elif _raw_ext.startswith("mysql://"):
+                self.external_async_url = _raw_ext.replace("mysql://", "mysql+aiomysql://")
+            else:
+                self.external_async_url = ""
+        else:
+            if _raw_ext:
+                logger.info("ℹ️ DATABASE_URL is not a supported external DB (postgresql/mysql). Ignoring for external engines.")
+            self.external_url = ""
+            self.external_async_url = ""
 
         self.primary_engine = None
         self.primary_async_engine = None

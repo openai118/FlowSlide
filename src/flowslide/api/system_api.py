@@ -19,37 +19,38 @@ logger = logging.getLogger(__name__)
 
 @router.get("/db-status")
 async def get_database_status():
-    """获取数据库配置状态"""
+    """获取数据库配置状态
+    注意：这里的 configured 仅表示“是否配置了外部数据库（DATABASE_URL 为 postgresql/mysql）”，
+    本地 SQLite 的存在不视为已配置外部数据库。
+    """
     try:
-        logger.info("�️ Checking database status...")
+        logger.info("🗄️ Checking database status...")
 
-        # 检查数据库配置：优先使用运行时的 db_manager 信息（应用中保存的配置），回退到环境变量
-        db_type = getattr(db_manager, 'database_type', None)
-        db_url = os.getenv("DATABASE_URL")
-        # 当 db_manager 指明为 sqlite 时我们认为本地数据库可用
-        if db_type:
-            is_configured = True
-        else:
-            is_configured = bool(db_url and db_url.strip())
+        # 运行时主库类型（sqlite / postgresql ...）仅用于展示
+        runtime_db_type = getattr(db_manager, 'database_type', None)
+
+        # 外部数据库配置仅来自环境（或后续你可能写入到 env 的配置中心）
+        raw_db_url = (os.getenv("DATABASE_URL") or "").strip()
+        is_external_configured = raw_db_url.startswith("postgresql://") or raw_db_url.startswith("mysql://")
 
         status_info = {
-            "configured": is_configured,
+            "configured": is_external_configured,
             "timestamp": datetime.now().isoformat(),
-            "database_type": db_type if db_type else ('sqlite' if (db_url and db_url.startswith('sqlite')) else 'unknown')
+            "database_type": runtime_db_type or 'unknown'
         }
 
-        # 解析db_url类型作为补充信息
-        if db_url:
-            if db_url.startswith("sqlite"):
+        # 提供 db_url 的类型解析（仅作提示用途）
+        if raw_db_url:
+            if raw_db_url.startswith("sqlite"):
                 status_info["db_type"] = "SQLite"
-            elif db_url.startswith("postgresql"):
+            elif raw_db_url.startswith("postgresql"):
                 status_info["db_type"] = "PostgreSQL"
-            elif db_url.startswith("mysql"):
+            elif raw_db_url.startswith("mysql"):
                 status_info["db_type"] = "MySQL"
             else:
                 status_info["db_type"] = "Unknown"
 
-        logger.info(f"✅ Database status checked: {'configured' if is_configured else 'not configured'}")
+        logger.info(f"✅ Database status checked: {'configured' if is_external_configured else 'not configured'}")
         return {
             "success": True,
             "db_status": status_info
@@ -193,9 +194,9 @@ async def test_database_connection():
         if not is_configured:
             return {
                 "success": True,  # 改为True，因为本地数据库总是可用的
+                "configured": False,
                 "message": "使用本地SQLite数据库，未配置外部数据库",
                 "database_type": "sqlite",
-                "configured": False,
                 "response_time_ms": round((time.time() - start_time) * 1000, 2)
             }
 
@@ -232,14 +233,15 @@ async def test_database_connection():
                     logger.info(f"✅ Database connection test passed in {response_time}ms")
                     return {
                         "success": True,
+                        "configured": True,
                         "message": f"数据库连接正常 ({db_manager.database_type})",
                         "database_type": db_manager.database_type,
-                        "configured": True,
                         "response_time_ms": response_time
                     }
                 else:
                     return {
                         "success": False,
+                        "configured": True,
                         "message": "数据库连接异常：查询返回异常结果",
                         "response_time_ms": response_time
                     }
@@ -249,6 +251,7 @@ async def test_database_connection():
             logger.error(f"❌ Database connection test failed: {e}")
             return {
                 "success": False,
+                "configured": True,
                 "message": f"数据库连接异常: {str(e)}",
                 "response_time_ms": response_time
             }
@@ -289,6 +292,7 @@ async def test_r2_connection():
         if not is_configured:
             return {
                 "success": False,
+                "configured": False,
                 "message": "R2配置不完整，请检查所有必需的环境变量",
                 "response_time_ms": round((time.time() - start_time) * 1000, 2)
             }
@@ -315,6 +319,7 @@ async def test_r2_connection():
             logger.info(f"✅ R2 connection test passed in {response_time}ms")
             return {
                 "success": True,
+                "configured": True,
                 "message": "R2连接正常",
                 "bucket": r2_config["bucket"],
                 "endpoint": r2_config["endpoint"],
@@ -326,6 +331,7 @@ async def test_r2_connection():
             logger.error("❌ R2 credentials invalid")
             return {
                 "success": False,
+                "configured": True,
                 "message": "R2凭据无效，请检查Access Key和Secret Key",
                 "response_time_ms": response_time
             }
@@ -338,6 +344,7 @@ async def test_r2_connection():
                 logger.error("❌ R2 bucket does not exist")
                 return {
                     "success": False,
+                    "configured": True,
                     "message": f"R2存储桶 '{r2_config['bucket']}' 不存在",
                     "response_time_ms": response_time
                 }
@@ -345,6 +352,7 @@ async def test_r2_connection():
                 logger.error("❌ R2 access denied")
                 return {
                     "success": False,
+                    "configured": True,
                     "message": "R2访问被拒绝，请检查权限设置",
                     "response_time_ms": response_time
                 }
@@ -352,6 +360,7 @@ async def test_r2_connection():
                 logger.error(f"❌ R2 connection failed: {error_code}")
                 return {
                     "success": False,
+                    "configured": True,
                     "message": f"R2连接失败: {error_code}",
                     "response_time_ms": response_time
                 }
@@ -361,6 +370,7 @@ async def test_r2_connection():
             logger.error(f"❌ R2 connection test failed: {e}")
             return {
                 "success": False,
+                "configured": True,
                 "message": f"R2连接异常: {str(e)}",
                 "response_time_ms": response_time
             }

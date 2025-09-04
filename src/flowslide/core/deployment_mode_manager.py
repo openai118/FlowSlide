@@ -242,7 +242,8 @@ class DeploymentModeManager:
             logger.warning(f"自动检测失败，使用传统方法: {e}")
 
             # 回退到传统检测方法
-            # 使用simple_config中的实际数据库URL而不是环境变量
+            # 注意：回退路径无法做连通性测试，因此为避免误判，回退时不启用 external
+            # 使用simple_config中的实际数据库URL仅用于日志与本地/SQLite识别
             try:
                 from .simple_config import DATABASE_URL
                 database_url = DATABASE_URL
@@ -255,34 +256,19 @@ class DeploymentModeManager:
             has_r2 = bool(os.getenv("R2_ACCESS_KEY_ID"))
             logger.info(f"R2_ACCESS_KEY_ID存在: {has_r2}")
 
-            # 检查是否是外部数据库（非SQLite）
+            # 为避免在无法测试时误入 external，回退路径一律视为无外部数据库
             has_external_db = False
-            if database_url:
-                # 检查是否是PostgreSQL或其他外部数据库
-                if database_url.startswith("postgresql://") or database_url.startswith("mysql://"):
-                    has_external_db = True
-                    logger.info("检测到PostgreSQL/MySQL外部数据库")
-                # 如果是SQLite，检查是否是本地文件路径
-                elif database_url.startswith("sqlite:///"):
-                    has_external_db = False  # 本地SQLite
-                    logger.info("检测到本地SQLite数据库")
-                else:
-                    # 其他情况默认为外部数据库
-                    has_external_db = True
-                    logger.info("检测到其他类型的外部数据库")
+            if database_url.startswith("sqlite:///"):
+                logger.info("检测到本地SQLite数据库（回退模式）")
+            elif database_url:
+                logger.info("检测到可能的外部数据库URL，但回退模式不启用 external")
             else:
-                logger.info("未找到数据库URL")
+                logger.info("未找到数据库URL（回退模式）")
 
             logger.info(f"has_external_db: {has_external_db}, has_r2: {has_r2}")
 
             # 自动检测模式
-            if has_external_db and has_r2:
-                logger.info("检测到模式: LOCAL_EXTERNAL_R2")
-                return DeploymentMode.LOCAL_EXTERNAL_R2
-            elif has_external_db:
-                logger.info("检测到模式: LOCAL_EXTERNAL")
-                return DeploymentMode.LOCAL_EXTERNAL
-            elif has_r2:
+            if has_r2:
                 logger.info("检测到模式: LOCAL_R2")
                 return DeploymentMode.LOCAL_R2
             else:
@@ -576,7 +562,16 @@ class DeploymentModeManager:
     async def _check_external_db_connection(self) -> bool:
         """检查外部数据库连接"""
         try:
-            # 实现外部数据库连接检查
+            db_url = (os.getenv("DATABASE_URL") or "").strip()
+            if not (db_url.startswith("postgresql://") or db_url.startswith("mysql://")):
+                logger.warning("未配置有效的外部数据库URL，跳过连接检查")
+                return False
+
+            # 进行一次轻量连接测试
+            from sqlalchemy import create_engine, text
+            engine = create_engine(db_url, pool_pre_ping=True)
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
             return True
         except Exception as e:
             logger.error(f"外部数据库连接检查失败: {e}")
@@ -694,7 +689,14 @@ async def start_mode_monitoring():
 
 def get_current_deployment_mode() -> DeploymentMode:
     """获取当前部署模式"""
-    return mode_manager.detect_current_mode()
+    # Prefer the initialized/current value to avoid flicker; detect once if empty
+    try:
+        if mode_manager.current_mode is None:
+            mode_manager.current_mode = mode_manager.detect_current_mode()
+        return mode_manager.current_mode
+    except Exception:
+        # Fallback to detection if anything goes wrong
+        return mode_manager.detect_current_mode()
 
 
 def is_mode_switch_in_progress() -> bool:

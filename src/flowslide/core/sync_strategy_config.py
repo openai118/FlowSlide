@@ -62,8 +62,9 @@ class DataSyncStrategy:
         except Exception as e:
             logger.warning(f"自动检测失败，使用传统方法: {e}")
 
-            # 回退到传统检测方法
-            has_external_db = bool(os.getenv("DATABASE_URL"))
+            # 回退到传统检测方法（严格但不做连通性），仅用于最小可用判断
+            db_url = (os.getenv("DATABASE_URL") or "").strip()
+            has_external_db = db_url.startswith("postgresql://") or db_url.startswith("mysql://")
             has_r2 = bool(os.getenv("R2_ACCESS_KEY_ID"))
 
             if has_external_db and has_r2:
@@ -341,12 +342,14 @@ class DataSyncStrategy:
 
     def get_deployment_info(self) -> Dict[str, Any]:
         """获取部署模式信息"""
+        db_url = (os.getenv("DATABASE_URL") or "").strip()
+        has_external_db = db_url.startswith("postgresql://") or db_url.startswith("mysql://")
         return {
             "deployment_mode": self.deployment_mode.value,
-            "has_external_db": bool(os.getenv("DATABASE_URL")),
+            "has_external_db": has_external_db,
             "has_r2": bool(os.getenv("R2_ACCESS_KEY_ID")),
             "local_db_type": "sqlite",
-            "external_db_url": bool(os.getenv("DATABASE_URL")),
+            "external_db_url": has_external_db,
             "r2_endpoint": bool(os.getenv("R2_ENDPOINT")),
             "r2_bucket": os.getenv("R2_BUCKET_NAME")
         }

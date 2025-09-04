@@ -137,7 +137,6 @@ jobs:
             ${{ steps.meta.outputs.labels }}
             org.opencontainers.image.licenses=Apache-2.0
           cache-from: type=gha
-          cache-to: type=gha,mode=max
           build-args: |
             BUILDKIT_INLINE_CACHE=1
             CACHE_BUST=${{ github.sha }}
@@ -155,7 +154,6 @@ jobs:
             ${{ steps.meta.outputs.labels }}
             org.opencontainers.image.licenses=Apache-2.0
           cache-from: type=gha
-          cache-to: type=gha,mode=max
           build-args: |
             BUILDKIT_INLINE_CACHE=1
             CACHE_BUST=${{ github.sha }}

@@ -674,11 +674,11 @@
                             <div style="display:flex; flex-direction:column; gap:10px;">
                                 <div class="form-group">
                                     <label>R2_ACCESS_KEY_ID</label>
-                                    <input type="text" name="r2_access_key_id" placeholder="R2_ACCESS_KEY_ID" value="{{ current_config.get('r2_access_key_id','') }}" autocomplete="off">
+                                    <input type="{{ 'text' if is_admin else 'password' }}" name="r2_access_key_id" placeholder="R2_ACCESS_KEY_ID" value="{{ current_config.get('r2_access_key_id','') }}" autocomplete="off">
                                 </div>
                                 <div class="form-group">
                                     <label>R2_SECRET_ACCESS_KEY</label>
-                                    <input type="password" name="r2_secret_access_key" placeholder="R2_SECRET_ACCESS_KEY" value="{{ current_config.get('r2_secret_access_key','') }}" autocomplete="current-password">
+                                    <input type="{{ 'text' if is_admin else 'password' }}" name="r2_secret_access_key" placeholder="R2_SECRET_ACCESS_KEY" value="{{ current_config.get('r2_secret_access_key','') }}" autocomplete="off">
                                 </div>
                                 <div class="form-group">
                                     <label>R2_ENDPOINT</label>
@@ -703,7 +703,7 @@
                             <div style="display:flex; flex-direction:column; gap:10px;">
                                 <div class="form-group">
                                     <label>DATABASE_URL</label>
-                                    <input type="password" name="database_url" placeholder="sqlite:///./flowslide.db" data-sensitive="true" value="{{ current_config.get('database_url','') }}" autocomplete="off">
+                                    <input type="{{ 'text' if is_admin else 'password' }}" name="database_url" placeholder="sqlite:///./flowslide.db" data-sensitive="true" value="{{ current_config.get('database_url','') }}" autocomplete="off">
                                 </div>
                                 <div class="form-group">
                                     <label>API_URL</label>
@@ -711,11 +711,11 @@
                                 </div>
                                 <div class="form-group">
                                     <label>API_ANON_KEY</label>
-                                    <input type="password" name="api_anon_key" placeholder="API_ANON_KEY" value="{{ current_config.get('api_anon_key','') }}" autocomplete="current-password">
+                                    <input type="{{ 'text' if is_admin else 'password' }}" name="api_anon_key" placeholder="API_ANON_KEY" value="{{ current_config.get('api_anon_key','') }}" autocomplete="off">
                                 </div>
                                 <div class="form-group">
                                     <label>API_SERVICE_KEY</label>
-                                    <input type="password" name="api_service_key" placeholder="API_SERVICE_KEY" value="{{ current_config.get('api_service_key','') }}" autocomplete="current-password">
+                                    <input type="{{ 'text' if is_admin else 'password' }}" name="api_service_key" placeholder="API_SERVICE_KEY" value="{{ current_config.get('api_service_key','') }}" autocomplete="off">
                                 </div>
                                 <div class="form-group">
                                     <label>STORAGE_BUCKET</label>
@@ -7171,22 +7171,39 @@ async function testDatabaseConnection() {
         if (response.ok) {
             const result = await response.json();
             if (result.success) {
-                if (statusElement) {
-                    statusElement.textContent = '✅ 正常';
-                    statusElement.style.background = '#27ae60'; // 绿色
-                }
-                if (timeElement && result.response_time_ms) {
-                    timeElement.textContent = `${result.response_time_ms}ms`;
-                }
+                // 使用后端返回的 configured 标记，避免误判
+                const configured = typeof result.configured === 'boolean' ? result.configured : false;
 
-                // 更新配置状态为已配置且可用
-                updateDatabaseConfigStatus({
-                    configured: true,
-                    tested: true,
-                    available: true
-                });
-
-                showNotification('数据库连接正常！', 'success');
+                if (configured) {
+                    if (statusElement) {
+                        statusElement.textContent = '✅ 正常';
+                        statusElement.style.background = '#27ae60'; // 绿色
+                    }
+                    if (timeElement && result.response_time_ms) {
+                        timeElement.textContent = `${result.response_time_ms}ms`;
+                    }
+                    updateDatabaseConfigStatus({
+                        configured: true,
+                        tested: true,
+                        available: true
+                    });
+                    showNotification('数据库连接正常！', 'success');
+                } else {
+                    // 未配置外部数据库：显示未配置，不提示成功
+                    if (statusElement) {
+                        statusElement.textContent = '未配置';
+                        statusElement.style.background = '#6c757d'; // 灰色
+                    }
+                    if (timeElement) {
+                        timeElement.textContent = '--';
+                    }
+                    updateDatabaseConfigStatus({
+                        configured: false,
+                        tested: false,
+                        available: false
+                    });
+                    showNotification('未配置外部数据库，当前使用本地SQLite', 'info');
+                }
             } else {
                 if (statusElement) {
                     statusElement.textContent = '❌ 异常';
@@ -7196,10 +7213,11 @@ async function testDatabaseConnection() {
                     timeElement.textContent = '--';
                 }
 
-                // 更新配置状态为已配置但不可用
+                // 如果后端返回 configured:false，则显示未配置
+                const configured = typeof result.configured === 'boolean' ? result.configured : false;
                 updateDatabaseConfigStatus({
-                    configured: true,
-                    tested: true,
+                    configured,
+                    tested: configured,
                     available: false
                 });
 
@@ -7214,10 +7232,10 @@ async function testDatabaseConnection() {
                 timeElement.textContent = '--';
             }
 
-            // 更新配置状态为已配置但不可用
+            // 请求失败，保持为未配置
             updateDatabaseConfigStatus({
-                configured: true,
-                tested: true,
+                configured: false,
+                tested: false,
                 available: false
             });
 
@@ -7233,10 +7251,10 @@ async function testDatabaseConnection() {
             timeElement.textContent = '--';
         }
 
-        // 更新配置状态为已配置但不可用
+        // 异常时显示未配置（外部库未设定）
         updateDatabaseConfigStatus({
-            configured: true,
-            tested: true,
+            configured: false,
+            tested: false,
             available: false
         });
 
@@ -7567,15 +7585,23 @@ async function initDataBackupPage() {
     await loadR2FileList();
     await checkDatabaseStatus();
 
-    // 非阻塞：在后台触发 R2 与 数据库 连接测试，避免阻塞页面加载
+    // 非阻塞：在后台触发 R2 与 数据库 连接测试（仅在已配置时），避免阻塞页面加载
     try{
-        // 将状态标记为检测中
-        updateR2ConfigStatus({ configured: true, tested: false, available: false });
-        updateDatabaseConfigStatus({ configured: true, tested: false, available: false });
+        // 由前面的 checkR2Status()/checkDatabaseStatus() 已设置过 configured
+        // 这里读取徽章状态，若未配置则不触发测试
+        const r2Badge = document.getElementById('r2-config-badge');
+        const dbBadge = document.getElementById('db-config-badge');
+        const r2Configured = r2Badge && !/未配置/.test(r2Badge.textContent || '');
+        const dbConfigured = dbBadge && !/未配置/.test(dbBadge.textContent || '');
 
-        // Fire-and-forget tests (they will update the UI when done)
-        testR2Connection().catch(e=>console.warn('后台R2检测失败', e));
-        testDatabaseConnection().catch(e=>console.warn('后台DB检测失败', e));
+        if (r2Configured) {
+            updateR2ConfigStatus({ configured: true, tested: false, available: false });
+            testR2Connection().catch(e=>console.warn('后台R2检测失败', e));
+        }
+        if (dbConfigured) {
+            updateDatabaseConfigStatus({ configured: true, tested: false, available: false });
+            testDatabaseConnection().catch(e=>console.warn('后台DB检测失败', e));
+        }
     }catch(e){
         console.warn('启动后台检测失败', e);
     }
@@ -7764,11 +7790,12 @@ async function testR2Connection() {
         if (response.ok) {
             const result = await response.json();
             if (result.success) {
-                // 更新配置状态为已配置且可用
+                const configured = typeof result.configured === 'boolean' ? result.configured : true;
+                // 更新配置状态
                 updateR2ConfigStatus({
-                    configured: true,
-                    tested: true,
-                    available: true
+                    configured,
+                    tested: configured,
+                    available: configured && true
                 });
 
                 // 更新响应时间显示
@@ -7779,10 +7806,10 @@ async function testR2Connection() {
 
                 showNotification('R2连接正常！', 'success');
             } else {
-                // 更新配置状态为已配置但不可用
+                const configured = typeof result.configured === 'boolean' ? result.configured : false;
                 updateR2ConfigStatus({
-                    configured: true,
-                    tested: true,
+                    configured,
+                    tested: configured,
                     available: false
                 });
 
@@ -7797,10 +7824,10 @@ async function testR2Connection() {
                 showNotification('R2连接异常: ' + (result.message || '未知错误'), 'error');
             }
         } else {
-            // 更新配置状态为已配置但不可用
+            // 请求失败，显示未配置
             updateR2ConfigStatus({
-                configured: true,
-                tested: true,
+                configured: false,
+                tested: false,
                 available: false
             });
 
@@ -7815,10 +7842,10 @@ async function testR2Connection() {
     } catch (error) {
         console.error('测试R2连接失败:', error);
 
-        // 更新配置状态为已配置但不可用
+        // 异常时显示未配置
         updateR2ConfigStatus({
-            configured: true,
-            tested: true,
+            configured: false,
+            tested: false,
             available: false
         });
 
