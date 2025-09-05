@@ -3526,11 +3526,11 @@ async function testAnthropicProvider(config) {
     }
 }
 
-// 测试 Google 提供者
+// 测试 Google 提供者（通过后端代理，避免 CORS/鉴权差异）
 async function testGoogleProvider(config) {
     try {
         let apiKey = config.google_api_key;
-    let baseUrl = (config.google_base_url || '').trim() || 'https://generativelanguage.googleapis.com';
+        let baseUrl = (config.google_base_url || '').trim() || 'https://generativelanguage.googleapis.com';
         let model = config.google_model || 'gemini-1.5-flash';
 
         // 如果前端没有输入API Key，尝试从后端获取
@@ -3548,49 +3548,43 @@ async function testGoogleProvider(config) {
             throw new Error('请配置 Google API Key');
         }
 
-        // 调用 Google Gemini API 进行测试
-    // 允许自定义 Base URL（例如代理服务）。Google Gemini REST 路径通常为 /v1beta/models/...:generateContent
-    const gbase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-    const response = await fetch(`${gbase}/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        // 通过后端代理测试，支持官方域名和自定义网关
+        const proxyResp = await fetch('/api/ai/providers/google/test', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                contents: [
-                    {
-                        parts: [
-                            {
-                                text: 'Say "Hello, I am working!" in exactly 5 words.'
-                            }
-                        ]
-                    }
-                ],
-                generationConfig: {
-                    maxOutputTokens: 20,
-                    temperature: 0
-                }
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ base_url: baseUrl, api_key: apiKey, model })
         });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+        let proxyData = null;
+        try { proxyData = await proxyResp.json(); } catch(_) {}
+
+        if (!proxyResp.ok) {
+            const msg = proxyData?.error || proxyData?.detail || `HTTP ${proxyResp.status}: ${proxyResp.statusText}`;
+            throw new Error(msg);
         }
 
-        const data = await response.json();
+        if (proxyData && (proxyData.status === 'success' || proxyData.success === true)) {
+            return {
+                success: true,
+                provider: 'google',
+                model: proxyData.model || model,
+                response_preview: proxyData.response_preview || '',
+                usage: proxyData.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+            };
+        }
 
-        return {
-            success: true,
-            provider: 'google',
-            model: model,
-            response_preview: data.candidates[0].content.parts[0].text,
-            usage: {
-                prompt_tokens: data.usageMetadata?.promptTokenCount || 0,
-                completion_tokens: data.usageMetadata?.candidatesTokenCount || 0,
-                total_tokens: data.usageMetadata?.totalTokenCount || 0
-            }
-        };
+        // 非标准成功结构时，尝试容错
+        if (proxyData && proxyResp.ok) {
+            return {
+                success: true,
+                provider: 'google',
+                model: proxyData.model || model,
+                response_preview: proxyData.response_preview || '',
+                usage: proxyData.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+            };
+        }
+
+        throw new Error(proxyData?.error || proxyData?.detail || '测试失败');
     } catch (error) {
         return {
             success: false,
@@ -4979,6 +4973,17 @@ function cacheTestResult(provider, success) {
     };
     localStorage.setItem(cacheKey, JSON.stringify(result));
     providerTestCache.set(provider, result);
+
+    // 立即刷新可用性计数、默认单选可用性与下拉选项
+    try {
+        const availableProviders = getAvailableProviders();
+        updateAvailableProvidersCount(availableProviders.length);
+        updateDefaultProviderRadios(availableProviders);
+        // 同步“当前提供者”下拉选项（只基于缓存结果）
+        initCurrentProviderSelect();
+    } catch (e) {
+        console.warn('刷新可用性状态失败:', e);
+    }
 }
 
 // 从localStorage加载缓存的测试结果

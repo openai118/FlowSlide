@@ -31,6 +31,9 @@ class AuthMiddleware:
             "/api/auth/login",
             "/api/auth/logout",
             "/api/auth/check",
+            # Provider test endpoints should be callable without auth
+            "/api/ai/providers/ollama/test",
+            "/api/ai/providers/google/test",
             "/docs",
             "/redoc",
             "/openapi.json",
@@ -51,6 +54,7 @@ class AuthMiddleware:
             "/temp/",  # 添加temp目录用于图片缓存访问
             "/api/image/view/",  # 图床图片访问无需认证
             "/api/image/thumbnail/",  # 图片缩略图访问无需认证
+            "/api/ai/providers/",  # 允许AI提供者测试与模型探测路由公开访问
             "/api/backup/",  # 备份API无需认证（用于自动化备份）
             "/api/system/",  # 系统监控API无需认证
             "/api/deployment/",  # 部署模式API无需认证

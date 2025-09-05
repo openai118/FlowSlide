@@ -6,6 +6,7 @@ import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
 
 from ..core.config import ai_config
 from ..services.deep_research_service import DEEPResearchService
@@ -168,7 +169,7 @@ async def test_ai_provider(provider_name: str, request: Request):
         except Exception:
             body = None  # No JSON body, use backend config
 
-        # Special handling for OpenAI provider with frontend config
+    # Special handling for OpenAI provider with frontend config
         if provider_name == "openai" and body:
             base_url = body.get("base_url")
             api_key = body.get("api_key")
@@ -220,6 +221,123 @@ async def test_ai_provider(provider_name: str, request: Request):
                                 status_code=response.status,
                                 detail=f"API error: {error_text}",
                             )
+
+        # Special handling for Ollama: perform direct HTTP checks and return 200 JSON on errors
+        if provider_name == "ollama":
+            data = body if isinstance(body, dict) else {}
+            base_url = (data.get("base_url") or "http://localhost:11434").rstrip("/")
+            model = (data.get("model") or "llama2").strip()
+            api_key = (data.get("api_key") or "").strip() or None
+
+            # Build URLs
+            def _join(base: str, *parts: str) -> str:
+                base = base.rstrip("/")
+                suffix = "/".join(p.strip("/") for p in parts if p)
+                return f"{base}/{suffix}" if suffix else base
+
+            tags_url = _join(base_url, "api", "tags")
+            gen_url = _join(base_url, "api", "generate")
+
+            headers = {}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+                headers["X-Api-Key"] = api_key
+
+            # 1) Ping service
+            try:
+                async with aiohttp.ClientSession() as session:
+                    try:
+                        async with session.get(tags_url, headers=headers or None, timeout=10) as ping:
+                            ping_text = await ping.text()
+                            if ping.status != 200:
+                                return JSONResponse({
+                                    "success": False,
+                                    "status": "error",
+                                    "provider": "ollama",
+                                    "error": f"无法连接到 Ollama ({ping.status})",
+                                    "detail": ping_text[:500],
+                                }, status_code=200)
+
+                            # Optional: validate model presence if parsable
+                            try:
+                                import json as _json
+                                tags_json = _json.loads(ping_text)
+                                if isinstance(tags_json, dict) and model:
+                                    names = [m.get("name") or m.get("model") for m in tags_json.get("models", [])]
+                                    if names and model not in names:
+                                        return JSONResponse({
+                                            "success": False,
+                                            "status": "error",
+                                            "provider": "ollama",
+                                            "error": f"模型未找到: {model}",
+                                            "detail": f"已安装模型: {', '.join([n for n in names if n])}",
+                                        }, status_code=200)
+                            except Exception:
+                                pass
+                    except Exception:
+                        return JSONResponse({
+                            "success": False,
+                            "status": "error",
+                            "provider": "ollama",
+                            "error": "Ollama 服务未运行或无法连接",
+                            "detail": f"请确保服务可通过 {base_url} 访问，并已拉取模型 {model}",
+                        }, status_code=200)
+
+                    # 2) Try a tiny generate
+                    payload = {
+                        "model": model,
+                        "prompt": 'Say "Hello, I am working!" in exactly 5 words.',
+                        "stream": False,
+                        "options": {"num_predict": 20, "temperature": 0},
+                    }
+
+                    try:
+                        async with session.post(gen_url, json=payload, headers=headers or None, timeout=30) as resp:
+                            text = await resp.text()
+                            if resp.status == 200:
+                                try:
+                                    import json as _json
+                                    resp_json = _json.loads(text)
+                                except Exception:
+                                    resp_json = None
+                                response_preview = None
+                                if isinstance(resp_json, dict):
+                                    response_preview = resp_json.get("response") or resp_json.get("output")
+                                if not response_preview:
+                                    response_preview = text[:500]
+                                return JSONResponse({
+                                    "success": True,
+                                    "status": "success",
+                                    "provider": "ollama",
+                                    "model": model,
+                                    "response_preview": response_preview,
+                                }, status_code=200)
+                            else:
+                                return JSONResponse({
+                                    "success": False,
+                                    "status": "error",
+                                    "provider": "ollama",
+                                    "error": f"HTTP {resp.status}",
+                                    "detail": text[:500],
+                                }, status_code=200)
+                    except Exception as gen_err:
+                        return JSONResponse({
+                            "success": False,
+                            "status": "error",
+                            "provider": "ollama",
+                            "error": "生成请求异常",
+                            "detail": str(gen_err)[:500],
+                        }, status_code=200)
+
+            except Exception as outer_err:
+                # Any unexpected error: still return 200 JSON
+                return JSONResponse({
+                    "success": False,
+                    "status": "error",
+                    "provider": "ollama",
+                    "error": "测试时发生异常",
+                    "detail": str(outer_err)[:500],
+                }, status_code=200)
 
         # Fallback to backend config for other providers or when no frontend config
         from ..ai import AIMessage, AIProviderFactory, MessageRole

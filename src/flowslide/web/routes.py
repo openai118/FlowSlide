@@ -94,6 +94,59 @@ def _build_provider_status(ai_config_obj) -> dict:
 
 template_dir = os.path.join(os.path.dirname(__file__), "templates")
 templates = Jinja2Templates(directory=template_dir)
+def _redact_key(value: str, keep: int = 4) -> str:
+    try:
+        s = str(value or "")
+        if not s:
+            return s
+        if len(s) <= keep:
+            return "*" * len(s)
+        return s[:keep] + "…" + "*" * max(0, len(s) - keep - 1)
+    except Exception:
+        return "***"
+
+
+def _sanitize_text(text: str) -> str:
+    """Remove or mask likely API keys and tokens in an error text.
+
+    - Masks patterns like key=XXXX, Authorization: Bearer XXXX, X-Api-Key: XXXX
+    - Truncates very long bodies
+    """
+    try:
+        if not text:
+            return text
+        t = str(text)
+        # Basic masks
+        import re
+
+        t = re.sub(r"(key=)([^&\s]{8,})", lambda m: m.group(1) + _redact_key(m.group(2)), t)
+        t = re.sub(r"(api[_-]?key[\"']?[:=]\s*)([A-Za-z0-9._-]{8,})", lambda m: m.group(1) + _redact_key(m.group(2)), t, flags=re.IGNORECASE)
+        t = re.sub(r"(Authorization:\s*Bearer\s+)([A-Za-z0-9._-]{8,})", lambda m: m.group(1) + _redact_key(m.group(2)), t, flags=re.IGNORECASE)
+        t = re.sub(r"(X-Api-Key:\s*)([A-Za-z0-9._-]{8,})", lambda m: m.group(1) + _redact_key(m.group(2)), t, flags=re.IGNORECASE)
+
+        # Trim output to avoid dumping entire HTML/JSON
+        if len(t) > 800:
+            t = t[:800] + "…"
+        return t
+    except Exception:
+        return "(error text hidden)"
+
+
+def _sanitize_dict(d: dict) -> dict:
+    try:
+        if not isinstance(d, dict):
+            return d
+        redacted = {}
+        for k, v in d.items():
+            key_l = str(k).lower()
+            if any(s in key_l for s in ["api_key", "apikey", "x-api-key", "authorization", "token", "secret"]):
+                redacted[k] = _redact_key(str(v))
+            else:
+                redacted[k] = v
+        return redacted
+    except Exception:
+        return {"info": "(payload hidden)"}
+
 
 
 # Helper to join base URL and endpoint paths safely
@@ -516,7 +569,7 @@ async def get_google_models(request: Request, user: User = Depends(get_current_u
         models_endpoint = build_api_url(base_url, "v1beta/models")
         url = models_endpoint + "?key=" + api_key
 
-        logger.info("Calling Google v1beta API: %s", url)
+        logger.info("Calling Google v1beta API: %s", models_endpoint + "?key=" + _redact_key(api_key))
 
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=30) as resp:
@@ -525,8 +578,9 @@ async def get_google_models(request: Request, user: User = Depends(get_current_u
                 logger.info(f"Google v1beta API response length: {len(text)} characters")
 
                 if resp.status != 200:
-                    logger.error(f"Google v1beta models fetch failed {resp.status}: {text}")
-                    return {"success": False, "error": f"HTTP {resp.status}: {text}"}
+                    safe_text = _sanitize_text(text)
+                    logger.error(f"Google v1beta models fetch failed {resp.status}: {safe_text}")
+                    return {"success": False, "error": f"HTTP {resp.status}: {safe_text}"}
 
                 try:
                     data = await resp.json()
@@ -534,9 +588,9 @@ async def get_google_models(request: Request, user: User = Depends(get_current_u
                     logger.info("Google v1beta API response structure: %s", structure)
                 except Exception:
                     logger.error(
-                        f"Failed to parse Google v1beta API response as JSON: {text[:500]}..."
+                        f"Failed to parse Google v1beta API response as JSON: {_sanitize_text(text)}"
                     )
-                    return {"success": False, "error": text}
+                    return {"success": False, "error": _sanitize_text(text)}
 
                 models = []
                 # Google API returns {"models": [{"name": "models/gemini-pro", ...}, ...]}
@@ -556,7 +610,7 @@ async def get_google_models(request: Request, user: User = Depends(get_current_u
                 return {"success": True, "models": models}
     except Exception as e:
         logger.error(f"Error fetching Google models: {e}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Failed to fetch Google models"}
 
 
 @router.post("/api/ai/providers/azure_openai/models")
@@ -626,11 +680,11 @@ async def get_ollama_models(request: Request, user: User = Depends(get_current_u
             async with session.get(url, headers=headers or None, timeout=15) as resp:
                 text = await resp.text()
                 if resp.status != 200:
-                    return {"success": False, "error": f"HTTP {resp.status}: {text}"}
+                    return {"success": False, "error": f"HTTP {resp.status}: {_sanitize_text(text)}"}
                 try:
                     data = await resp.json()
                 except Exception:
-                    return {"success": False, "error": text}
+                    return {"success": False, "error": _sanitize_text(text)}
 
                 models = []
                 for m in data.get("models", []):
@@ -641,7 +695,7 @@ async def get_ollama_models(request: Request, user: User = Depends(get_current_u
                 return {"success": True, "models": models}
     except Exception as e:
         logger.error(f"Error fetching Ollama models: {e}")
-        return {"success": False, "error": str(e)}
+    return {"success": False, "error": "Failed to fetch Ollama models"}
 
 
 @router.post("/api/ai/providers/openai/validate")
@@ -806,18 +860,133 @@ async def test_openai_provider_proxy(
         return {"success": False, "status": "error", "error": str(e)}
 
 
-@router.post("/api/ai/providers/ollama/test")
-async def test_ollama_provider_proxy(
-    request: Request, user: User = Depends(get_current_user_required)
-):
-    """Backend proxy to test Ollama provider (validates base_url and shields credentials/CORS)."""
+@router.post("/api/ai/providers/google/test")
+async def test_google_provider_proxy(request: Request):
+    """Backend proxy to test Google Gemini provider using frontend-provided config.
+
+    This avoids CORS and supports both official Google endpoint (query param ?key=)
+    and custom gateways that require Authorization/X-Api-Key headers.
+    """
     try:
         import aiohttp
 
         data = await request.json()
-        logger.info(f"Ollama test payload: {data}")
+        base_url = (data.get("base_url") or "https://generativelanguage.googleapis.com").rstrip("/")
+        api_key = (data.get("api_key") or "").strip()
+        model = (data.get("model") or "gemini-1.5-flash").strip()
+
+        if not api_key:
+            return {"success": False, "status": "error", "error": "API Key is required"}
+
+        # Build REST URL: /v1beta/models/{model}:generateContent
+        # Use helper to safely join paths
+        gen_url = build_api_url(base_url, "v1beta/models", f"{model}:generateContent")
+
+        # Some gateways only accept headers; Google's official accepts query param ?key=
+        use_query_key = base_url.endswith("generativelanguage.googleapis.com")
+        if use_query_key:
+            gen_url = f"{gen_url}?key={api_key}"
+
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {"text": 'Say "Hello, I am working!" in exactly 5 words.'}
+                    ]
+                }
+            ],
+            "generationConfig": {"maxOutputTokens": 20, "temperature": 0},
+        }
+
+        headers = {"Content-Type": "application/json"}
+        # Provide multiple header styles for better compatibility with proxies
+        headers["Authorization"] = f"Bearer {api_key}"
+        headers["X-Api-Key"] = api_key
+        headers["x-goog-api-key"] = api_key
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(gen_url, json=payload, headers=headers, timeout=30) as resp:
+                text = await resp.text()
+                if resp.status == 200:
+                    try:
+                        data = await resp.json()
+                    except Exception:
+                        # Return raw text if JSON parse fails
+                        data = None
+
+                    # Extract a short preview
+                    preview = None
+                    try:
+                        if isinstance(data, dict):
+                            cand = data.get("candidates")
+                            if isinstance(cand, list) and cand:
+                                c0 = cand[0]
+                                content = (
+                                    (c0 or {}).get("content") if isinstance(c0, dict) else None
+                                )
+                                parts = (content or {}).get("parts") if isinstance(content, dict) else None
+                                if isinstance(parts, list) and parts:
+                                    preview = (parts[0] or {}).get("text")
+                    except Exception:
+                        preview = None
+
+                    if not preview:
+                        preview = (text or "")[:500]
+
+                    usage = None
+                    if isinstance(data, dict):
+                        um = data.get("usageMetadata")
+                        if isinstance(um, dict):
+                            usage = {
+                                "prompt_tokens": um.get("promptTokenCount", 0),
+                                "completion_tokens": um.get("candidatesTokenCount", 0),
+                                "total_tokens": um.get("totalTokenCount", 0),
+                            }
+                    if not usage:
+                        usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+                    return {
+                        "success": True,
+                        "status": "success",
+                        "provider": "google",
+                        "model": model,
+                        "response_preview": preview,
+                        "usage": usage,
+                    }
+                else:
+                    # Try parse JSON error
+                    err_msg = text
+                    try:
+                        err_json = json.loads(text)
+                        err_msg = (
+                            err_json.get("error", {}).get("message")
+                            or err_json.get("message")
+                            or str(err_json)
+                            or err_msg
+                        )
+                    except Exception:
+                        pass
+                    return {"success": False, "status": "error", "error": f"HTTP {resp.status}: {err_msg}"}
+
+    except Exception as e:
+        logger.error(f"Error testing Google provider with frontend config: {e}")
+        return {"success": False, "status": "error", "error": str(e)}
+
+@router.post("/api/ai/providers/ollama/test")
+async def test_ollama_provider_proxy(request: Request):
+    """Backend proxy to test Ollama provider (validates base_url and shields credentials/CORS)."""
+    try:
+        import aiohttp
+        # Parse body defensively
+        try:
+            data = await request.json()
+            if not isinstance(data, dict):
+                data = {}
+        except Exception:
+            data = {}
+        logger.info(f"Ollama test payload: {_sanitize_dict(data) if isinstance(data, dict) else '(invalid payload)'}")
         base_url = (data.get("base_url") or "http://localhost:11434").rstrip("/")
-        model = data.get("model") or "llama2"
+        model = (data.get("model") or "llama2").strip()
 
         # Basic validation of URL scheme
         parsed = urllib.parse.urlparse(base_url)
@@ -832,13 +1001,8 @@ async def test_ollama_provider_proxy(
             "options": {"num_predict": 20, "temperature": 0},
         }
 
-        from ..services.config_service import get_config_service
-
-        # Prefer api_key from frontend body if provided, otherwise use server-side config
-        body_api_key = data.get("api_key")
-        cfg = get_config_service().get_config_by_category("ai_providers")
-        cfg_key = cfg.get("ollama_api_key") if cfg else None
-        use_key = body_api_key or cfg_key
+        # Only use API key passed from body; avoid touching server-side config here
+        use_key = (data.get("api_key") or "").strip() or None
 
         headers = {}
         if use_key:
@@ -887,7 +1051,8 @@ async def test_ollama_provider_proxy(
 
             # 2) Generate test
             try:
-                logger.info(f"Calling Ollama generate URL: {gen_url} with model={model}")
+                safe_url = gen_url  # URL contains only local host/port and path
+                logger.info(f"Calling Ollama generate URL: {safe_url} with model={model}")
                 async with session.post(gen_url, json=payload, headers=headers or None, timeout=30) as resp:
                     text = await resp.text()
                     if resp.status == 200:
@@ -915,16 +1080,16 @@ async def test_ollama_provider_proxy(
                             err = json.loads(text)
                             err_msg = err.get("error") or str(err)
                         except Exception:
-                            err_msg = f"HTTP {resp.status}: {text}"
-                        logger.error(f"Ollama test failed for {gen_url}: {err_msg}")
-                        return JSONResponse({"success": False, "status": "error", "error": err_msg}, status_code=200)
+                            err_msg = f"HTTP {resp.status}: {_sanitize_text(text)}"
+                        logger.error(f"Ollama test failed for {safe_url}: {_sanitize_text(err_msg)}")
+                        return JSONResponse({"success": False, "status": "error", "error": _sanitize_text(err_msg)}, status_code=200)
             except Exception as aio_err:
                 logger.exception(f"Exception during Ollama test request: {aio_err}")
-                return JSONResponse({"success": False, "status": "error", "error": str(aio_err)}, status_code=200)
+                return JSONResponse({"success": False, "status": "error", "error": _sanitize_text(str(aio_err))}, status_code=200)
 
     except Exception as e:
         logger.exception(f"Error testing Ollama provider: {e}")
-        return JSONResponse({"success": False, "status": "error", "error": str(e)}, status_code=200)
+        return JSONResponse({"success": False, "status": "error", "error": _sanitize_text(str(e))}, status_code=200)
 
 
 @router.get("/scenarios", response_class=HTMLResponse)
