@@ -15,5 +15,16 @@
       "https://cdn.jsdmirror.com/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js",
       "https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.1.3/js/bootstrap.bundle.min.js"
     ]
+  },
+  "chartjs": {
+    "version": "4",
+    "js": [
+      "https://cdn.jsdelivr.net/npm/chart.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js",
+      "https://cdn.bootcdn.net/ajax/libs/Chart.js/4.4.1/chart.umd.min.js",
+      "https://cdn.iocdn.cc/npm/chart.js",
+      "https://cdn.jsdmirror.com/npm/chart.js"
+    ],
+    "local": "/static/js/chart.min.js"
   }
 }

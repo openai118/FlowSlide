@@ -4,12 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PPT编辑器 - {{ project.title }}</title>
-    <!-- Bootstrap CSS with fallback mirrors for regions where jsDelivr is blocked -->
+    <!-- 静态资源镜像加载（Bootstrap/Chart.js）：优先本地与镜像，避免 jsDelivr 超时） -->
     <script>
         (function(){
             fetch('/static/config/static_cdn_mirrors.json').then(function(r){
                 return r.json();
             }).then(function(cfg){
+                try { window._CDN_MIRRORS = cfg || {}; } catch(e){}
                 var cssMirrors = (cfg && cfg.bootstrap && cfg.bootstrap.css) || [];
                 function tryLoad(i){
                     if(i>=cssMirrors.length) return;
@@ -21,6 +22,27 @@
                     document.head.appendChild(l);
                 }
                 tryLoad(0);
+
+                // 预加载 Bootstrap JS（依次尝试多个镜像）
+                var jsMirrors = (cfg && cfg.bootstrap && cfg.bootstrap.js) || [];
+                (function tryJs(i){
+                    if(i>=jsMirrors.length) return;
+                    var s=document.createElement('script'); s.src=jsMirrors[i]; s.defer=false; s.async=false;
+                    s.onload=function(){ console.debug('Loaded bootstrap js from', jsMirrors[i]); };
+                    s.onerror=function(){ try { s.remove(); } catch(e){}; tryJs(i+1); };
+                    document.body.appendChild(s);
+                })(0);
+
+                // 预加载 Chart.js：将本地静态文件放最前
+                var chartList = (cfg && cfg.chartjs && cfg.chartjs.js) ? cfg.chartjs.js.slice() : [];
+                if (cfg && cfg.chartjs && cfg.chartjs.local) chartList.unshift(cfg.chartjs.local);
+                (function tryChart(i){
+                    if(i>=chartList.length) return;
+                    var sc=document.createElement('script'); sc.src=chartList[i]; sc.defer=false; sc.async=false;
+                    sc.onload=function(){ console.debug('Loaded Chart.js from', chartList[i]); };
+                    sc.onerror=function(){ try { sc.remove(); } catch(e){}; tryChart(i+1); };
+                    document.body.appendChild(sc);
+                })(0);
             }).catch(function(e){ console.warn('Failed to load CDN mirrors config', e); });
         })();
     </script>
@@ -3784,6 +3806,37 @@
         let codeMirrorEditor = null;
         let isCodeMirrorInitialized = false;
 
+        // 简单的CDN重写：将常见外部CDN资源替换为本地或镜像，避免 jsDelivr 超时
+        function rewriteExternalCDN(html) {
+            try {
+                if (!html) return html;
+                // 使用已加载到页面的镜像配置（若存在）
+                var cfg = (window._CDN_MIRRORS || {});
+                var cj = cfg.chartjs || {};
+                var chartLocal = cj.local || '/static/js/chart.min.js';
+                // 将 Chart.js 指向本地文件
+                html = html.replace(/https:\/\/cdn\.jsdelivr\.net\/npm\/chart\.js[^"']*/gi, chartLocal);
+                html = html.replace(/https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/Chart\.js\/[^"']*/gi, chartLocal);
+                html = html.replace(/https:\/\/cdn\.bootcdn\.net\/ajax\/libs\/Chart\.js\/[^"']*/gi, chartLocal);
+                html = html.replace(/https:\/\/cdn\.jsdmirror\.com\/npm\/chart\.js[^"']*/gi, chartLocal);
+
+                // Bootstrap：若 iframe 内引用了 jsDelivr，替换为第一个可用镜像
+                var bs = cfg.bootstrap || {};
+                var cssList = Array.isArray(bs.css) ? bs.css : [];
+                var jsList = Array.isArray(bs.js) ? bs.js : [];
+                var cssFallback = cssList.find(function(u){ return !/cdn\.jsdelivr\.net/.test(u); }) || '';
+                var jsFallback = jsList.find(function(u){ return !/cdn\.jsdelivr\.net/.test(u); }) || '';
+                if (cssFallback) {
+                    html = html.replace(/https:\/\/cdn\.jsdelivr\.net\/npm\/bootstrap@[^"']*\/dist\/css\/bootstrap\.min\.css/gi, cssFallback);
+                }
+                if (jsFallback) {
+                    html = html.replace(/https:\/\/cdn\.jsdelivr\.net\/npm\/bootstrap@[^"']*\/dist\/js\/bootstrap\.bundle\.min\.js/gi, jsFallback);
+                }
+
+                return html;
+            } catch (e) { return html; }
+        }
+
         // 创建安全的data URL
         function createDataUrl(html) {
             try {
@@ -3795,58 +3848,7 @@
             }
         }
 
-        // 清理HTML中的外部依赖，避免CDN连接超时
-        function cleanExternalDependencies(html) {
-            if (!html || typeof html !== 'string') return html;
-
-            try {
-                // 移除常见的CDN脚本，特别是chart.js等
-                let cleaned = html;
-
-                // 移除chart.js CDN
-                cleaned = cleaned.replace(
-                    /<script[^>]*src=["'][^"']*cdn\.jsdelivr\.net\/npm\/chart\.js[^"']*["'][^>]*><\/script>/gi,
-                    ''
-                );
-
-                // 移除其他常见的CDN脚本
-                const cdnPatterns = [
-                    /<script[^>]*src=["'][^"']*cdn\.jsdelivr\.net[^"']*["'][^>]*><\/script>/gi,
-                    /<script[^>]*src=["'][^"']*cdnjs\.cloudflare\.com[^"']*["'][^>]*><\/script>/gi,
-                    /<script[^>]*src=["'][^"']*unpkg\.com[^"']*["'][^>]*><\/script>/gi,
-                    /<link[^>]*href=["'][^"']*cdn\.jsdelivr\.net[^"']*["'][^>]*>/gi,
-                    /<link[^>]*href=["'][^"']*cdnjs\.cloudflare\.com[^"']*["'][^>]*>/gi,
-                    /<link[^>]*href=["'][^"']*unpkg\.com[^"']*["'][^>]*>/gi
-                ];
-
-                cdnPatterns.forEach(pattern => {
-                    cleaned = cleaned.replace(pattern, '');
-                });
-
-                // 移除可能导致问题的外部字体加载
-                cleaned = cleaned.replace(
-                    /<link[^>]*href=["'][^"']*fonts\.googleapis\.com[^"']*["'][^>]*>/gi,
-                    ''
-                );
-
-                // 移除分析脚本
-                cleaned = cleaned.replace(
-                    /<script[^>]*src=["'][^"']*google-analytics\.com[^"']*["'][^>]*><\/script>/gi,
-                    ''
-                );
-                cleaned = cleaned.replace(
-                    /<script[^>]*src=["'][^"']*googletagmanager\.com[^"']*["'][^>]*><\/script>/gi,
-                    ''
-                );
-
-                return cleaned;
-            } catch (e) {
-                console.warn('清理外部依赖失败:', e);
-                return html;
-            }
-        }
-
-        // 优化的iframe内容设置函数，减少卡顿
+    // 优化的iframe内容设置函数，减少卡顿，并在写入前对外部CDN进行重写
         function setSafeIframeContent(iframe, html) {
             if (!iframe) {
                 console.error('iframe is null or undefined');
@@ -3858,8 +3860,8 @@
                 return;
             }
 
-            // 清理HTML中的外部依赖，避免CDN连接超时
-            html = cleanExternalDependencies(html);
+            // CDN重写（Chart.js/Bootstrap 等）
+            try { html = rewriteExternalCDN(html); } catch(e) {}
 
             // 检查内容是否相同，避免不必要的更新
             if (iframe.getAttribute('data-current-content') === html) {
@@ -3999,10 +4001,7 @@
 
                     const updateView = () => {
                         const p = previews[current];
-                        let htmlContent = p.html_content || '<div style="padding:20px">无预览内容</div>';
-                        // 清理外部依赖，避免CDN连接超时
-                        htmlContent = cleanExternalDependencies(htmlContent);
-                        iframe.srcdoc = htmlContent;
+                        iframe.srcdoc = p.html_content || '<div style="padding:20px">无预览内容</div>';
                         pager.innerText = `${current + 1} / ${previews.length} - ${p.title || ''}`;
                         prevBtn.disabled = current === 0;
                         nextBtn.disabled = current === previews.length - 1;
@@ -7887,7 +7886,8 @@
                     preview.innerHTML = '';
                     const iframe = document.createElement('iframe');
                     iframe.style.cssText = 'width:100%; height:100%; border:none;';
-                    iframe.srcdoc = t.html_template; preview.appendChild(iframe);
+                    try { iframe.srcdoc = (typeof rewriteExternalCDN === 'function') ? rewriteExternalCDN(t.html_template) : t.html_template; } catch(e){ iframe.srcdoc = t.html_template; }
+                    preview.appendChild(iframe);
                 }
 
                 // 补充：调用 /preview 拉取完整模板，直接在红框内展示
@@ -7902,7 +7902,8 @@
                             preview.innerHTML = '';
                             const iframe = document.createElement('iframe');
                             iframe.style.cssText = 'width:100%; height:100%; border:none;';
-                            iframe.srcdoc = tplHtml; preview.appendChild(iframe);
+                            try { iframe.srcdoc = (typeof rewriteExternalCDN === 'function') ? rewriteExternalCDN(tplHtml) : tplHtml; } catch(e){ iframe.srcdoc = tplHtml; }
+                            preview.appendChild(iframe);
                         } else if (imgUrl) {
                             preview.innerHTML = '';
                             const img = document.createElement('img');
