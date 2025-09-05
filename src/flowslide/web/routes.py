@@ -5322,6 +5322,14 @@ def _remove_external_dependencies(html: str) -> str:
     for pat in patterns:
         cleaned = re.sub(pat, '', cleaned, flags=re.IGNORECASE)
 
+    # 替换 jsdelivr CDN 为国内镜像
+    cleaned = re.sub(
+        r'<script[^>]*src=["\']https://cdn\.jsdelivr\.net/npm/chart\.js[^"\']*["\'][^>]*>\s*</script>',
+        '<script src="https://cdn.staticfile.org/chart.js/4.4.0/chart.js"></script>',
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
     return cleaned
 
 

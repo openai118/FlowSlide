@@ -3795,6 +3795,57 @@
             }
         }
 
+        // 清理HTML中的外部依赖，避免CDN连接超时
+        function cleanExternalDependencies(html) {
+            if (!html || typeof html !== 'string') return html;
+
+            try {
+                // 移除常见的CDN脚本，特别是chart.js等
+                let cleaned = html;
+
+                // 移除chart.js CDN
+                cleaned = cleaned.replace(
+                    /<script[^>]*src=["'][^"']*cdn\.jsdelivr\.net\/npm\/chart\.js[^"']*["'][^>]*><\/script>/gi,
+                    ''
+                );
+
+                // 移除其他常见的CDN脚本
+                const cdnPatterns = [
+                    /<script[^>]*src=["'][^"']*cdn\.jsdelivr\.net[^"']*["'][^>]*><\/script>/gi,
+                    /<script[^>]*src=["'][^"']*cdnjs\.cloudflare\.com[^"']*["'][^>]*><\/script>/gi,
+                    /<script[^>]*src=["'][^"']*unpkg\.com[^"']*["'][^>]*><\/script>/gi,
+                    /<link[^>]*href=["'][^"']*cdn\.jsdelivr\.net[^"']*["'][^>]*>/gi,
+                    /<link[^>]*href=["'][^"']*cdnjs\.cloudflare\.com[^"']*["'][^>]*>/gi,
+                    /<link[^>]*href=["'][^"']*unpkg\.com[^"']*["'][^>]*>/gi
+                ];
+
+                cdnPatterns.forEach(pattern => {
+                    cleaned = cleaned.replace(pattern, '');
+                });
+
+                // 移除可能导致问题的外部字体加载
+                cleaned = cleaned.replace(
+                    /<link[^>]*href=["'][^"']*fonts\.googleapis\.com[^"']*["'][^>]*>/gi,
+                    ''
+                );
+
+                // 移除分析脚本
+                cleaned = cleaned.replace(
+                    /<script[^>]*src=["'][^"']*google-analytics\.com[^"']*["'][^>]*><\/script>/gi,
+                    ''
+                );
+                cleaned = cleaned.replace(
+                    /<script[^>]*src=["'][^"']*googletagmanager\.com[^"']*["'][^>]*><\/script>/gi,
+                    ''
+                );
+
+                return cleaned;
+            } catch (e) {
+                console.warn('清理外部依赖失败:', e);
+                return html;
+            }
+        }
+
         // 优化的iframe内容设置函数，减少卡顿
         function setSafeIframeContent(iframe, html) {
             if (!iframe) {
@@ -3806,6 +3857,9 @@
                 console.error('html content is empty');
                 return;
             }
+
+            // 清理HTML中的外部依赖，避免CDN连接超时
+            html = cleanExternalDependencies(html);
 
             // 检查内容是否相同，避免不必要的更新
             if (iframe.getAttribute('data-current-content') === html) {
@@ -3945,7 +3999,10 @@
 
                     const updateView = () => {
                         const p = previews[current];
-                        iframe.srcdoc = p.html_content || '<div style="padding:20px">无预览内容</div>';
+                        let htmlContent = p.html_content || '<div style="padding:20px">无预览内容</div>';
+                        // 清理外部依赖，避免CDN连接超时
+                        htmlContent = cleanExternalDependencies(htmlContent);
+                        iframe.srcdoc = htmlContent;
                         pager.innerText = `${current + 1} / ${previews.length} - ${p.title || ''}`;
                         prevBtn.disabled = current === 0;
                         nextBtn.disabled = current === previews.length - 1;
