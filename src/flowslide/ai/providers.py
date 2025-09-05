@@ -33,6 +33,33 @@ class OpenAIProvider(AIProvider):
 
         config = self._merge_config(**kwargs)
 
+        # Normalize incoming messages to AIMessage to be robust to dicts or other models
+        normalized: List[AIMessage] = []
+        for m in messages:
+            if isinstance(m, AIMessage):
+                normalized.append(m)
+            elif isinstance(m, dict):
+                role = m.get("role", "user")
+                content = m.get("content", "")
+                name = m.get("name")
+                try:
+                    normalized.append(
+                        AIMessage(role=MessageRole(role), content=str(content), name=name)
+                    )
+                except Exception:
+                    normalized.append(AIMessage(role=MessageRole.USER, content=str(content)))
+            elif hasattr(m, "role") and hasattr(m, "content"):
+                # Pydantic-like object
+                try:
+                    normalized.append(
+                        AIMessage(role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content")))
+                    )
+                except Exception:
+                    normalized.append(AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", ""))))
+            else:
+                normalized.append(AIMessage(role=MessageRole.USER, content=str(m)))
+        messages = normalized
+
         # Convert messages to OpenAI format
         openai_messages = [{"role": msg.role.value, "content": msg.content} for msg in messages]
 
@@ -90,6 +117,32 @@ class OpenAIProvider(AIProvider):
 
         config = self._merge_config(**kwargs)
 
+        # Normalize incoming messages
+        normalized: List[AIMessage] = []
+        for m in messages:
+            if isinstance(m, AIMessage):
+                normalized.append(m)
+            elif isinstance(m, dict):
+                role = m.get("role", "user")
+                content = m.get("content", "")
+                name = m.get("name")
+                try:
+                    normalized.append(
+                        AIMessage(role=MessageRole(role), content=str(content), name=name)
+                    )
+                except Exception:
+                    normalized.append(AIMessage(role=MessageRole.USER, content=str(content)))
+            elif hasattr(m, "role") and hasattr(m, "content"):
+                try:
+                    normalized.append(
+                        AIMessage(role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content")))
+                    )
+                except Exception:
+                    normalized.append(AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", ""))))
+            else:
+                normalized.append(AIMessage(role=MessageRole.USER, content=str(m)))
+        messages = normalized
+
         # Convert messages to OpenAI format
         openai_messages = [{"role": msg.role.value, "content": msg.content} for msg in messages]
 
@@ -139,6 +192,32 @@ class AnthropicProvider(AIProvider):
             raise RuntimeError("Anthropic client not available")
 
         config = self._merge_config(**kwargs)
+
+        # Normalize incoming messages
+        normalized: List[AIMessage] = []
+        for m in messages:
+            if isinstance(m, AIMessage):
+                normalized.append(m)
+            elif isinstance(m, dict):
+                role = m.get("role", "user")
+                content = m.get("content", "")
+                name = m.get("name")
+                try:
+                    normalized.append(
+                        AIMessage(role=MessageRole(role), content=str(content), name=name)
+                    )
+                except Exception:
+                    normalized.append(AIMessage(role=MessageRole.USER, content=str(content)))
+            elif hasattr(m, "role") and hasattr(m, "content"):
+                try:
+                    normalized.append(
+                        AIMessage(role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content")))
+                    )
+                except Exception:
+                    normalized.append(AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", ""))))
+            else:
+                normalized.append(AIMessage(role=MessageRole.USER, content=str(m)))
+        messages = normalized
 
         # Convert messages to Anthropic format
         system_message = None
@@ -222,6 +301,31 @@ class GoogleProvider(AIProvider):
         """Generate chat completion using Google Gemini"""
         # If REST mode, use REST call (supports custom base URL/proxies)
         if self._use_rest:
+            # Normalize incoming messages
+            normalized: List[AIMessage] = []
+            for m in messages:
+                if isinstance(m, AIMessage):
+                    normalized.append(m)
+                elif isinstance(m, dict):
+                    role = m.get("role", "user")
+                    content = m.get("content", "")
+                    name = m.get("name")
+                    try:
+                        normalized.append(
+                            AIMessage(role=MessageRole(role), content=str(content), name=name)
+                        )
+                    except Exception:
+                        normalized.append(AIMessage(role=MessageRole.USER, content=str(content)))
+                elif hasattr(m, "role") and hasattr(m, "content"):
+                    try:
+                        normalized.append(
+                            AIMessage(role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content")))
+                        )
+                    except Exception:
+                        normalized.append(AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", ""))))
+                else:
+                    normalized.append(AIMessage(role=MessageRole.USER, content=str(m)))
+            messages = normalized
             prompt = []
             for msg in messages:
                 if msg.role == MessageRole.SYSTEM:
@@ -241,6 +345,31 @@ class GoogleProvider(AIProvider):
 
         # Convert messages to Gemini format
         # Gemini uses a different conversation format
+        # Normalize incoming messages
+        normalized: List[AIMessage] = []
+        for m in messages:
+            if isinstance(m, AIMessage):
+                normalized.append(m)
+            elif isinstance(m, dict):
+                role = m.get("role", "user")
+                content = m.get("content", "")
+                name = m.get("name")
+                try:
+                    normalized.append(
+                        AIMessage(role=MessageRole(role), content=str(content), name=name)
+                    )
+                except Exception:
+                    normalized.append(AIMessage(role=MessageRole.USER, content=str(content)))
+            elif hasattr(m, "role") and hasattr(m, "content"):
+                try:
+                    normalized.append(
+                        AIMessage(role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content")))
+                    )
+                except Exception:
+                    normalized.append(AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", ""))))
+            else:
+                normalized.append(AIMessage(role=MessageRole.USER, content=str(m)))
+        messages = normalized
         conversation_parts = []
         for msg in messages:
             if msg.role == MessageRole.SYSTEM:
@@ -468,6 +597,32 @@ class OllamaProvider(AIProvider):
             raise RuntimeError("Ollama client not available")
 
         config = self._merge_config(**kwargs)
+
+        # Normalize incoming messages
+        normalized: List[AIMessage] = []
+        for m in messages:
+            if isinstance(m, AIMessage):
+                normalized.append(m)
+            elif isinstance(m, dict):
+                role = m.get("role", "user")
+                content = m.get("content", "")
+                name = m.get("name")
+                try:
+                    normalized.append(
+                        AIMessage(role=MessageRole(role), content=str(content), name=name)
+                    )
+                except Exception:
+                    normalized.append(AIMessage(role=MessageRole.USER, content=str(content)))
+            elif hasattr(m, "role") and hasattr(m, "content"):
+                try:
+                    normalized.append(
+                        AIMessage(role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content")))
+                    )
+                except Exception:
+                    normalized.append(AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", ""))))
+            else:
+                normalized.append(AIMessage(role=MessageRole.USER, content=str(m)))
+        messages = normalized
 
         # Convert messages to Ollama format
         ollama_messages = [{"role": msg.role.value, "content": msg.content} for msg in messages]

@@ -18,6 +18,7 @@ from ..api.models import (
     PPTOutline,
     PPTProject,
     SlideContent,
+    SpeakerNotesGenerationRequest,
     TodoBoard,
 )
 from ..core.config import ai_config
@@ -579,6 +580,139 @@ class EnhancedPPTService(PPTService):
         except Exception as e:
             logger.error(f"Error enhancing content: {str(e)}")
             return content  # Return original content if enhancement fails
+
+    async def generate_speaker_notes(
+        self, project_id: str, req: SpeakerNotesGenerationRequest
+    ) -> Dict[str, Any]:
+        """Generate speaker notes for selected slides and persist them.
+
+        Returns a dict: { 'updated': int, 'skipped': int, 'total': int, 'slides': [ {index, title, has_notes} ] }
+        """
+        project = await self.project_manager.get_project(project_id)
+        if not project:
+            raise ValueError("Project not found")
+
+        if not project.slides_data or len(project.slides_data) == 0:
+            raise ValueError("PPT not generated yet")
+
+        total = len(project.slides_data)
+        # Determine target indices (0-based)
+        if req.all or not req.indices:
+            target_indices = list(range(total))
+        else:
+            # Convert 1-based to 0-based; filter invalid
+            target_indices = [i - 1 for i in req.indices if 1 <= i <= total]
+
+        updated = 0
+        skipped = 0
+        result_slides = []
+
+        for idx in target_indices:
+            slide = project.slides_data[idx]
+            meta = slide.get("metadata", {}) or {}
+            existing = meta.get("speaker_notes") or slide.get("speaker_notes")
+            if existing and not req.overwrite:
+                skipped += 1
+                result_slides.append({"index": idx + 1, "title": slide.get("title", ""), "has_notes": True})
+                continue
+
+            title = slide.get("title") or f"第{idx+1}页"
+            # Try to extract visible text from html_content for context
+            html_content = slide.get("html_content", "") or ""
+            plain_context = self._extract_text_from_html(html_content)
+
+            prompt = self._build_speaker_notes_prompt(
+                project_topic=project.topic,
+                slide_title=title,
+                slide_text=plain_context,
+                language=req.language or (project.project_metadata or {}).get("language", "zh"),
+                tone=req.tone,
+                words=req.words_per_slide,
+            )
+
+            try:
+                resp = await self.ai_provider.text_completion(
+                    prompt=prompt,
+                    max_tokens=min(getattr(ai_config, "max_tokens", 2000), 2000),
+                    temperature=max(getattr(ai_config, "temperature", 0.7) - 0.1, 0.1),
+                )
+                notes = resp.content.strip()
+            except Exception as e:
+                notes = f"(生成失败: {str(e)})"
+
+            # Persist into slides_data JSON and slide_metadata
+            # Prefer storing inside metadata to keep schema tidy
+            meta["speaker_notes"] = notes
+            slide["metadata"] = meta
+            # Keep a top-level alias for compatibility if any future consumer expects it
+            slide["speaker_notes"] = notes
+
+            # Save single slide immediately for durability
+            await self.project_manager.save_single_slide(project_id, idx, slide)
+
+            updated += 1
+            result_slides.append({"index": idx + 1, "title": title, "has_notes": True})
+
+        # Also update the project aggregate slides_data to reflect changes
+        await self.project_manager.update_project_data(project_id, {"slides_data": project.slides_data})
+
+        return {"updated": updated, "skipped": skipped, "total": len(target_indices), "slides": result_slides}
+
+    def _extract_text_from_html(self, html: str) -> str:
+        """Very lightweight HTML to text extractor to supply context for notes."""
+        try:
+            # Avoid heavy dependencies; simple tags strip
+            import re
+
+            # Remove scripts/styles
+            html = re.sub(r"<script[\s\S]*?</script>", " ", html, flags=re.IGNORECASE)
+            html = re.sub(r"<style[\s\S]*?</style>", " ", html, flags=re.IGNORECASE)
+            # Replace breaks and list items with newlines
+            html = re.sub(r"<(br|/p|/div|/li)[^>]*>", "\n", html, flags=re.IGNORECASE)
+            # Strip tags
+            text = re.sub(r"<[^>]+>", " ", html)
+            # Collapse whitespace
+            text = re.sub(r"\s+", " ", text).strip()
+            return text[:2000]  # limit context
+        except Exception:
+            return ""
+
+    def _build_speaker_notes_prompt(
+        self,
+        project_topic: str,
+        slide_title: str,
+        slide_text: str,
+        language: str = "zh",
+        tone: Optional[str] = None,
+        words: Optional[int] = None,
+    ) -> str:
+        """Create a focused prompt for generating a presenter script for one slide."""
+        tone_hint = f"\n- 语气风格：{tone}" if tone else ""
+        length_hint = (
+            f"\n- 篇幅：每页约{words}字左右，分段自然，便于口播" if (words and language == "zh") else (
+                f"\n- Length: around {words} words, natural paragraphs, spoken-friendly" if words else ""
+            )
+        )
+        if language == "zh":
+            return (
+                f"请为演示文稿的单页生成演讲稿（Presenter Notes），用于口播：\n"
+                f"- 整体主题：{project_topic}\n"
+                f"- 当前页标题：{slide_title}\n"
+                f"- 页面可见要点/文字（可用作上下文）：{slide_text[:800]}\n"
+                f"- 要求：口语化、逻辑清晰、信息准确，适合2-3分钟讲述；尽量避免重复逐字朗读幻灯片上的文字，更多补充解释与示例；使用中文输出。"
+                f"{tone_hint}{length_hint}"
+                "\n请直接输出完整演讲稿正文，不要包含多余前后缀或Markdown标题。"
+            )
+        else:
+            return (
+                f"Write a presenter script (speaker notes) for one slide:\n"
+                f"- Deck topic: {project_topic}\n"
+                f"- Slide title: {slide_title}\n"
+                f"- Visible points/text for context: {slide_text[:800]}\n"
+                f"- Requirements: conversational, structured, factually correct; suitable for a 2–3 minute talk; avoid reading the bullets verbatim—expand with explanations and examples; respond in English."
+                f"{tone_hint}{length_hint}"
+                "\nReturn only the script body, no extra headings."
+            )
 
     def _create_outline_prompt(
         self,

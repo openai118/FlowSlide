@@ -101,7 +101,12 @@ class PlaywrightPDFConverter:
             return False
 
     async def _launch_browser(self) -> Browser:
-        """Launch browser with enhanced settings optimized for chart rendering"""
+        """Launch browser with enhanced settings optimized for chart rendering.
+
+        Optimization: On Windows, prefer system-installed Chrome first to avoid
+        noisy Playwright browser-missing warnings. Fall back to Playwright's
+        bundled Chromium only if system Chrome isn't available.
+        """
         if not self.is_available():
             raise ImportError("Playwright is not available. Please install: pip install playwright")
 
@@ -156,17 +161,7 @@ class PlaywrightPDFConverter:
             if self.playwright is None:
                 self.playwright = await async_playwright().start()
 
-            # Method 1: Try Playwright's installed Chromium first (especially for Docker)
-            logger.info("🔄 Trying Playwright's installed Chromium...")
-            try:
-                browser = await self.playwright.chromium.launch(headless=True, args=launch_args)
-                logger.info("✅ Playwright Chromium launched successfully")
-                return browser
-
-            except Exception as playwright_error:
-                logger.warning(f"❌ Playwright Chromium launch failed: {playwright_error}")
-
-            # Method 2: Try system Chrome with enhanced error handling
+            # Method 1: Try system Chrome first (esp. for Windows local env)
             system_chrome_paths = [
                 "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
                 "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
@@ -221,6 +216,15 @@ class PlaywrightPDFConverter:
                                 # 网络连接问题，等待后重试
                                 await asyncio.sleep(2)
                             continue
+
+            # Method 2: Try Playwright's installed Chromium (Docker-friendly)
+            logger.info("🔄 Trying Playwright's installed Chromium...")
+            try:
+                browser = await self.playwright.chromium.launch(headless=True, args=launch_args)
+                logger.info("✅ Playwright Chromium launched successfully")
+                return browser
+            except Exception as playwright_error:
+                logger.warning(f"❌ Playwright Chromium launch failed: {playwright_error}")
 
             # Method 3: Try portable Chrome
             logger.info("🔄 System Chrome failed, trying portable solutions...")
@@ -1791,7 +1795,7 @@ class PlaywrightPDFConverter:
                 timeout=60000,
             )  # 增加超时时间以确保完整加载
 
-            # 智能等待：根据页面复杂度动态调整等待时间
+            # 智能等待：根据页面复杂度动态调整等待时间（simple 模式下缩短）
             page_complexity = await page.evaluate(
                 """() => {
                 const complexity = {
@@ -1830,26 +1834,35 @@ class PlaywrightPDFConverter:
             else:
                 wait_time = base_wait
 
+            simple_mode = bool((options or {}).get("simple"))
+            if simple_mode:
+                # 简单稳定模式：减少等待
+                wait_time = min(wait_time, 0.6)
+
             logger.debug(
                 f"📊 页面复杂度分析: 图表:{page_complexity['canvasCount']+page_complexity['svgCount']}, 图片:{page_complexity['imageCount']}, 总分:{page_complexity['complexityScore']}, 等待时间:{wait_time}s"
             )
             await asyncio.sleep(wait_time)
 
-            # 等待字体和外部资源加载完成
-            await self._wait_for_fonts_and_resources(page)
+            # 等待字体和外部资源（simple 模式下更快）
+            if simple_mode:
+                try:
+                    await self._wait_for_fonts_and_resources(page, max_wait_time=3000)
+                except Exception:
+                    pass
+            else:
+                await self._wait_for_fonts_and_resources(page)
 
             # Inject optimizations
             await self._inject_pdf_styles(page)
-            await self._inject_javascript_optimizations(page)
-
-            # Force chart initialization after page load
-            await self._force_chart_initialization(page)
-
-            # Enhanced waiting for Chart.js and dynamic content rendering
-            await self._wait_for_charts_and_dynamic_content(page)
-
-            # Perform final chart verification before PDF generation
-            await self._perform_final_chart_verification(page)
+            if not simple_mode:
+                await self._inject_javascript_optimizations(page)
+                # Force chart initialization after page load
+                await self._force_chart_initialization(page)
+                # Enhanced waiting for Chart.js and dynamic content rendering
+                await self._wait_for_charts_and_dynamic_content(page)
+                # Perform final chart verification before PDF generation
+                await self._perform_final_chart_verification(page)
 
             # 最终确认所有内容已准备就绪
             logger.debug("🔍 执行最终内容检查...")
@@ -1879,8 +1892,9 @@ class PlaywrightPDFConverter:
             # 最终稳定等待
             await asyncio.sleep(0.5)
 
-            # 执行最终的综合页面就绪检查
-            await self._comprehensive_page_ready_check(page)
+            # 执行最终的综合页面就绪检查（simple 模式下可跳过非关键检测）
+            if not simple_mode:
+                await self._comprehensive_page_ready_check(page)
 
             # PDF generation options - optimized for 1280x720 landscape (16:9)
             pdf_options = {
@@ -2105,7 +2119,7 @@ class PlaywrightPDFConverter:
                     # Try conversion with retry mechanism
                     success = False
                     retry_count = 0
-                    max_retries = 5
+                    max_retries = 2
 
                     while not success and retry_count <= max_retries:
                         if retry_count > 0:
@@ -2163,6 +2177,37 @@ class PlaywrightPDFConverter:
             if browser:
                 await browser.close()
                 logger.debug("🔒 Shared browser closed.")
+
+    async def convert_single_html_to_pdf(
+        self,
+        html_content: str,
+        pdf_output_path: str,
+        *,
+        simple: bool = True,
+    ) -> bool:
+        """Convert a single combined HTML string into one PDF.
+
+        This is the simplest and often most stable path: render all slides in
+        one HTML document (with proper CSS page breaks) and let the browser
+        paginate it into a single PDF. When `simple` is True, skip heavy chart
+        re-initialization and long waits.
+        """
+        try:
+            # Write HTML to a temp file
+            with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8") as tmp:
+                tmp.write(html_content)
+                html_path = tmp.name
+
+            try:
+                return await self.html_to_pdf(html_path, pdf_output_path, options={"simple": simple})
+            finally:
+                try:
+                    os.unlink(html_path)
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.error(f"❌ Single HTML to PDF failed: {e}")
+            return False
 
     def _merge_pdfs_sync(self, pdf_files: List[str], output_path: str) -> bool:
         """Synchronous PDF merging function to be run in thread pool"""

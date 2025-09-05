@@ -4215,9 +4215,25 @@ async def export_project_pdf(
             lambda: tempfile.NamedTemporaryFile(suffix=".pdf", delete=False).name
         )
 
-        logging.info(f"Generating PDF with Pyppeteer for project: {project.topic}")
+        logging.info(f"Generating PDF for project: {project.topic}")
         logging.info(f"Project has {len(project.slides_data)} slides")
-        success = await _generate_pdf_with_pyppeteer(project, temp_pdf_path, individual)
+
+        # Prefer simple, single-pass path: one combined HTML rendered once
+        success = False
+        try:
+            combined_html = await _generate_combined_html_for_pdf(project)
+            # Use converter directly in simple mode
+            success = await pdf_converter.convert_single_html_to_pdf(
+                combined_html, temp_pdf_path, simple=True
+            )
+            if success:
+                logging.info("PDF generated via single-pass simple mode")
+        except Exception as e:
+            logging.info(f"Simple single-pass PDF attempt failed, will fallback: {e}")
+
+        if not success:
+            # Fallback: legacy per-slide HTML -> batch convert -> merge
+            success = await _generate_pdf_with_pyppeteer(project, temp_pdf_path, individual)
 
         if not success:
             # Clean up temp file and raise error
@@ -4229,16 +4245,14 @@ async def export_project_pdf(
             raise HTTPException(status_code=500, detail="PDF generation failed")
 
         # Return PDF file
-        logging.info("PDF generated successfully using Pyppeteer")
+        logging.info("PDF generated successfully")
 
-        # 创建安全的文件名
-        safe_topic = re.sub(r"[^\w\s-]", "", project.topic).strip()[:50]  # 限制长度并移除特殊字符
-        if not safe_topic:
-            safe_topic = "presentation"
-        filename = f"{safe_topic}_PPT.pdf"
-
-        # URL编码文件名用于Content-Disposition
-        encoded_filename = urllib.parse.quote(filename, safe="")
+        # 创建安全的文件名（ASCII 回退 + UTF-8 显示名）
+        safe_topic = re.sub(r"[^\w\s-]", "", project.topic).strip()[:50] or "presentation"
+        ascii_topic = re.sub(r"[^A-Za-z0-9_-]", "", safe_topic) or "presentation"
+        ascii_filename = f"{ascii_topic}_PPT.pdf"
+        utf8_filename = f"{safe_topic}_PPT.pdf"
+        encoded_filename = urllib.parse.quote(utf8_filename, safe="")
 
         # 使用BackgroundTask来清理临时文件
         from starlette.background import BackgroundTask
@@ -4252,9 +4266,9 @@ async def export_project_pdf(
         return FileResponse(
             temp_pdf_path,
             media_type="application/pdf",
-            filename=filename,
             headers={
-                "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{encoded_filename}",
+                # ASCII 回退 + UTF-8 filename*
+                "Content-Disposition": f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{encoded_filename}",
                 "X-PDF-Generator": "Pyppeteer",
             },
             background=BackgroundTask(cleanup_temp_file),
@@ -4386,16 +4400,12 @@ async def export_project_pptx(project_id: str, user: User = Depends(get_current_
             # Return PPTX file
             logging.info("PPTX generated successfully")
 
-            # 创建安全的文件名
-            safe_topic = re.sub(r"[^\w\s-]", "", project.topic).strip()[
-                :50
-            ]  # 限制长度并移除特殊字符
-            if not safe_topic:
-                safe_topic = "presentation"
-            filename = f"{safe_topic}_PPT.pptx"
-
-            # URL编码文件名用于Content-Disposition
-            encoded_filename = urllib.parse.quote(filename, safe="")
+            # 创建安全的文件名（ASCII 回退 + UTF-8 显示名）
+            safe_topic = re.sub(r"[^\w\s-]", "", project.topic).strip()[:50] or "presentation"
+            ascii_topic = re.sub(r"[^A-Za-z0-9_-]", "", safe_topic) or "presentation"
+            ascii_filename = f"{ascii_topic}_PPT.pptx"
+            utf8_filename = f"{safe_topic}_PPT.pptx"
+            encoded_filename = urllib.parse.quote(utf8_filename, safe="")
 
             # 使用BackgroundTask来清理临时文件
             from starlette.background import BackgroundTask
@@ -4413,9 +4423,9 @@ async def export_project_pptx(project_id: str, user: User = Depends(get_current_
             return FileResponse(
                 temp_pptx_path,
                 media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                filename=filename,
                 headers={
-                    "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{encoded_filename}",
+                    # ASCII 回退 + UTF-8 filename*
+                    "Content-Disposition": f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{encoded_filename}",
                     "X-Conversion-Method": "PDF-to-PPTX",
                 },
                 background=BackgroundTask(cleanup_temp_files),
@@ -5198,8 +5208,12 @@ def _clean_html_for_pdf(original_html: str, slide_number: int, total_slides: int
     # Replace deprecated placeholder domains with picsum.photos
     cleaned_html = _replace_placeholder_images(cleaned_html)
 
-    # Remove external CDN dependencies for PDF generation
-    cleaned_html = _remove_external_dependencies(cleaned_html)
+    # Remove external CDN dependencies for PDF generation (guarded)
+    try:
+        cleaned_html = _remove_external_dependencies(cleaned_html)
+    except Exception:
+        # If helper is not available or fails, continue with original html
+        pass
 
     # Add PDF-specific styles
     pdf_styles = """
@@ -5280,40 +5294,213 @@ def _replace_placeholder_images(html: str) -> str:
 
 
 def _remove_external_dependencies(html: str) -> str:
-    """移除可能导致PDF渲染问题的外部依赖，保留功能性资源"""
+    """移除或替换可能影响无头浏览器渲染的外部 CDN 依赖，保证 PDF 生成稳定。
+    - 替换 tailwindcdn 脚本为本地样式链接（如果项目提供了本地 CSS）。
+    - 移除分析/追踪脚本（analytics/gtag/hotjar 等）。
+    - 保留常见功能库，但尽量不破坏页面渲染。
+    """
     import re
 
-    # 仅替换 Tailwind CDN 为本地版本
-    html = re.sub(
-        r'<script[^>]*src=["\']https://cdn\.tailwindcss\.com[^"\']*["\'][^>]*>' r"</script>",
+    cleaned = html
+
+    # 替换 Tailwind CDN 脚本为本地 CSS（若有）
+    cleaned = re.sub(
+        r'<script[^>]*src=["\']https://cdn\.tailwindcss\.com[^"\']*["\'][^>]*>\s*</script>',
         '<link href="/static/css/tailwind.min.css" rel="stylesheet">',
-        html,
+        cleaned,
         flags=re.IGNORECASE,
     )
 
-    # 移除可能导致PDF渲染阻塞的特定脚本（保留功能性库）
-    problematic_scripts = [
-        # 移除可能导致渲染问题的交互性脚本
-        r'<script[^>]*src=["\'][^"\']*analytics[^"\']*["\'][^>]*></script>',
-        r'<script[^>]*src=["\'][^"\']*gtag[^"\']*["\'][^>]*></script>',
-        r'<script[^>]*src=["\'][^"\']*hotjar[^"\']*["\'][^>]*></script>',
-        # 移除社交媒体插件
-        r'<script[^>]*src=["\'][^"\']*facebook[^"\']*["\'][^>]*></script>',
-        r'<script[^>]*src=["\'][^"\']*twitter[^"\']*["\'][^>]*></script>',
+    # 移除常见分析/追踪脚本
+    patterns = [
+        r'<script[^>]*src=["\'][^"\']*analytics[^"\']*["\'][^>]*>\s*</script>',
+        r'<script[^>]*src=["\'][^"\']*gtag[^"\']*["\'][^>]*>\s*</script>',
+        r'<script[^>]*src=["\'][^"\']*hotjar[^"\']*["\'][^>]*>\s*</script>',
+        r'<script[^>]*src=["\'][^"\']*facebook[^"\']*["\'][^>]*>\s*</script>',
+        r'<script[^>]*src=["\'][^"\']*twitter[^"\']*["\'][^>]*>\s*</script>',
     ]
+    for pat in patterns:
+        cleaned = re.sub(pat, '', cleaned, flags=re.IGNORECASE)
 
-    for pattern in problematic_scripts:
-        html = re.sub(pattern, "", html, flags=re.IGNORECASE)
+    return cleaned
 
-    # 保留但优化外部字体加载（添加display=swap避免阻塞）
-    html = re.sub(
-        r'(<link[^>]*href=["\']https://fonts\.googleapis\.com[^"\']*["\'][^>]*>)',
-        r"\1&display=swap",
-        html,
-        flags=re.IGNORECASE,
+
+# duplicate header removed
+# ===== Speaker Notes (Script) Generation & Export =====
+from ..api.models import SpeakerNotesGenerationRequest
+
+
+@router.post("/api/projects/{project_id}/scripts/generate")
+async def generate_speaker_notes_endpoint(
+    project_id: str,
+    req: SpeakerNotesGenerationRequest,
+    user: User = Depends(get_current_user_required),
+):
+    """Generate speaker notes for selected or all slides and persist them."""
+    project = await ppt_service.project_manager.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not _user_can_access_project(user, project):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    try:
+        result = await ppt_service.generate_speaker_notes(project_id, req)
+        return JSONResponse({"success": True, **result})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
+
+def _build_notes_markdown(project, indices: list[int] | None = None) -> str:
+    """Assemble Markdown with titles and notes for selected slides."""
+    lines = []
+    lines.append(f"# {project.topic} - 演讲稿")
+    slides = project.slides_data or []
+    if not slides:
+        return "# 演讲稿\n\n（暂无内容）"
+
+    chosen = range(len(slides)) if not indices else [i for i in indices if 0 <= i < len(slides)]
+    for i in chosen:
+        s = slides[i]
+        title = s.get("title", f"第{i+1}页")
+        notes = (s.get("metadata", {}).get("speaker_notes") or s.get("speaker_notes") or "").strip()
+        lines.append("")
+        lines.append(f"## 第{i+1}页 · {title}")
+        if notes:
+            lines.append("")
+            lines.append(notes)
+        else:
+            lines.append("")
+            lines.append("（暂无演讲稿）")
+    return "\n".join(lines)
+
+
+@router.get("/api/projects/{project_id}/export/scripts.md")
+async def export_speaker_notes_markdown(
+    project_id: str,
+    indices: Optional[str] = None,  # comma-separated 1-based
+    user: User = Depends(get_current_user_required),
+):
+    """Export speaker notes as a Markdown file for selected or all slides."""
+    project = await ppt_service.project_manager.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not _user_can_access_project(user, project):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    idx0 = None
+    if indices:
+        try:
+            idx0 = [int(x.strip()) - 1 for x in indices.split(",") if x.strip()]
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid indices parameter")
+
+    md = _build_notes_markdown(project, idx0)
+
+    # Prepare response (avoid non-ASCII in plain filename= to prevent latin-1 header encoding errors)
+    # 1) Build a human-readable Unicode filename for filename*
+    unicode_topic = re.sub(r"[^\w\s-]", "", project.topic).strip() or "presentation"
+    unicode_filename = f"{unicode_topic}_演讲稿.md"
+    # 2) Build an ASCII-safe fallback for filename=
+    ascii_topic = re.sub(r"[^A-Za-z0-9_-]", "", unicode_topic)
+    if not ascii_topic:
+        ascii_topic = "presentation"
+    ascii_filename = f"{ascii_topic}_notes.md"
+    encoded = urllib.parse.quote(unicode_filename, safe="")
+    from fastapi.responses import Response
+
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={
+            # Provide ASCII fallback and RFC 5987 UTF-8 filename*
+            "Content-Disposition": f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{encoded}"
+        },
     )
 
-    return html
+
+@router.get("/api/projects/{project_id}/export/scripts.docx")
+async def export_speaker_notes_docx(
+    project_id: str,
+    indices: Optional[str] = None,  # comma-separated 1-based
+    user: User = Depends(get_current_user_required),
+):
+    """Export speaker notes as a DOCX file using python-docx."""
+    project = await ppt_service.project_manager.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not _user_can_access_project(user, project):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    idx0 = None
+    if indices:
+        try:
+            idx0 = [int(x.strip()) - 1 for x in indices.split(",") if x.strip()]
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid indices parameter")
+
+    # Build DOCX in a temp file
+    try:
+        from docx import Document
+        from docx.shared import Pt
+    except Exception:
+        raise HTTPException(status_code=503, detail="python-docx is not installed")
+
+    slides = project.slides_data or []
+    chosen = range(len(slides)) if not idx0 else [i for i in idx0 if 0 <= i < len(slides)]
+
+    document = Document()
+    document.core_properties.title = f"{project.topic} - 演讲稿"
+
+    # Title
+    document.add_heading(f"{project.topic} - 演讲稿", level=0)
+
+    for i in chosen:
+        s = slides[i]
+        title = s.get("title", f"第{i+1}页")
+        notes = (s.get("metadata", {}).get("speaker_notes") or s.get("speaker_notes") or "").strip()
+
+        document.add_heading(f"第{i+1}页 · {title}", level=1)
+        if notes:
+            # Split into paragraphs on blank lines; fall back to single paragraph
+            parts = [p.strip() for p in re.split(r"\n\s*\n", notes) if p.strip()]
+            if not parts:
+                parts = [notes]
+            for p in parts:
+                para = document.add_paragraph(p)
+                para_format = para.paragraph_format
+                para_format.space_after = Pt(6)
+        else:
+            document.add_paragraph("（暂无演讲稿）")
+
+    # Save to temp path
+    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
+        temp_path = tmp.name
+    document.save(temp_path)
+
+    unicode_topic = re.sub(r"[^\w\s-]", "", project.topic).strip()[:50] or "presentation"
+    unicode_filename = f"{unicode_topic}_演讲稿.docx"
+    ascii_topic = re.sub(r"[^A-Za-z0-9_-]", "", unicode_topic)
+    if not ascii_topic:
+        ascii_topic = "presentation"
+    ascii_filename = f"{ascii_topic}_notes.docx"  # ASCII-safe fallback
+    encoded = urllib.parse.quote(unicode_filename, safe="")
+    from starlette.background import BackgroundTask
+
+    def cleanup():
+        try:
+            os.unlink(temp_path)
+        except Exception:
+            pass
+
+    return FileResponse(
+        temp_path,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        # Don't set filename param to avoid duplicate Content-Disposition; provide our own header with ASCII + filename*
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{encoded}"
+        },
+        background=BackgroundTask(cleanup),
+    )
 
 
 async def _generate_pdf_with_pyppeteer(project, output_path: str, individual: bool = False) -> bool:

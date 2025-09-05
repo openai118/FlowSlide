@@ -355,3 +355,53 @@ class TemplateSelectionResponse(BaseModel):
     success: bool
     message: str
     selected_template: Optional[GlobalMasterTemplateResponse] = None
+
+
+# Speaker notes / script generation models
+class SpeakerNotesGenerationRequest(BaseModel):
+    """Request model for generating speaker notes (scripts) for slides"""
+
+    indices: Optional[List[int]] = Field(
+        None, description="List of 1-based slide indices to generate notes for; omit for all"
+    )
+    all: bool = Field(False, description="If true, generate for all slides")
+    overwrite: bool = Field(
+        False, description="Overwrite existing speaker notes; if false, skip slides that already have notes"
+    )
+    language: str = Field("zh", description="Language for the notes: 'zh' or 'en'")
+    tone: Optional[str] = Field(
+        None,
+        description="Optional tone/style hint, e.g., 'professional', 'friendly', 'concise', 'storytelling'",
+    )
+    words_per_slide: Optional[int] = Field(
+        None, description="Approximate target word count per slide (the model may vary)"
+    )
+
+
+# AI 模板转换（将现有幻灯片HTML重排为目标母版样式）
+class AITemplateTransformRequest(BaseModel):
+    """请求模型：使用AI将一页幻灯片HTML转换为目标母版风格"""
+
+    slide_html: str = Field(..., description="原始幻灯片的完整HTML内容")
+    slide_title: Optional[str] = Field(None, description="该页标题（可选）")
+    page_number: Optional[int] = Field(None, description="当前页码（1-based，可选）")
+    total_pages: Optional[int] = Field(None, description="总页数（可选）")
+    project_context: Optional[Dict[str, Any]] = Field(
+        None, description="项目上下文（如项目标题、场景、受众等，可选）"
+    )
+    extra_instructions: Optional[str] = Field(
+        None, description="额外指令（如风格偏好、需要保留/删除的元素提示等，可选）"
+    )
+    safe_mode: Optional[bool] = Field(
+        True,
+        description="安全模式：尽量保留原有重要节点（图片、图表、脚本），只做必要的结构与样式映射",
+    )
+
+
+class AITemplateTransformResponse(BaseModel):
+    """响应模型：AI模板转换结果"""
+
+    success: bool
+    transformed_html: Optional[str] = Field(None, description="转换后的完整HTML(含<!DOCTYPE html>)")
+    notes: Optional[str] = Field(None, description="AI的简短说明/注意事项（可选）")
+    error: Optional[str] = Field(None, description="错误信息（如失败）")

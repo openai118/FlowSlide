@@ -6,8 +6,11 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
+import asyncio
 
 from ..services.global_master_template_service import GlobalMasterTemplateService
+from ..services.global_master_template_service import GlobalMasterTemplateService
+from ..ai import AIMessage, MessageRole
 from ..database.create_default_template import ensure_default_templates_exist
 from .models import (
     GlobalMasterTemplateCreate,
@@ -15,6 +18,8 @@ from .models import (
     GlobalMasterTemplateGenerateRequest,
     GlobalMasterTemplateResponse,
     GlobalMasterTemplateUpdate,
+    AITemplateTransformRequest,
+    AITemplateTransformResponse,
     TemplateSelectionRequest,
     TemplateSelectionResponse,
 )
@@ -320,6 +325,108 @@ async def get_template_preview(template_id: int):
     except Exception as e:
         logger.error(f"Failed to get template preview {template_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to get template preview")
+
+@router.post("/{template_id}/ai-transform", response_model=AITemplateTransformResponse)
+async def ai_transform_slide_with_template(
+    template_id: int,
+    req: AITemplateTransformRequest,
+    timeout_sec: float = Query(45.0, ge=1, le=300, description="AI调用超时时间（秒），默认45s")
+):
+    """使用AI将传入的单页幻灯片HTML转换为指定全局母版的风格，返回完整HTML。
+
+    约束/目标：
+    - 保持1280x720（或模板自带尺寸）画布，保留关键节点（img/canvas/svg/script）
+    - 将原内容映射到模板的内容区域/插槽（如 {{ page_content }} 或 data-page-* 容器）
+    - 允许 safe_mode 更偏保守地迁移结构
+    """
+    try:
+        # 读取目标模板
+        template = await template_service.get_template_by_id(template_id)
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+
+        html_template = template.get("html_template") or ""
+        if not html_template:
+            raise HTTPException(status_code=400, detail="Template has no html_template")
+
+        # 构造给AI的提示词
+        ai = template_service.ai_provider
+        from ..core.config import ai_config as _ai_cfg
+
+        page_title = req.slide_title or ""
+        page_number = req.page_number or 1
+        total_pages = req.total_pages or 1
+        project_info = req.project_context or {}
+
+        system_msg = (
+            "你是一名资深的PPT前端工程与视觉设计专家，擅长将现有HTML幻灯片内容迁移到新的母版模板结构中。"
+        )
+
+        user_msg = f"""
+请将“原始幻灯片HTML”迁移到“目标母版HTML”的结构与样式下，输出严格的完整HTML（包含 <!DOCTYPE html>、<head>、<body>）。
+
+要求：
+- 尽量保留原有的重要节点：<img>、<canvas>、<svg>、<script>、图表容器等，保留其事件/属性；
+- 将原内容映射到模板的内容区域或插槽（如 data-page-content、{{{{ page_content }}}} 或明显的内容容器）；
+- 如模板具有页眉/页脚/页码区域，避免重复放置同类元素；
+- 维持页面尺寸比例（优先1280x720或模板自带的固定尺寸）；
+- 如果存在内联脚本，请保留，并确保依赖的DOM仍然存在；
+- 避免引入外部网络依赖；
+- 输出只包含转换后的最终HTML，不要额外解释文字。
+
+上下文：
+- 页面标题：{page_title}
+- 页码：{page_number}/{total_pages}
+- 项目信息：{project_info}
+- 安全模式：{req.safe_mode}
+
+目标母版HTML：
+```html
+{html_template}
+```
+
+原始幻灯片HTML：
+```html
+{req.slide_html}
+```
+"""
+
+        messages = [
+            AIMessage(role=MessageRole.SYSTEM, content=system_msg),
+            AIMessage(
+                role=MessageRole.USER,
+                content=(user_msg + ("\n补充指令：" + req.extra_instructions if req.extra_instructions else "")),
+            ),
+        ]
+
+        # 调用对话式补全，提取HTML（加超时保护）
+        try:
+            resp = await asyncio.wait_for(
+                ai.chat_completion(
+                    messages=messages,
+                    max_tokens=_ai_cfg.max_tokens,
+                    temperature=0.4,
+                ),
+                timeout=timeout_sec,
+            )
+        except asyncio.TimeoutError:
+            return AITemplateTransformResponse(success=False, error="AI转换超时，请稍后重试或调低批量并发。")
+        content = getattr(resp, "content", "") if resp else ""
+
+        # 提取代码块中的HTML
+        transformed = template_service._extract_html_from_response(content) if hasattr(template_service, "_extract_html_from_response") else content
+
+        # 基本校验
+        if not transformed or (hasattr(template_service, "_validate_html_template") and not template_service._validate_html_template(transformed)):
+            # 兜底：若不符合完整结构，直接返回原文，前端可回退
+            return AITemplateTransformResponse(success=False, error="AI返回的HTML不完整或校验失败", transformed_html=content)
+
+        return AITemplateTransformResponse(success=True, transformed_html=transformed, notes="AI转换完成")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"AI模板转换失败: {e}")
+        return AITemplateTransformResponse(success=False, error=str(e))
 
 
 # Add increment usage endpoint for internal use

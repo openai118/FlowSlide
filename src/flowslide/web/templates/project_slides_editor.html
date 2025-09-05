@@ -3412,6 +3412,32 @@
                 <button class="btn btn-info" onclick="sharePresentation()">
                     <i class="fas fa-share"></i> 分享演示
                 </button>
+                <!-- Speaker notes actions -->
+                <button class="btn btn-info" onclick="generateNotesForCurrent()" title="为当前页生成演讲稿">
+                    <i class="fas fa-microphone"></i> 生成演讲稿（本页）
+                </button>
+                <button class="btn btn-info" onclick="generateNotesForAll()" title="为全部页生成演讲稿">
+                    <i class="fas fa-microphone-lines"></i> 生成演讲稿（全部）
+                </button>
+                <button class="btn btn-success" onclick="downloadNotesMarkdown()" title="导出演讲稿为Markdown">
+                    <i class="fas fa-file-alt"></i> 导出演讲稿（Markdown）
+                </button>
+                <button class="btn btn-success" onclick="downloadNotesDocx()" title="导出演讲稿为DOCX">
+                    <i class="fas fa-file-word"></i> 导出演讲稿（DOCX）
+                </button>
+            </div>
+            <!-- Speaker Notes Preview Panel -->
+            <div id="speakerNotesPreview" style="margin-top:12px; padding:12px; border:1px solid var(--border-color, #e5e7eb); border-radius:8px; background: var(--panel-bg, #fff);">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                    <div style="font-weight:600;">
+                        <i class="fas fa-comment-dots" aria-hidden="true"></i>
+                        <span>演讲稿预览（当前页）</span>
+                    </div>
+                    <button class="btn btn-sm" onclick="renderNotesPreview()" title="刷新预览" style="padding:4px 8px;">
+                        <i class="fas fa-rotate"></i> 刷新
+                    </button>
+                </div>
+                <div id="speakerNotesPreviewBody" style="max-height:200px; overflow:auto; white-space:pre-wrap; line-height:1.6; font-size:14px; color:var(--text-color, #111827);"></div>
             </div>
         </div>
     </div>
@@ -3604,6 +3630,10 @@
                     <button class="ai-outline-btn" onclick="autoGenerateSlideImages()" title="一键配图">
                         <i class="fas fa-magic"></i>
                     </button>
+                    <!-- 选择母版：迁移到AI编辑面板 -->
+                    <button class="ai-outline-btn" onclick="openTemplatePicker()" title="选择母版">
+                        <i class="fas fa-layer-group"></i>
+                    </button>
                     <button class="ai-edit-sidebar-close" onclick="closeAIEditSidebar()">
                         <i class="fas fa-times"></i>
                     </button>
@@ -3699,10 +3729,33 @@
             }).catch(function(e){ console.warn('Failed to load CDN mirrors config', e); });
         })();
     </script>
+    <script id="PROJECT_INFO_JSON" type="application/json">
+        {{ {
+            "project_id": project.project_id,
+            "title": project.title,
+            "topic": project.topic,
+            "scenario": project.scenario,
+            "requirements": project.requirements
+        } | tojson }}
+    </script>
+    <script id="SLIDES_DATA_JSON" type="application/json">
+        {{ project.slides_data | tojson if project.slides_data and project.slides_data|length > 0 else '[]' }}
+    </script>
+    <script id="PROJECT_OUTLINE_JSON" type="application/json">
+        {{ project.outline | tojson if project.outline else 'null' }}
+    </script>
     <script>
         let currentSlideIndex = 0;
         let currentMode = 'preview';
-        let slidesData = {{ project.slides_data | tojson if project.slides_data and project.slides_data|length > 0 else '[]' }};
+        // 幻灯片数据（避免直接内嵌 Jinja 导致编辑器语法误报）
+        const SLIDES_DATA_JSON = document.getElementById('SLIDES_DATA_JSON');
+        let slidesData = [];
+        try {
+            slidesData = SLIDES_DATA_JSON ? JSON.parse(SLIDES_DATA_JSON.textContent) : [];
+        } catch (e) {
+            console.warn('解析 SLIDES_DATA_JSON 失败:', e);
+            slidesData = [];
+        }
         let slideshowIndex = 0;
         let isSlideshow = false;
 
@@ -3927,7 +3980,26 @@
 
         // 项目状态和生成完成状态
         let projectStatus = '{{ project.status }}';
-        let projectOutline = {{ project.outline | tojson if project.outline else 'null' }};
+        // 项目大纲（通过 JSON 脚本注入）
+        const PROJECT_OUTLINE_JSON = document.getElementById('PROJECT_OUTLINE_JSON');
+        let projectOutline = null;
+        try {
+            projectOutline = PROJECT_OUTLINE_JSON ? JSON.parse(PROJECT_OUTLINE_JSON.textContent) : null;
+        } catch (e) {
+            console.warn('解析 PROJECT_OUTLINE_JSON 失败:', e);
+            projectOutline = null;
+        }
+
+        // 全局项目信息（从上方 JSON 脚本解析，避免在 JS 里直接写 Jinja）
+        const PROJECT_INFO = (() => {
+            try {
+                const el = document.getElementById('PROJECT_INFO_JSON');
+                return el ? JSON.parse(el.textContent) : null;
+            } catch (e) {
+                console.warn('解析 PROJECT_INFO_JSON 失败:', e);
+                return null;
+            }
+        })();
 
         // 调试信息
         console.log('PPT编辑器调试信息:');
@@ -6463,6 +6535,103 @@
             document.body.appendChild(modal);
         }
 
+        // 调用后端AI模板转换接口，返回 { success, transformed_html, error }
+        async function aiTransformSlideWithTemplate(templateId, slideIndex, fallbackTplHtml = '', opts = {}) {
+            if (!Array.isArray(slidesData) || slideIndex < 0 || slideIndex >= slidesData.length) {
+                throw new Error('无效的幻灯片索引');
+            }
+            const slide = slidesData[slideIndex];
+            const timeoutSec = typeof opts.timeoutSec === 'number' ? opts.timeoutSec : 45;
+            const clientTimeoutMs = typeof opts.timeoutMs === 'number' ? opts.timeoutMs : Math.min((timeoutSec + 5) * 1000, 300000);
+            const payload = {
+                slide_html: slide.html_content || '',
+                slide_title: slide.title || `第${slideIndex + 1}页`,
+                page_number: slideIndex + 1,
+                total_pages: slidesData.length,
+                project_context: PROJECT_INFO,
+                extra_instructions: null,
+                safe_mode: true
+            };
+            const controller = new AbortController();
+            const abortId = setTimeout(() => controller.abort(), clientTimeoutMs);
+            let resp;
+            try {
+                resp = await fetch(`/api/global-master-templates/${templateId}/ai-transform?timeout_sec=${encodeURIComponent(timeoutSec)}` , {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    signal: controller.signal
+                });
+            } catch (err) {
+                clearTimeout(abortId);
+                if (err && (err.name === 'AbortError' || err.message === 'The operation was aborted.')) {
+                    return { success: false, transformed_html: null, error: '请求超时' };
+                }
+                throw err;
+            } finally {
+                clearTimeout(abortId);
+            }
+            if (!resp.ok) {
+                const text = await resp.text();
+                throw new Error(`AI转换接口失败: HTTP ${resp.status} ${resp.statusText} ${text || ''}`);
+            }
+            const data = await resp.json();
+            // data: { success, transformed_html, error }
+            if (!data || data.success !== true || !data.transformed_html) {
+                // 失败则回退由调用方处理
+                return { success: false, transformed_html: null, error: (data && data.error) || 'AI转换失败' };
+            }
+            return data;
+        }
+
+        // 单页预览并确认，返回 Promise<boolean>
+        function showSinglePreviewAndConfirm(htmlContent, titleText = '预览') {
+            return new Promise((resolve) => {
+                const overlay = document.createElement('div');
+                overlay.style.cssText = 'position:fixed; inset:0; background: rgba(0,0,0,0.6); z-index:12000; display:flex; align-items:center; justify-content:center; padding:20px; box-sizing:border-box;';
+                const panel = document.createElement('div');
+                panel.style.cssText = 'width:min(1100px,98%); max-height:90%; background:#fff; border-radius:8px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.3)';
+                const header = document.createElement('div');
+                header.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid #eee;';
+                header.innerHTML = `<div style="font-weight:700">预览：${titleText}</div>`;
+                const body = document.createElement('div');
+                body.style.cssText = 'padding:0; flex:1; background:#000; display:flex; align-items:center; justify-content:center;';
+                const slideBox = document.createElement('div');
+                slideBox.style.cssText = `background:#fff; border-radius:10px; overflow:hidden; width:100%; height:100%;
+                    {% if aspect_ratio_settings.ratio_css == "4/3" %}
+                    max-width: calc(100vh * 4/3 - 40px);
+                    max-height: calc(100vw * 3/4 - 40px);
+                    {% else %}
+                    max-width: calc(100vh * 16/9 - 40px);
+                    max-height: calc(100vw * 9/16 - 40px);
+                    {% endif %}
+                    aspect-ratio: {{ aspect_ratio_settings.ratio_css }};`;
+                const iframe = document.createElement('iframe');
+                iframe.style.cssText = 'width:100%; height:100%; border:none; background:#fff;';
+                iframe.srcdoc = htmlContent;
+                slideBox.appendChild(iframe);
+                body.appendChild(slideBox);
+
+                const footer = document.createElement('div');
+                footer.style.cssText = 'padding:10px 14px; border-top:1px solid #eee; display:flex; gap:8px; justify-content:flex-end; background:#fafafa;';
+                const cancelBtn = document.createElement('button');
+                cancelBtn.textContent = '取消';
+                cancelBtn.style.cssText = 'padding:8px 14px; background:#6c757d; color:#fff; border:none; border-radius:4px; cursor:pointer;';
+                const okBtn = document.createElement('button');
+                okBtn.textContent = '确认应用';
+                okBtn.style.cssText = 'padding:8px 14px; background:#28a745; color:#fff; border:none; border-radius:4px; cursor:pointer;';
+                cancelBtn.onclick = () => { document.body.removeChild(overlay); resolve(false); };
+                okBtn.onclick = () => { document.body.removeChild(overlay); resolve(true); };
+                footer.appendChild(cancelBtn); footer.appendChild(okBtn);
+
+                panel.appendChild(header); panel.appendChild(body); panel.appendChild(footer);
+                overlay.appendChild(panel);
+                overlay.addEventListener('click', (e) => { if (e.target === overlay) { document.body.removeChild(overlay); resolve(false); } });
+                document.addEventListener('keydown', function onKey(e){ if(e.key==='Escape'){ document.body.removeChild(overlay); document.removeEventListener('keydown', onKey); resolve(false);} });
+                document.body.appendChild(overlay);
+            });
+        }
+
         // 保存幻灯片大纲
         async function saveSlideOutline() {
             const title = document.getElementById('slideTitle').value;
@@ -7645,96 +7814,208 @@
                 const card = document.createElement('div');
                 card.style.cssText = 'border:1px solid #e6e6e6; border-radius:6px; padding:8px; background:#fafafa; display:flex; flex-direction:column; gap:8px;';
                 const title = document.createElement('div'); title.innerText = t.template_name || `模板 ${t.id}`; title.style.fontWeight = '600';
-                const preview = document.createElement('div'); preview.style.cssText = 'height:120px; overflow:hidden; border-radius:4px; background:#fff; border:1px solid #ddd;';
-                if (t.preview_image) { const img = document.createElement('img'); img.src = t.preview_image; img.style.cssText = 'width:100%; height:100%; object-fit:cover;'; preview.appendChild(img); }
-                else if (t.html_template) { const iframe = document.createElement('iframe'); iframe.style.cssText = 'width:100%; height:100%; border:none;'; iframe.srcdoc = t.html_template; preview.appendChild(iframe); }
-                else { preview.innerText = '暂无预览'; preview.style.display = 'flex'; preview.style.alignItems = 'center'; preview.style.justifyContent = 'center'; preview.style.color = '#888'; }
+                const preview = document.createElement('div'); preview.style.cssText = 'height:120px; overflow:hidden; border-radius:4px; background:#fff; border:1px solid #ddd; position:relative;';
+                const placeholder = document.createElement('div');
+                placeholder.innerText = '暂无预览';
+                placeholder.style.cssText = 'position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#888;';
+                preview.appendChild(placeholder);
 
-                const actions = document.createElement('div'); actions.style.cssText = 'display:flex; gap:8px;';
-                const selectBtn = document.createElement('button'); selectBtn.innerText = '选择并设为项目母版'; selectBtn.style.cssText = 'flex:1; padding:8px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer;';
-                selectBtn.onclick = async () => {
-                    try {
-                        selectBtn.disabled = true; selectBtn.innerText = '应用中...';
-                        const res = await fetch(`/api/projects/{{ project.project_id }}/select-template`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_id: '{{ project.project_id }}', selected_template_id: t.id }) });
-                        if (!res.ok) throw new Error('设置项目母版失败');
-                        alert('母版已设置到项目。可选择“应用到所有幻灯片”以批量替换当前幻灯片风格。'); selectBtn.innerText = '已设置';
-                    } catch (e) { console.error('选择母版失败:', e); alert('选择母版失败：' + (e.message || e)); selectBtn.disabled = false; selectBtn.innerText = '选择并设为项目母版'; }
-                };
+                // 初始快速渲染（如果列表接口已带了图片）
+                if (t.preview_image) {
+                    preview.innerHTML = '';
+                    const img = document.createElement('img');
+                    img.src = t.preview_image; img.style.cssText = 'width:100%; height:100%; object-fit:cover;';
+                    preview.appendChild(img);
+                } else if (t.html_template) {
+                    preview.innerHTML = '';
+                    const iframe = document.createElement('iframe');
+                    iframe.style.cssText = 'width:100%; height:100%; border:none;';
+                    iframe.srcdoc = t.html_template; preview.appendChild(iframe);
+                }
 
-                const applyAllBtn = document.createElement('button'); applyAllBtn.innerText = '应用到所有幻灯片'; applyAllBtn.style.cssText = 'flex:1; padding:8px; background:#28a745; color:white; border:none; border-radius:4px; cursor:pointer;';
-                applyAllBtn.onclick = async () => {
+                // 补充：调用 /preview 拉取完整模板，直接在红框内展示
+                (async () => {
                     try {
-                        applyAllBtn.disabled = true; applyAllBtn.innerText = '生成预览...';
                         const pv = await fetch(`/api/global-master-templates/${t.id}/preview`);
-                        if (!pv.ok) throw new Error('无法获取模板预览');
+                        if (!pv.ok) return;
                         const pvj = await pv.json();
-                        const templateObj = pvj;
-
-                        // 生成内存预览，但不修改 slidesData
-                        const previews = [];
-                        for (let i = 0; i < slidesData.length; i++) {
-                            const titleTxt = slidesData[i].title || `第${i+1}页`;
-                            const slideHtml = slidesData[i].html_content || '';
-                            const tplHtml = templateObj.html_template || templateObj.html || (typeof templateObj === 'string' ? templateObj : '');
-                            const finalHtml = mergeTemplateAndSlide(tplHtml, slideHtml, titleTxt, i+1, slidesData.length);
-                            previews.push({ page_number: i+1, title: titleTxt, html_content: finalHtml });
+                        const tplHtml = pvj.html_template || pvj.html || '';
+                        const imgUrl = pvj.preview_image || '';
+                        if (tplHtml) {
+                            preview.innerHTML = '';
+                            const iframe = document.createElement('iframe');
+                            iframe.style.cssText = 'width:100%; height:100%; border:none;';
+                            iframe.srcdoc = tplHtml; preview.appendChild(iframe);
+                        } else if (imgUrl) {
+                            preview.innerHTML = '';
+                            const img = document.createElement('img');
+                            img.src = imgUrl; img.style.cssText = 'width:100%; height:100%; object-fit:cover;';
+                            preview.appendChild(img);
+                        } else {
+                            // 保持占位
                         }
+                    } catch (e) {
+                        // 忽略预览加载错误
+                    }
+                })();
 
-                        // 显示预览并让用户确认
-                        const confirmed = await showPreviewAndConfirm(previews);
-                        if (!confirmed) {
-                            applyAllBtn.disabled = false; applyAllBtn.innerText = '应用到所有幻灯片';
+                const actions = document.createElement('div'); actions.style.cssText = 'display:flex; gap:8px; flex-wrap: wrap;';
+
+                // AI转换（单页）
+                const aiApplyCurrentBtn = document.createElement('button');
+                aiApplyCurrentBtn.innerText = '转换当前页';
+                aiApplyCurrentBtn.style.cssText = 'flex:1; padding:8px; background:#6f42c1; color:white; border:none; border-radius:4px; cursor:pointer;';
+                aiApplyCurrentBtn.onclick = async () => {
+                    try {
+                        if (!Array.isArray(slidesData) || slidesData.length === 0) {
+                            alert('当前项目没有幻灯片');
                             return;
                         }
+                        const idx = currentSlideIndex;
+                        if (idx < 0 || idx >= slidesData.length) {
+                            alert('无效的当前页索引');
+                            return;
+                        }
+                        aiApplyCurrentBtn.disabled = true;
+                        const origText = aiApplyCurrentBtn.innerText;
+                        aiApplyCurrentBtn.innerText = 'AI转换中...';
+                        // 先取模板html用于失败回退
+                        const pv = await fetch(`/api/global-master-templates/${t.id}/preview`);
+                        const pvj = pv.ok ? await pv.json() : {};
+                        const tplHtml = pvj.html_template || pvj.html || '';
+                        const result = await aiTransformSlideWithTemplate(t.id, idx, tplHtml);
+                        if (!result || !result.transformed_html) {
+                            throw new Error(result && result.error ? result.error : 'AI未返回有效HTML');
+                        }
+                        const titleTxt = slidesData[idx].title || `第${idx+1}页`;
+                        const confirmed = await showSinglePreviewAndConfirm(result.transformed_html, titleTxt);
+                        if (!confirmed) {
+                            aiApplyCurrentBtn.disabled = false; aiApplyCurrentBtn.innerText = origText;
+                            return;
+                        }
+                        // 应用并保存
+                        const saveOk = await saveSingleSlideToServer(idx, result.transformed_html);
+                        if (saveOk) {
+                            slidesData[idx].html_content = result.transformed_html;
+                            slidesData[idx].is_user_edited = true;
+                            updateThumbnailsContent();
+                            if (idx === currentSlideIndex) {
+                                const slideFrame = document.getElementById('slideFrame');
+                                if (slideFrame) {
+                                    setSafeIframeContent(slideFrame, result.transformed_html);
+                                    setTimeout(() => forceReinitializeIframeJS(slideFrame), 300);
+                                }
+                            }
+                            showNotification('已应用AI转换并保存（当前页）', 'success');
+                        } else {
+                            showNotification('AI转换应用成功，但保存失败', 'warning');
+                        }
+                        aiApplyCurrentBtn.innerText = '已应用';
+                    } catch (err) {
+                        console.error('AI转换当前页失败:', err);
+                        alert('AI转换失败：' + (err.message || err));
+                        aiApplyCurrentBtn.disabled = false;
+                        aiApplyCurrentBtn.innerText = '转换当前页';
+                    }
+                };
 
-                        applyAllBtn.innerText = '创建备份...';
-                        // 创建项目版本备份（以便可回滚）
-                        const backupResp = await fetch(`/api/projects/{{ project.project_id }}/versions`, {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: `Backup before apply template ${t.template_name || t.id}`, created_by: 'ui' })
-                        });
+                // AI转换（所有页）
+                const aiApplyAllBtn = document.createElement('button');
+                aiApplyAllBtn.innerText = '转换所有页';
+                aiApplyAllBtn.style.cssText = 'flex:1; padding:8px; background:#20c997; color:white; border:none; border-radius:4px; cursor:pointer;';
+                aiApplyAllBtn.onclick = async () => {
+                    try {
+                        if (!Array.isArray(slidesData) || slidesData.length === 0) {
+                            alert('当前项目没有幻灯片');
+                            return;
+                        }
+                        aiApplyAllBtn.disabled = true; const origText = aiApplyAllBtn.innerText;
+                        aiApplyAllBtn.innerText = `AI转换中 0/${slidesData.length}...`;
+                        // 取模板html用于失败回退
+                        const pv = await fetch(`/api/global-master-templates/${t.id}/preview`);
+                        const pvj = pv.ok ? await pv.json() : {};
+                        const tplHtml = pvj.html_template || pvj.html || '';
+                        const total = slidesData.length;
+                        const previews = new Array(total);
+                        let completed = 0;
+                        const concurrency = 2; // 限制并发，避免AI提供商限流
+                        const timeoutSec = 45;  // 与后端默认一致
+                        const indices = Array.from({length: total}, (_, i) => i);
+
+                        async function worker() {
+                            while (indices.length > 0) {
+                                const i = indices.shift();
+                                if (typeof i !== 'number') break;
+                                try {
+                                    let r;
+                                    let attempt = 0;
+                                    while (attempt < 2) { // 简单重试一次
+                                        try {
+                                            r = await aiTransformSlideWithTemplate(t.id, i, tplHtml, { timeoutSec });
+                                            break;
+                                        } catch (err) {
+                                            attempt++;
+                                            if (attempt >= 2) break;
+                                            await new Promise(res => setTimeout(res, 800 * Math.pow(2, attempt-1)));
+                                        }
+                                    }
+                                    const html = (r && r.transformed_html) ? r.transformed_html : mergeTemplateAndSlide(
+                                        tplHtml, slidesData[i].html_content || '', (slidesData[i].title || `第${i+1}页`), i+1, total
+                                    );
+                                    previews[i] = { page_number: i+1, title: slidesData[i].title || `第${i+1}页`, html_content: html };
+                                } catch (e) {
+                                    console.warn('AI转换失败，回退到合并策略，第', i+1, '页:', e);
+                                    const html = mergeTemplateAndSlide(
+                                        tplHtml, slidesData[i].html_content || '', (slidesData[i].title || `第${i+1}页`), i+1, total
+                                    );
+                                    previews[i] = { page_number: i+1, title: slidesData[i].title || `第${i+1}页`, html_content: html };
+                                } finally {
+                                    completed++;
+                                    aiApplyAllBtn.innerText = `AI转换中 ${completed}/${total}...`;
+                                }
+                            }
+                        }
+
+                        const workers = Array.from({length: Math.min(concurrency, total)}, () => worker());
+                        await Promise.all(workers);
+
+                        // 预览确认
+                        const confirmed = await showPreviewAndConfirm(previews);
+                        if (!confirmed) { aiApplyAllBtn.disabled = false; aiApplyAllBtn.innerText = origText; return; }
+
+                        aiApplyAllBtn.innerText = '创建备份...';
+                        const backupResp = await fetch(`/api/projects/{{ project.project_id }}/versions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: `Backup before AI apply template ${t.template_name || t.id}`, created_by: 'ui' }) });
                         if (!backupResp.ok) throw new Error('创建备份失败');
                         const backupJson = await backupResp.json();
-                        const versionId = backupJson && backupJson.version ? backupJson.version : (backupJson.id || null);
+                        const versionId = (backupJson && (backupJson.version || backupJson.id)) || null;
 
-                        applyAllBtn.innerText = '保存变更...';
-                        // 构建批量保存 payload
+                        aiApplyAllBtn.innerText = '保存变更...';
                         const newSlides = previews.map(p => ({ ...slidesData[p.page_number - 1], html_content: p.html_content, is_user_edited: true }));
-
                         const saveResp = await fetch(`/api/projects/{{ project.project_id }}/slides/batch-save`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slides_data: newSlides }) });
                         if (!saveResp.ok) throw new Error('批量保存失败');
                         const saveJson = await saveResp.json();
                         if (!saveJson.success) throw new Error(saveJson.error || 'batch save failed');
 
-                        // 成功后替换本地数据并刷新缩略图
-                        slidesData = newSlides;
-                        updateThumbnailsContent();
-
-                        // 通知用户并提供回滚信息
-                        const rollbackMsg = versionId ? ` 已创建备份(version=${versionId})，如需回滚请在项目版本中恢复。` : '';
-                        alert('母版已应用到所有幻灯片并保存。' + rollbackMsg);
-                        applyAllBtn.innerText = '已应用';
+                        slidesData = newSlides; updateThumbnailsContent();
+                        const rollbackMsg = versionId ? ` 已创建备份(version=${versionId})，可在项目版本中回滚。` : '';
+                        alert('AI已应用到所有幻灯片并保存。' + rollbackMsg);
+                        aiApplyAllBtn.innerText = '已应用';
                         modal.remove();
                     } catch (e) {
-                        console.error('应用母版到所有幻灯片失败:', e);
-                        alert('应用失败：' + (e.message || e));
-                        applyAllBtn.disabled = false; applyAllBtn.innerText = '应用到所有幻灯片';
+                        console.error('AI应用到所有幻灯片失败:', e);
+                        alert('AI应用失败：' + (e.message || e));
+                        aiApplyAllBtn.disabled = false; aiApplyAllBtn.innerText = '转换所有页';
                     }
                 };
 
-                actions.appendChild(selectBtn); actions.appendChild(applyAllBtn);
+                actions.appendChild(aiApplyCurrentBtn); actions.appendChild(aiApplyAllBtn);
                 card.appendChild(title); card.appendChild(preview); card.appendChild(actions); grid.appendChild(card);
             });
 
             panel.appendChild(grid); modal.appendChild(panel); document.body.appendChild(modal);
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            try {
-                const existingBtn = document.getElementById('openTemplatePickerBtn');
-                if (existingBtn) return;
-                const btn = document.createElement('button'); btn.id = 'openTemplatePickerBtn'; btn.innerText = '选择母版'; btn.title = '从全局母版中选择并应用到项目'; btn.style.cssText = 'position:fixed; right:18px; bottom:120px; z-index:11000; padding:10px 14px; background:#6f42c1; color:#fff; border:none; border-radius:6px; box-shadow:0 6px 18px rgba(0,0,0,0.2); cursor:pointer;'; btn.onclick = openTemplatePicker; document.body.appendChild(btn);
-            } catch (e) { console.error(e); }
-        });
+    // 已将“选择母版”入口移动到 AI 编辑侧栏按钮区，移除右下角浮动按钮
 
         // 清理数据库中多余的幻灯片
         async function cleanupExcessSlides() {
@@ -7985,6 +8266,137 @@
             }, 1000);
         }
 
+        // ===== Speaker Notes (演讲稿) preview / generation / export =====
+        function getCurrentSlideNotes() {
+            try {
+                if (!Array.isArray(slidesData) || slidesData.length === 0) return '';
+                const s = slidesData[currentSlideIndex] || {};
+                return (s.metadata && s.metadata.speaker_notes) || s.speaker_notes || '';
+            } catch (e) { return ''; }
+        }
+
+        function renderNotesPreview() {
+            try {
+                const el = document.getElementById('speakerNotesPreviewBody');
+                if (!el) return;
+                const slide = (Array.isArray(slidesData) && slidesData[currentSlideIndex]) || {};
+                const title = slide.title || `第${currentSlideIndex + 1}页`;
+                const notes = getCurrentSlideNotes();
+                if (notes && ('' + notes).trim()) {
+                    el.innerHTML = `<div style="font-weight:600; margin-bottom:6px;">${title}</div>` +
+                                   `<div>${('' + notes).replace(/\n/g, '<br>')}</div>`;
+                } else {
+                    el.innerHTML = `<div style="font-weight:600; margin-bottom:6px;">${title}</div>` +
+                                   `<div style="color:#6b7280;">（暂无演讲稿）</div>`;
+                }
+            } catch (e) {}
+        }
+        async function generateNotesForCurrent() {
+            try {
+                if (!validateCurrentSlideIndex('generateNotesForCurrent')) {
+                    return;
+                }
+                const slideNo = currentSlideIndex + 1; // API uses 1-based indices
+                showNotification(`正在为第${slideNo}页生成演讲稿…`, 'info');
+                const payload = {
+                    indices: [slideNo],
+                    all: false,
+                    overwrite: true,
+                    language: 'zh',
+                    tone: '口语化、自然、有感染力',
+                    words_per_slide: 120
+                };
+                const resp = await fetch(`/api/projects/{{ project.project_id }}/scripts/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!resp.ok) {
+                    const text = await resp.text();
+                    throw new Error(text || `HTTP ${resp.status}`);
+                }
+                // Optional: merge returned notes into local state
+                try {
+                    const data = await resp.json();
+                    if (data && Array.isArray(slidesData) && slidesData[currentSlideIndex]) {
+                        const maybeNotes = (data.notes && data.notes[slideNo]) || data.speaker_notes || data.result || null;
+                        if (maybeNotes) {
+                            slidesData[currentSlideIndex].speaker_notes = maybeNotes;
+                            slidesData[currentSlideIndex].metadata = slidesData[currentSlideIndex].metadata || {};
+                            slidesData[currentSlideIndex].metadata.speaker_notes = maybeNotes;
+                            try { renderNotesPreview(); } catch (e) {}
+                        }
+                    }
+                } catch (e) {
+                    // ignore JSON merge errors; generation succeeded
+                }
+                showNotification(`第${slideNo}页演讲稿已生成`, 'success');
+            } catch (err) {
+                console.error('生成当前页演讲稿失败:', err);
+                showNotification(`生成失败：${err.message}`, 'error');
+            }
+        }
+
+        async function generateNotesForAll() {
+            try {
+                showNotification('正在为全部幻灯片生成演讲稿…（可能需要一点时间）', 'info');
+                const payload = {
+                    indices: [],
+                    all: true,
+                    overwrite: true,
+                    language: 'zh',
+                    tone: '口语化、自然、有感染力',
+                    words_per_slide: 120
+                };
+                const resp = await fetch(`/api/projects/{{ project.project_id }}/scripts/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!resp.ok) {
+                    const text = await resp.text();
+                    throw new Error(text || `HTTP ${resp.status}`);
+                }
+                showNotification('全部演讲稿生成完成', 'success');
+                try { renderNotesPreview(); } catch (e) {}
+            } catch (err) {
+                console.error('生成全部演讲稿失败:', err);
+                showNotification(`生成失败：${err.message}`, 'error');
+            }
+        }
+
+        function downloadNotesMarkdown() {
+            try {
+                const a = document.createElement('a');
+                a.href = `/api/projects/{{ project.project_id }}/export/scripts.md`;
+                a.download = '';
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => showNotification('演讲稿（Markdown）导出已开始', 'success'), 500);
+            } catch (err) {
+                console.error('导出演讲稿Markdown失败:', err);
+                showNotification(`导出失败：${err.message}`, 'error');
+            }
+        }
+
+        function downloadNotesDocx() {
+            try {
+                const a = document.createElement('a');
+                a.href = `/api/projects/{{ project.project_id }}/export/scripts.docx`;
+                a.download = '';
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => showNotification('演讲稿（DOCX）导出已开始', 'success'), 500);
+            } catch (err) {
+                console.error('导出演讲稿DOCX失败:', err);
+                showNotification(`导出失败：${err.message}`, 'error');
+            }
+        }
+
         function showNotification(message, type = 'info') {
             // 创建通知元素
             const notification = document.createElement('div');
@@ -8043,7 +8455,21 @@
             }, 3000);
         }
 
-        function exportSingleSlideHTML() {
+        // Speaker notes preview: hook into slide switching and initial load
+        (function(){
+            try {
+                const origSelectSlide = window.selectSlide;
+                window.selectSlide = function(index){
+                    const ret = origSelectSlide ? origSelectSlide.apply(this, arguments) : undefined;
+                    try { renderNotesPreview(); } catch (e) {}
+                    return ret;
+                };
+            } catch (e) {}
+            // Initial render after slidesData likely ready
+            setTimeout(function(){ try { renderNotesPreview(); } catch (e) {} }, 400);
+        })();
+
+    function exportSingleSlideHTML() {
             hideContextMenu();
             if (contextMenuSlideIndex >= 0 && contextMenuSlideIndex < slidesData.length) {
                 const slide = slidesData[contextMenuSlideIndex];

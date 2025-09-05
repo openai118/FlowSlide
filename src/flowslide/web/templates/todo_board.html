@@ -4142,6 +4142,129 @@ function renderOutlineViewNewWithData(parsedOutline) {
     }
 }
 
+// ========== 思维导图 右键菜单与编辑（最小实现，修复未定义函数报错） ==========
+function hideContextMenu() {
+    try {
+        const menu = document.getElementById('mindmap-context-menu');
+        if (menu) menu.style.display = 'none';
+    } catch (e) {
+        // no-op
+    }
+}
+
+function ensureMindmapContextMenu() {
+    let menu = document.getElementById('mindmap-context-menu');
+    if (!menu) {
+        menu = document.createElement('div');
+        menu.id = 'mindmap-context-menu';
+        Object.assign(menu.style, {
+            position: 'absolute',
+            zIndex: '10000',
+            display: 'none',
+            minWidth: '180px',
+            background: '#fff',
+            border: '1px solid #e5e7eb',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+            borderRadius: '8px',
+            overflow: 'hidden',
+            fontFamily: 'Microsoft YaHei, Arial, sans-serif'
+        });
+        const itemStyle = 'padding:10px 14px;cursor:pointer;user-select:none;font-size:14px;color:#111827;';
+        menu.innerHTML = `
+            <div class="mm-item" data-action="edit" style="${itemStyle}">✏️ 编辑节点</div>
+            <div class="mm-item" data-action="add" style="${itemStyle}">➕ 添加子节点</div>
+            <div class="mm-item" data-action="delete" style="${itemStyle}color:#b91c1c;">🗑️ 删除节点</div>
+        `;
+        menu.addEventListener('click', (ev) => {
+            const action = ev.target && ev.target.getAttribute('data-action');
+            if (action && menu.__currentNode) {
+                if (action === 'edit') editNodeInFullscreen(menu.__currentNode);
+                if (action === 'add') addChildNodeInFullscreen(menu.__currentNode);
+                if (action === 'delete') deleteNodeInFullscreen(menu.__currentNode);
+            }
+            hideContextMenu();
+        });
+        document.body.appendChild(menu);
+    }
+    return menu;
+}
+
+function showContextMenuInFullscreen(event, nodeData) {
+    const menu = ensureMindmapContextMenu();
+    menu.__currentNode = nodeData;
+    menu.style.display = 'block';
+    // position within viewport
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const rect = { w: 200, h: 140 };
+    let x = event.pageX, y = event.pageY;
+    if (x + rect.w > vw) x = Math.max(0, vw - rect.w - 10);
+    if (y + rect.h > vh) y = Math.max(0, vh - rect.h - 10);
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+}
+
+// Basic stubs to avoid reference errors; integrate with your modal/logic if present
+function editNodeInFullscreen(node) {
+    const modal = document.getElementById('node-edit-modal');
+    if (modal) {
+        modal.style.display = 'block';
+        // You can prefill inputs here using node.data
+    } else {
+        const newName = prompt('编辑节点名称', (node && node.data && node.data.name) || '');
+        if (newName && typeof newName === 'string') {
+            try {
+                node.data.name = newName;
+                if (typeof renderMindmapInContainer === 'function' && typeof mindmapData !== 'undefined') {
+                    // Try to refresh fullscreen canvas if present
+                    const el = document.getElementById('mindmap-fullscreen-canvas');
+                    if (el) renderMindmapInContainer(mindmapData, 'mindmap-fullscreen-canvas');
+                }
+            } catch (e) {
+                console.warn('更新节点名称失败:', e);
+            }
+        }
+    }
+}
+
+function addChildNodeInFullscreen(node) {
+    try {
+        const name = prompt('子节点名称', '新节点');
+        if (!name) return;
+        node.data.children = node.data.children || [];
+        node.data.children.push({ name });
+        if (typeof renderMindmapInContainer === 'function' && typeof mindmapData !== 'undefined') {
+            const el = document.getElementById('mindmap-fullscreen-canvas');
+            if (el) renderMindmapInContainer(mindmapData, 'mindmap-fullscreen-canvas');
+        }
+    } catch (e) {
+        console.warn('添加子节点失败:', e);
+    }
+}
+
+function deleteNodeInFullscreen(node) {
+    try {
+        if (!confirm('确定删除该节点及其子节点？')) return;
+        // Simple removal: replace node name to indicate deletion (full removal requires parent ref)
+        node.data.name = '(已删除) ' + (node.data.name || '');
+        if (typeof renderMindmapInContainer === 'function' && typeof mindmapData !== 'undefined') {
+            const el = document.getElementById('mindmap-fullscreen-canvas');
+            if (el) renderMindmapInContainer(mindmapData, 'mindmap-fullscreen-canvas');
+        }
+    } catch (e) {
+        console.warn('删除节点失败:', e);
+    }
+}
+
+// Safe stubs for modal helpers referenced by key handlers
+function cancelNodeEdit() {
+    const modal = document.getElementById('node-edit-modal');
+    if (modal) modal.style.display = 'none';
+}
+function saveNodeEdit() {
+    const modal = document.getElementById('node-edit-modal');
+    if (modal) modal.style.display = 'none';
+}
+
 // 大纲视图模式切换（简洁视图 vs 详细视图）
 let isDetailViewNew = false;
 
