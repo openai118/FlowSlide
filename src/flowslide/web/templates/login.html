@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>登录 - FlowSlide</title>
-    <link rel="icon" type="image/svg+xml" href="/static/images/flowslide-logo.svg">
+    <link id="site-favicon" rel="icon" type="image/svg+xml" href="/static/images/flowslide-logo-light.svg?v=102">
     <!-- Font Awesome icons inline -->
     <style>
         /* Font Awesome icons - inline minimal set */
@@ -280,13 +280,16 @@
                 var mql = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
                 var sys = (mql && mql.matches) ? 'dark' : 'github';
                 var theme = saved || sys;
-                if (theme === 'github') document.documentElement.classList.add('theme-github');
-                if (theme === 'dark') document.documentElement.classList.add('theme-dark');
+                document.documentElement.classList.remove('theme-github','theme-dark');
+                if (theme === 'dark') { document.documentElement.classList.add('theme-dark'); }
+                else { document.documentElement.classList.add('theme-github'); }
+                try { var ico=document.getElementById('site-favicon'); if(ico){ ico.href=(theme==='dark')?'/static/images/flowslide-logo-dark.svg':'/static/images/flowslide-logo-light.svg'; } } catch(e){}
             } catch(e) {}
         })();
     </script>
 </head>
 <body>
+    <script src="/static/js/theme.js"></script>
     <div class="login-container">
         <div style="position:absolute; top:12px; right:12px;">
             <button id="theme-toggle" class="btn" style="padding:8px 10px; background: var(--accent-blue); border: 1px solid var(--accent-blue); border-radius: 8px;">
@@ -296,7 +299,7 @@
         <div class="login-header">
             <h1>
                 <span style="display: inline-flex; align-items: center; gap: 12px;">
-                    <img src="/static/images/flowslide-logo.svg" alt="FlowSlide Logo" style="width: 48px; height: 48px;">
+                    <img id="brand-logo" src="/static/images/flowslide-logo-light.svg?v=102" alt="FlowSlide Logo" style="width: 48px; height: 48px;">
                     FlowSlide
                 </span>
             </h1>
@@ -356,59 +359,24 @@
     </div>
 
     <script>
-        // Submit UX
-        document.getElementById('loginForm').addEventListener('submit', function(e) {
-            const btn = document.getElementById('loginBtn');
+        // 登录按钮加载态
+        document.getElementById('loginForm').addEventListener('submit', function() {
+            var btn = document.getElementById('loginBtn');
+            if(!btn) return;
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 登录中...';
         });
-        // Theme toggle (match base)
+        // 主题按钮绑定（共享 theme.js 已处理切换逻辑）
         (function(){
-            var btn = document.getElementById('theme-toggle');
-            if(!btn) return;
-            var icon = btn.querySelector('i');
-            var mql = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
-
-            function apply(theme){
-                document.documentElement.classList.remove('theme-github','theme-dark');
-                if (theme === 'dark') document.documentElement.classList.add('theme-dark');
-                else document.documentElement.classList.add('theme-github');
-                if (icon) icon.className = (theme === 'dark') ? 'fas fa-moon' : 'fas fa-sun';
-            }
-
-            function effectiveMode(){
-                var saved = null;
-                try { saved = localStorage.getItem('fs-theme'); } catch(e) {}
-                if (saved === 'github' || saved === 'dark') return saved;
-                return (mql && mql.matches) ? 'dark' : 'github';
-            }
-
-            function refresh(){
-                var mode = effectiveMode();
-                apply(mode);
-            }
-
-            function toggle(){
-                var mode = effectiveMode();
-                var next = (mode === 'dark') ? 'github' : 'dark';
-                try { localStorage.setItem('fs-theme', next); } catch(e) {}
-                refresh();
-            }
-
-            if (mql && mql.addEventListener) {
-                mql.addEventListener('change', function(){
-                    var saved = null; try { saved = localStorage.getItem('fs-theme'); } catch(e) {}
-                    if (!saved) refresh();
-                });
-            } else if (mql && mql.addListener) {
-                mql.addListener(function(){
-                    var saved = null; try { saved = localStorage.getItem('fs-theme'); } catch(e) {}
-                    if (!saved) refresh();
+            var tbtn = document.getElementById('theme-toggle');
+            if(tbtn && !tbtn.__FS_BOUND){
+                tbtn.__FS_BOUND=true;
+                tbtn.addEventListener('click', function(){
+                    if(window.FlowSlideTheme){ window.FlowSlideTheme.toggle(); }
                 });
             }
-
-            btn.addEventListener('click', toggle);
-            refresh();
+            // 初次刷新图标与 logo
+            if(window.FlowSlideTheme){ window.FlowSlideTheme.refresh(); }
         })();
     </script>
 </body>

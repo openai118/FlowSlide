@@ -223,7 +223,7 @@
 {% block content %}
 <div class="projects-hero">
     <h2>📋 项目列表</h2>
-    <p>管理您的所有 PPT 项目</p>
+    <p>管理您的所有 Slide 项目</p>
 </div>
 
 <div style="max-width: 1400px; margin: 0 auto; padding: var(--spacing-lg);">
@@ -361,10 +361,10 @@
                 <div style="display: flex; align-items: center; gap: var(--spacing-xs);" onclick="event.stopPropagation();">
                     <!-- Quick Action Button -->
                     {% if project.status == 'completed' %}
-                        <a href="/projects/{{ project.project_id }}/edit" class="btn-icon" title="编辑PPT" style="width: 32px; height: 32px; border-radius: 50%; background: var(--warning-gradient); color: white; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 0.8rem; box-shadow: 0 2px 8px rgba(250, 112, 154, 0.3); transition: all 0.3s ease;">
+                        <a href="/projects/{{ project.project_id }}/edit" class="btn-icon" title="编辑Slide" style="width: 32px; height: 32px; border-radius: 50%; background: var(--warning-gradient); color: white; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 0.8rem; box-shadow: 0 2px 8px rgba(250, 112, 154, 0.3); transition: all 0.3s ease;">
                             ✏️
                         </a>
-                        <a href="/projects/{{ project.project_id }}/fullscreen" class="btn-icon" title="预览PPT" target="_blank" style="width: 32px; height: 32px; border-radius: 50%; background: var(--success-gradient); color: white; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 0.8rem; box-shadow: 0 2px 8px rgba(67, 233, 123, 0.3); transition: all 0.3s ease;">
+                        <a href="/projects/{{ project.project_id }}/fullscreen" class="btn-icon" title="预览Slide" target="_blank" style="width: 32px; height: 32px; border-radius: 50%; background: var(--success-gradient); color: white; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 0.8rem; box-shadow: 0 2px 8px rgba(67, 233, 123, 0.3); transition: all 0.3s ease;">
                             👁️
                         </a>
                     {% elif project.status == 'in_progress' %}
@@ -421,7 +421,7 @@
             {% if status_filter %}
                 尝试切换其他状态筛选或创建新项目
             {% else %}
-                开始创建您的第一个 PPT 项目
+                开始创建您的第一个 Slide 项目
             {% endif %}
         </p>
         <div style="display: flex; gap: var(--spacing-md); justify-content: center; flex-wrap: wrap;">

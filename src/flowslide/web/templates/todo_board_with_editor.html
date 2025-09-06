@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TODO进度 - {{ todo_board.title }}</title>
+    <link id="site-favicon" rel="icon" type="image/svg+xml" href="/static/images/flowslide-logo-light.svg?v=102">
+    <script src="/static/js/theme.js"></script>
     <!-- Bootstrap CSS with fallback mirrors -->
     <script>
         (function(){
@@ -169,6 +171,24 @@
             0%, 100% { background-position: 0% 50%; }
             50% { background-position: 100% 50%; }
         }
+
+        /* Dark theme overrides */
+        html.theme-dark .header {
+            background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
+            color: #c9d1d9;
+            border-bottom: 1px solid #30363d;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+        }
+        html.theme-dark .header-subtitle { color: #8b949e; }
+        html.theme-dark .editor-toolbar {
+            background: linear-gradient(135deg, #1d2229 0%, #0d1117 100%);
+            border-bottom: 1px solid #30363d;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+        html.theme-dark .editor-toolbar::before { background: linear-gradient(90deg,#1f6feb 0%,#8250df 50%,#1f6feb 100%); }
+        html.theme-dark .toolbar-title h4 { color:#c9d1d9; }
+        html.theme-dark .btn.btn-outline-light { color:#c9d1d9; border-color:#30363d; }
+        html.theme-dark .btn.btn-outline-light:hover { background:#30363d; }
 
         .toolbar-title {
             display: flex;
@@ -803,8 +823,8 @@
         <div class="header">
             <div class="header-content">
                 <div class="header-left">
-                    <div class="header-icon">
-                        <i class="fas fa-tasks"></i>
+                    <div class="header-icon" style="padding:0; background:none; box-shadow:none;">
+                        <img id="brand-logo" src="/static/images/flowslide-logo-light.svg?v=102" alt="FlowSlide" style="width:48px;height:48px; border-radius:12px;">
                     </div>
                     <div class="header-text">
                         <h2>{{ todo_board.title }}</h2>
@@ -815,6 +835,9 @@
                     </div>
                 </div>
                 <div class="header-controls">
+                    <button id="theme-toggle" class="btn btn-outline-secondary" title="切换主题" style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;">
+                        <i class="fas fa-moon" aria-hidden="true"></i>
+                    </button>
                     <a href="/projects" class="btn btn-outline-light" onclick="return true;">
                         <i class="fas fa-arrow-left"></i>
                         返回项目列表
@@ -979,7 +1002,7 @@
                     console.log('未检测到用户选择的全局模板，当前使用:', templateName, '是否用户选择:', templateData.is_user_selected);
 
                     // 未检测到用户选择的全局模板ID，跳转到模板选择页面
-                    if (confirm('检测到您还未选择全局模板，需要先选择模板才能开始生成PPT。是否跳转到模板选择页面？')) {
+                    if (confirm('检测到您还未选择全局模板，需要先选择模板才能开始生成 Slide。是否跳转到模板选择页面？')) {
                         console.log('用户确认跳转到模板选择页面');
                         window.location.href = `/projects/{{ todo_board.task_id }}/template-selection`;
                         return;
@@ -993,7 +1016,7 @@
             } catch (error) {
                 console.error('检查全局模板时出错:', error);
                 // 如果检查失败，询问用户是否继续
-                if (!confirm('无法检查全局模板设置，是否继续生成PPT？')) {
+                if (!confirm('无法检查全局模板设置，是否继续生成 Slide？')) {
                     console.log('用户选择不继续生成');
                     return;
                 } else {
@@ -1556,6 +1579,30 @@
 
         // 定期检查PPT状态（每10秒检查一次）
         setInterval(checkPPTStatus, 10000);
+    </script>
+    <script>
+(function(){
+    var btn=document.getElementById('theme-toggle'); if(!btn) return;
+    var icon=btn.querySelector('i');
+    var mql=window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+    function effective(){
+        var saved=null; try{ saved=localStorage.getItem('fs-theme'); }catch(e){}
+        if(saved==='github'||saved==='dark') return saved;
+        return (mql && mql.matches)?'dark':'github';
+    }
+    function apply(theme){
+        document.documentElement.classList.remove('theme-github','theme-dark');
+        if(theme==='dark') document.documentElement.classList.add('theme-dark'); else document.documentElement.classList.add('theme-github');
+        if(icon) icon.className = (theme==='dark')? 'fas fa-moon':'fas fa-sun';
+        try { var ico=document.getElementById('site-favicon'); if(ico){ ico.href=(theme==='dark')?'/static/images/flowslide-logo-dark.svg':'/static/images/flowslide-logo-light.svg'; } } catch(e){}
+        try { var bl=document.getElementById('brand-logo'); if(bl){ bl.src=(theme==='dark')?'/static/images/flowslide-logo-dark.svg':'/static/images/flowslide-logo-light.svg'; } } catch(e){}
+    }
+    function refresh(){ apply(effective()); }
+    function toggle(){ var cur=effective(); var next=(cur==='dark')?'github':'dark'; try{localStorage.setItem('fs-theme',next);}catch(e){}; refresh(); }
+    if(mql && mql.addEventListener){ mql.addEventListener('change', function(){ var saved=null; try{saved=localStorage.getItem('fs-theme');}catch(e){} if(!saved) refresh(); }); }
+    btn.addEventListener('click', toggle);
+    refresh();
+})();
     </script>
 </body>
 </html>

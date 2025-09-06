@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}选择PPT母版{% endblock %}
+{% block title %}选择Slide母版{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -79,8 +79,8 @@
 
 {% block content %}
 <div class="template-selection-hero">
-    <h1>选择PPT母版</h1>
-    <p>为您的PPT选择一个合适的母版模板</p>
+    <h1>选择Slide母版</h1>
+    <p>为您的Slide选择一个合适的母版模板</p>
     <div class="project-info">
         <strong>项目：</strong><span id="projectTopic">{{ project_topic or '未知项目' }}</span>
     </div>
@@ -186,11 +186,11 @@
     <!-- Action Buttons -->
     <div style="text-align: center; margin-top: var(--spacing-2xl); padding: var(--spacing-xl); background: var(--glass-bg); backdrop-filter: blur(15px); border: 1px solid var(--glass-border); border-radius: var(--border-radius-lg); box-shadow: var(--glass-shadow);">
         <div style="margin-bottom: var(--spacing-lg);">
-            <span style="color: var(--text-secondary); font-size: 1.1rem; font-weight: 500;">选择模板后点击下方按钮开始生成PPT</span>
+            <span style="color: var(--text-secondary); font-size: 1.1rem; font-weight: 500;">选择模板后点击下方按钮开始生成 Slide</span>
         </div>
         <div style="display: flex; gap: var(--spacing-lg); justify-content: center; flex-wrap: wrap;">
             <button id="startGenerationBtn" class="btn btn-primary" disabled style="padding: var(--spacing-lg) var(--spacing-2xl); font-size: 1.1rem;">
-                🚀 开始生成PPT
+                🚀 开始生成 Slide
             </button>
             <button id="skipSelectionBtn" class="btn btn-secondary" style="padding: var(--spacing-lg) var(--spacing-2xl); font-size: 1.1rem;">
                 ⏭️ 使用默认模板
@@ -1001,7 +1001,7 @@ function renderTemplates(templatesToRender) {
             <div style="grid-column: 1 / -1; text-align: center; padding: var(--spacing-2xl); background: var(--glass-bg); backdrop-filter: blur(15px); border: 1px solid var(--glass-border); border-radius: var(--border-radius-lg); box-shadow: var(--glass-shadow);">
                 <div style="font-size: 4rem; margin-bottom: var(--spacing-lg); opacity: 0.6;">🎨</div>
                 <h3 style="color: var(--text-primary); font-size: 1.5rem; margin-bottom: var(--spacing-md); font-weight: 600;">暂无可用模板</h3>
-                <p style="color: var(--text-secondary); font-size: 1rem; margin-bottom: var(--spacing-lg);">系统中还没有可用的PPT模板</p>
+                <p style="color: var(--text-secondary); font-size: 1rem; margin-bottom: var(--spacing-lg);">系统中还没有可用的Slide模板</p>
                 <button class="btn btn-primary" onclick="window.location.reload()" style="margin-top: var(--spacing-md);">
                     🔄 刷新页面
                 </button>
@@ -1027,7 +1027,7 @@ function renderTemplates(templatesToRender) {
                     <h4 style="font-size: 16px; font-weight: 600; color: #2c3e50; margin: 0; line-height: 1.3;">${template.template_name}</h4>
                     ${template.is_default ? '<span class="default-badge">默认</span>' : ''}
                 </div>
-                <p style="color: #666; font-size: 14px; line-height: 1.4; margin: 0 0 12px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${template.description || '这是一个精美的PPT模板，适用于多种场景'}</p>
+                <p style="color: #666; font-size: 14px; line-height: 1.4; margin: 0 0 12px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${template.description || '这是一个精美的Slide模板，适用于多种场景'}</p>
                 <div style="margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 6px;">
                     ${(template.tags || []).map(tag => `<span class="tag">${tag}</span>`).join('')}
                 </div>
@@ -1370,12 +1370,12 @@ async function startPPTGeneration() {
         const result = await response.json();
         console.log('Template selection result:', result);
 
-        // Redirect to TODO board to start PPT generation
+        // Redirect to TODO board to start Slide generation
         console.log('Redirecting to TODO board...');
         window.location.href = `/projects/${projectId}/todo`;
 
     } catch (error) {
-        console.error('Error starting PPT generation:', error);
+        console.error('Error starting Slide generation:', error);
         alert('开始生成失败: ' + error.message);
     }
 }
@@ -1422,7 +1422,7 @@ async function useDefaultTemplate() {
         const result = await response.json();
         console.log('Default template selection result:', result);
 
-        // Redirect to TODO board to start PPT generation
+        // Redirect to TODO board to start Slide generation
         console.log('Redirecting to TODO board...');
         window.location.href = `/projects/${projectId}/todo`;
 

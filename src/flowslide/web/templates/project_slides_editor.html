@@ -3,10 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PPT编辑器 - {{ project.title }}</title>
+    <title>Slide编辑器 - {{ project.title }}</title>
+    <link id="site-favicon" rel="icon" type="image/svg+xml" href="/static/images/flowslide-logo-light.svg?v=102">
     <!-- 静态资源镜像加载（Bootstrap/Chart.js）：优先本地与镜像，避免 jsDelivr 超时） -->
     <script>
         (function(){
+            // 同步 favicon 与主题
+            try { const ico=document.getElementById('site-favicon'); if(ico){ const dark=document.documentElement.classList.contains('theme-dark'); ico.href= dark? '/static/images/flowslide-logo-dark.svg':'/static/images/flowslide-logo-light.svg'; } } catch(e){}
             fetch('/static/config/static_cdn_mirrors.json').then(function(r){
                 return r.json();
             }).then(function(cfg){
@@ -62,6 +65,17 @@
                         <span id="allNotesDurationDelta">偏差: -</span>
                         <span id="allNotesAvgPace">平均语速: -</span>
                     </div>
+                    <!-- 新增：搜索 / 总体进度 / 预览开关（精简：去掉快捷键说明 & 上下翻按钮下移） -->
+                    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap" style="row-gap:6px;">
+                        <input id="allNotesSearch" class="form-control form-control-sm" style="max-width:220px;" placeholder="搜索标题/内容..." oninput="buildAllNotesList()" />
+                        <div class="flex-grow-1" style="min-width:220px;">
+                            <div class="progress" style="height:6px;">
+                                <div id="allNotesGlobalProgress" class="progress-bar bg-info" style="width:0%"></div>
+                            </div>
+                            <div id="allNotesGlobalProgressText" style="font-size:11px;color:#666;margin-top:2px;">—</div>
+                        </div>
+                        <!-- 顶部预览按钮移除，改放到底部按钮行 -->
+                    </div>
                     <div id="allNotesEditorContainer" class="mb-2" style="display:flex; gap:12px;">
                         <div style="flex:1; min-width:320px; display:flex; flex-direction:column;">
                             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -70,23 +84,35 @@
                             </div>
                             <div id="allNotesSlidesList" style="border:1px solid var(--border-color,#e5e7eb);border-radius:6px;overflow:auto;max-height:60vh;background:var(--panel-bg,#fff);"></div>
                         </div>
-                        <div style="flex:2; min-width:420px; display:flex; flex-direction:column; gap:6px;">
+                        <div style="flex:2; min-width:480px; display:flex; flex-direction:column; gap:6px;">
                             <div class="d-flex justify-content-between align-items-center">
                                 <strong id="allNotesCurrentTitle">—</strong>
-                                <div id="allNotesCurrentStats" style="font-size:11px;color:#555;"></div>
+                                <div id="allNotesCurrentStats" style="font-size:11px;color:#555;text-align:right;min-width:160px;"></div>
                             </div>
-                            <textarea id="allNotesEditor" class="form-control" style="flex:1; min-height:300px; font-size:13px; line-height:1.6; white-space:pre-wrap;"></textarea>
-                            <div class="d-flex gap-2 flex-wrap">
-                                <button class="btn btn-sm btn-primary" onclick="saveCurrentAllNotes()"><i class="fas fa-save"></i> 保存</button>
-                                <button class="btn btn-sm btn-secondary" onclick="reloadCurrentAllNotes()"><i class="fas fa-rotate"></i> 还原</button>
+                            <div style="flex:1; display:flex; gap:8px; min-height:300px;">
+                                <textarea id="allNotesEditor" class="form-control" style="flex:1; font-size:13px; line-height:1.55; white-space:pre-wrap; resize:vertical;"></textarea>
+                                <div id="allNotesPreviewPane" style="flex:1; display:none; border:1px solid #e5e7eb;border-radius:6px;padding:10px;overflow:auto;background:#fafafa;font-size:13px;line-height:1.55;" aria-label="预览"></div>
+                            </div>
+                            <div class="d-flex gap-2 flex-wrap align-items-center">
+                                <!-- 交换顺序：AI润色 与 保存 -->
                                 <button class="btn btn-sm btn-info" onclick="applyNotesAIRefine()"><i class="fas fa-wand-magic-sparkles"></i> AI润色</button>
-                                <button class="btn btn-sm btn-outline-secondary" onclick="recalcAllNotesStats()"><i class="fas fa-clock"></i> 重新估算</button>
+                                <button class="btn btn-sm btn-secondary" onclick="reloadCurrentAllNotes()"><i class="fas fa-rotate"></i> 还原</button>
+                                <button class="btn btn-sm btn-primary" onclick="saveCurrentAllNotes()" title="Ctrl+S"><i class="fas fa-save"></i> 保存</button>
+                                <!-- 保留图标，去文字 -->
+                                <button class="btn btn-sm btn-outline-secondary" onclick="recalcAllNotesStats()" title="重新估算"><i class="fas fa-clock"></i></button>
+                                <button class="btn btn-sm btn-outline-primary" onclick="copyCurrentNotes()" title="复制"><i class="fas fa-copy"></i></button>
+                                <button class="btn btn-sm btn-outline-dark" id="allNotesTogglePreview" onclick="toggleAllNotesPreview()" title="切换预览 (Ctrl+P)"><i class="fas fa-eye"></i></button>
+                                <!-- 上下翻页按钮移至此右侧 -->
+                                <div class="btn-group btn-group-sm ms-auto" role="group" aria-label="navigate slides">
+                                    <button class="btn btn-outline-secondary" onclick="quickPrevSlide()" title="上一页 (Alt+↑)"><i class="fas fa-arrow-up"></i></button>
+                                    <button class="btn btn-outline-secondary" onclick="quickNextSlide()" title="下一页 (Alt+↓)"><i class="fas fa-arrow-down"></i></button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
                 <div class="modal-footer justify-content-between">
-                    <div style="font-size:12px;color:#666;">显示：分配秒(若有) / 动态估算秒 / 字数 / 建议字数。编辑后自动刷新总时长估算。</div>
+                    <div style="font-size:12px;color:#666;">显示：分配秒 / 估算秒 / 字数 / 建议字数。新增：搜索过滤、实时预览、快捷键。</div>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
                 </div>
             </div>
@@ -134,13 +160,70 @@
             }
         });
 
-    function buildAllNotesList(){ const listEl=document.getElementById('allNotesSlidesList'); listEl.innerHTML=''; allNotesSlidesCache.forEach(slide=>{ const wordCount=countWordsAdaptive(slide.notes); const estSeconds=estimateSecondsFromText(slide.notes); const allocSec=slide.allocated_seconds; const badgeAlloc=allocSec!=null?`<span style="background:#eef;padding:2px 6px;border-radius:12px;">分配${Math.round(allocSec)}s</span>`:''; const badgeEst=`<span style="background:#f5f5f5;padding:2px 6px;border-radius:12px;">估算${Math.round(estSeconds)}s</span>`; const badgeWords=`<span style="background:#f5f5f5;padding:2px 6px;border-radius:12px;">字${wordCount}</span>`; const badgeTarget=slide.target_words!=null?`<span style="background:#e8f7f2;padding:2px 6px;border-radius:12px;">建议${slide.target_words}</span>`:''; const item=document.createElement('div'); item.className='all-notes-slide-item'; item.style.cssText='padding:8px 10px;border-bottom:1px solid #eee;cursor:pointer;font-size:12px;'; if(slide.index===allNotesCurrentIndex){ item.style.background='var(--accent-bg,#f0f7ff)'; } item.innerHTML=`<div style=\"font-weight:600;font-size:13px;\">第${slide.index+1}页 · ${escapeHtml(slide.title)}</div><div style=\"font-size:12px;color:#666;max-height:38px;overflow:hidden;white-space:pre-wrap;\">${escapeHtml((slide.notes||'').slice(0,120))}</div><div style=\"margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;\">${badgeAlloc}${badgeEst}${badgeWords}${badgeTarget}</div>`; item.onclick=()=>selectAllNotesSlide(slide.index); listEl.appendChild(item); }); const countEl=document.getElementById('allNotesCount'); if(countEl) countEl.textContent=allNotesSlidesCache.length+' 页'; }
+    function buildAllNotesList(){ const listEl=document.getElementById('allNotesSlidesList'); const keyword=(document.getElementById('allNotesSearch')?.value||'').trim().toLowerCase(); listEl.innerHTML=''; allNotesSlidesCache.forEach(slide=>{ const text=(slide.notes||''); if(keyword && !( (slide.title||'').toLowerCase().includes(keyword) || text.toLowerCase().includes(keyword)) ) return; const wordCount=countWordsAdaptive(text); const estSeconds=estimateSecondsFromText(text); const allocSec=slide.allocated_seconds; const target=slide.target_words; const ratio= target? Math.min(1, wordCount/target): null; const badgeAlloc=allocSec!=null?`<span class='badge badge-light' style="background:#eef;">分配${Math.round(allocSec)}s</span>`:''; const badgeEst=`<span class='badge badge-light' style="background:#f5f5f5;">估算${Math.round(estSeconds)}s</span>`; const badgeWords=`<span class='badge badge-light' style="background:#f5f5f5;">字${wordCount}</span>`; const badgeTarget=target!=null?`<span class='badge badge-light' style="background:#e8f7f2;">建议${target}</span>`:''; const bar= ratio!=null?`<div style='background:#eee;height:4px;border-radius:2px;margin-top:4px;'><div style='width:${(ratio*100).toFixed(0)}%;height:100%;background:${ratio>0.9?'#16a34a':'#60a5fa'};border-radius:2px;'></div></div>`:''; const item=document.createElement('div'); item.className='all-notes-slide-item'; item.style.cssText='padding:8px 10px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:12px;transition:background .15s;'; if(slide.index===allNotesCurrentIndex){ item.classList.add('active'); } item.onmouseenter=()=>{ if(slide.index!==allNotesCurrentIndex) item.style.background='#fafafa'; }; item.onmouseleave=()=>{ if(slide.index!==allNotesCurrentIndex) item.style.background=''; }; item.innerHTML=`<div style=\"font-weight:600;font-size:13px;display:flex;justify-content:space-between;\"><span>第${slide.index+1}页 · ${escapeHtml(slide.title)}</span></div><div style=\"font-size:12px;color:#666;max-height:38px;overflow:hidden;white-space:pre-wrap;\">${escapeHtml(text.slice(0,120))}</div><div style=\"margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;\">${badgeAlloc}${badgeEst}${badgeWords}${badgeTarget}</div>${bar}`; item.onclick=()=>selectAllNotesSlide(slide.index); listEl.appendChild(item); }); const countEl=document.getElementById('allNotesCount'); if(countEl) countEl.textContent=listEl.childElementCount+' / '+allNotesSlidesCache.length+' 页'; }
+
+    // 预览 & 快捷键等增强
+    let allNotesShowPreview=false; let allNotesModalOpen=false;
+    function toggleAllNotesPreview(){ allNotesShowPreview=!allNotesShowPreview; const pane=document.getElementById('allNotesPreviewPane'); const btn=document.getElementById('allNotesTogglePreview'); if(allNotesShowPreview){ pane.style.display='block'; btn.classList.add('btn-dark'); renderAllNotesPreview(); } else { pane.style.display='none'; btn.classList.remove('btn-dark'); } }
+    // 轻量 Markdown + 段落节奏渲染（不引入外部库，满足基础排版）
+    function simpleMarkdownToHtml(src){
+        let text = src.replace(/\r/g,'');
+        // 代码块 ``` ```
+        text = text.replace(/```([\s\S]*?)```/g, function(_,code){ return '\n<pre class="allnotes-code"><code>'+escapeHtml(code.trim())+'</code></pre>\n'; });
+        const lines = text.split(/\n/);
+        let out=[]; let listBuf=[]; let listType=null;
+        function flushList(){ if(!listBuf.length) return; const tag=listType==='ol'?'ol':'ul'; out.push('<'+tag+' class="allnotes-list">'+listBuf.join('')+'</'+tag+'>'); listBuf=[]; listType=null; }
+        for(let line of lines){
+            if(!line.trim()){ flushList(); continue; }
+            let m;
+            if(m=line.match(/^(#{1,6})\s+(.+)/)){ flushList(); const lvl=m[1].length; out.push(`<h${lvl}>${escapeHtml(m[2].trim())}</h${lvl}>`); continue; }
+            if(m=line.match(/^(\d+)\.\s+(.+)/)){ const content=escapeHtml(m[2].trim()); if(listType && listType!=='ol') flushList(); listType='ol'; listBuf.push(`<li>${content}</li>`); continue; }
+            if(m=line.match(/^[-*+]\s+(.+)/)){ const content=escapeHtml(m[1].trim()); if(listType && listType!=='ul') flushList(); listType='ul'; listBuf.push(`<li>${content}</li>`); continue; }
+            flushList();
+            // 引用
+            if(m=line.match(/^>\s+(.+)/)){ out.push(`<blockquote>${escapeHtml(m[1].trim())}</blockquote>`); continue; }
+            let html = escapeHtml(line);
+            html = html
+                .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+                .replace(/__(.*?)__/g,'<strong>$1</strong>')
+                .replace(/(?<!\*)\*(?!\*)([^*]+)(?<!\*)\*(?!\*)/g,'<em>$1</em>')
+                .replace(/_(.+?)_/g,'<em>$1</em>')
+                .replace(/`([^`]+)`/g,'<code>$1</code>');
+            out.push('<p>'+html+'</p>');
+        }
+        flushList();
+        return out.join('\n');
+    }
+    function renderAllNotesPreview(){
+        if(!allNotesShowPreview) return; const pane=document.getElementById('allNotesPreviewPane'); const ta=document.getElementById('allNotesEditor'); if(!pane||!ta) return; const raw=ta.value.trim(); if(!raw){ pane.innerHTML='<div style="color:#999;font-size:12px;">（空）</div>'; return; }
+        const paragraphs = raw.split(/\n{2,}/).map(s=>s.trim()).filter(Boolean);
+        let totalSeconds=0; const paraHtml=[];
+        for(const p of paragraphs){ const sec = estimateSecondsFromText(p); totalSeconds+=sec; paraHtml.push(`<div class="allnotes-para" data-sec="${sec.toFixed(1)}">${simpleMarkdownToHtml(p)}</div>`); }
+        const words = countWordsAdaptive(raw);
+        const header = `<div class="allnotes-preview-meta" style="font-size:11px;color:#555;margin:-4px 0 6px 0;">共 ${words} 字，估算 ${Math.round(totalSeconds)} 秒，段落 ${paragraphs.length} 个</div>`;
+        pane.innerHTML = header + paraHtml.join('\n');
+        // 为每段添加节奏标签
+        pane.querySelectorAll('.allnotes-para').forEach(div=>{ const sec=parseFloat(div.dataset.sec||'0'); const txt=div.innerText.trim(); const w=countWordsAdaptive(txt); if(w>0 && sec>0){ const rate=(w/sec).toFixed(2); const badge=document.createElement('span'); badge.textContent=rate+'字/秒'; badge.className='badge bg-light text-dark'; badge.style.cssText='margin-left:6px;font-weight:400;border:1px solid #ddd;background:#f8fafc;'; const first=div.querySelector('p,h1,h2,h3,h4,h5,h6,blockquote,ul,ol,pre'); if(first){ first.appendChild(badge); } }
+        });
+    }
+    document.getElementById('allNotesEditor')?.addEventListener('input',()=>{ updateLiveCurrentSlideCache(); renderAllNotesPreview(); });
+    function updateLiveCurrentSlideCache(){ if(allNotesCurrentIndex==null) return; const ta=document.getElementById('allNotesEditor'); allNotesSlidesCache[allNotesCurrentIndex].notes=ta.value; updateCurrentAllNotesStats(); recalcAllNotesStats(); }
+    function quickPrevSlide(){ if(allNotesCurrentIndex==null) return; const idx=Math.max(0, allNotesCurrentIndex-1); selectAllNotesSlide(idx); }
+    function quickNextSlide(){ if(allNotesCurrentIndex==null) return; const idx=Math.min(allNotesSlidesCache.length-1, allNotesCurrentIndex+1); selectAllNotesSlide(idx); }
+    function copyCurrentNotes(){ if(allNotesCurrentIndex==null) return; const txt=allNotesSlidesCache[allNotesCurrentIndex].notes||''; navigator.clipboard.writeText(txt).then(()=>showNotification('已复制到剪贴板','success')); }
+    document.addEventListener('shown.bs.modal', ev=>{ if(ev.target && ev.target.id==='allNotesEditorModal'){ allNotesModalOpen=true; }});
+    document.addEventListener('hidden.bs.modal', ev=>{ if(ev.target && ev.target.id==='allNotesEditorModal'){ allNotesModalOpen=false; }});
+    document.addEventListener('keydown', e=>{ if(!allNotesModalOpen) return; if(e.ctrlKey && e.key==='s'){ e.preventDefault(); saveCurrentAllNotes(); } if(e.ctrlKey && (e.key==='p'||e.key==='P')){ e.preventDefault(); toggleAllNotesPreview(); } if(e.altKey && e.key==='ArrowUp'){ e.preventDefault(); quickPrevSlide(); } if(e.altKey && e.key==='ArrowDown'){ e.preventDefault(); quickNextSlide(); } });
 
     function selectAllNotesSlide(idx){ saveCurrentAllNotes(true); allNotesCurrentIndex=idx; const data=allNotesSlidesCache[idx]; document.getElementById('allNotesCurrentTitle').textContent=`第${idx+1}页 · ${data.title}`; document.getElementById('allNotesEditor').value=data.notes||''; updateCurrentAllNotesStats(); buildAllNotesList(); }
 
     function updateCurrentAllNotesStats(){ if(allNotesCurrentIndex==null) return; const data=allNotesSlidesCache[allNotesCurrentIndex]; const words=countWordsAdaptive(data.notes); const est=estimateSecondsFromText(data.notes); const alloc=data.allocated_seconds; const tgt=data.target_words; const el=document.getElementById('allNotesCurrentStats'); if(!el) return; el.innerHTML=[ alloc!=null?`分配${Math.round(alloc)}s`:null, `估算${Math.round(est)}s`, `字${words}`, tgt!=null?`建议字${tgt}`:null ].filter(Boolean).join(' | '); }
     async function saveCurrentAllNotes(silent){ if(allNotesCurrentIndex==null) return; const textarea=document.getElementById('allNotesEditor'); const newVal=textarea.value.trim(); const data=allNotesSlidesCache[allNotesCurrentIndex]; if(data.notes===newVal) return; try{ const resp=await fetch(`/api/projects/${projectId}/slides/${data.index+1}/speaker_notes`,{ method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ notes:newVal }) }); const j=await resp.json(); if(!j.success) throw new Error(j.error||'保存失败'); data.notes=newVal; if(!silent) showNotification('已保存当前页演讲稿','success'); if(slidesData && slidesData[data.index]){ slidesData[data.index].speaker_notes=newVal; slidesData[data.index].metadata=slidesData[data.index].metadata||{}; slidesData[data.index].metadata.speaker_notes=newVal; } updateCurrentAllNotesStats(); recalcAllNotesStats(); buildAllNotesList(); if(currentSlideIndex===data.index){ renderNotesPreview(); } }catch(e){ if(!silent) showNotification('保存失败: '+e,'danger'); } }
     function recalcAllNotesStats(){ let totalSeconds=0,totalWords=0; allNotesSlidesCache.forEach(s=>{ const w=countWordsAdaptive(s.notes); totalWords+=w; totalSeconds+=estimateSecondsFromText(s.notes); }); const targetSec=allNotesTargetTotalSeconds; const estMin=totalSeconds/60; if(totalWords>0 && totalSeconds>0){ const rate=totalWords/totalSeconds; if(rate>=2 && rate<=6) allNotesAvgCharPerSec=rate; } const targetEl=document.getElementById('allNotesTargetDuration'); const estEl=document.getElementById('allNotesEstimatedDuration'); const deltaEl=document.getElementById('allNotesDurationDelta'); const paceEl=document.getElementById('allNotesAvgPace'); if(targetEl) targetEl.textContent='目标: '+(targetSec? (targetSec/60).toFixed(1)+' 分':'-'); if(estEl) estEl.textContent='当前估算: '+estMin.toFixed(1)+' 分'; if(deltaEl){ if(!targetSec){ deltaEl.textContent='偏差: -'; } else { const diff=totalSeconds-targetSec; const pct=(diff/targetSec)*100; deltaEl.textContent=`偏差: ${(diff/60).toFixed(2)} 分 (${diff>0?'+':''}${pct.toFixed(1)}%)`; deltaEl.style.color=Math.abs(pct)<=5?'#16a34a':(diff>0?'#dc2626':'#2563eb'); } } if(paceEl) paceEl.textContent='平均语速: '+allNotesAvgCharPerSec.toFixed(2)+' 字/秒'; updateCurrentAllNotesStats(); }
+    // 扩展：总体进度（按建议字数）
+    const globalProgressBar=document.getElementById('allNotesGlobalProgress'); const globalProgressText=document.getElementById('allNotesGlobalProgressText');
+    const _origRecalc=recalcAllNotesStats;
+    recalcAllNotesStats=function(){ _origRecalc(); let totalWords=0, totalTarget=0; allNotesSlidesCache.forEach(s=>{ const w=countWordsAdaptive(s.notes); totalWords+=w; if(s.target_words!=null) totalTarget+=s.target_words; }); if(totalTarget>0){ const pct=Math.min(100, (totalWords/totalTarget)*100); if(globalProgressBar){ globalProgressBar.style.width=pct.toFixed(1)+'%'; globalProgressBar.className='progress-bar '+(pct>=95?'bg-success':'bg-info'); } if(globalProgressText){ globalProgressText.textContent=`总字数 ${totalWords} / 建议 ${totalTarget} （${pct.toFixed(1)}%）`; } } else { if(globalProgressBar){ globalProgressBar.style.width='0%'; } if(globalProgressText){ globalProgressText.textContent='无建议字数基线'; } } };
     function reloadCurrentAllNotes(){ if(allNotesCurrentIndex==null) return; const data=allNotesSlidesCache[allNotesCurrentIndex]; document.getElementById('allNotesEditor').value=data.notes||''; updateCurrentAllNotesStats(); }
 
         async function saveCurrentAllNotes(silent){
@@ -282,6 +365,41 @@
                 radial-gradient(circle at 70% 70%, rgba(255, 255, 255, 0.05) 0%, transparent 50%);
             animation: headerFloat 25s ease-in-out infinite;
         }
+
+    /* ===== All Notes Editor Font Enlarged Overrides ===== */
+    #allNotesEditor, #allNotesPreviewPane { font-size:14px !important; line-height:1.68 !important; }
+    #allNotesSlidesList .all-notes-slide-item { font-size:13px !important; }
+    #allNotesSlidesList .all-notes-slide-item div[style*='font-weight:600'] { font-size:14px !important; }
+    #allNotesCurrentStats { font-size:12px !important; }
+    /* Provide a slightly larger search box font */
+    #allNotesSearch { font-size:13px; }
+    /* Progress text */
+    #allNotesGlobalProgressText { font-size:11px; }
+    /* Make buttons in toolbar slightly more readable */
+    #allNotesEditorContainer .btn-sm { font-size:12px; }
+    /* ===== 深色模式适配 ===== */
+    html.theme-dark body { background:#111827; color:#e5e7eb; }
+    html.theme-dark .modal-content { background:#1f2532; color:#e5e7eb; }
+    html.theme-dark .modal-header { background:linear-gradient(90deg,#4338ca,#0ea5e9); }
+    html.theme-dark #allNotesSlidesList { background:#1f2532; border-color:#334155; }
+    html.theme-dark .all-notes-slide-item { border-bottom:1px solid #2c3440 !important; }
+    html.theme-dark .all-notes-slide-item.active { background:#334155 !important; }
+    html.theme-dark #allNotesEditor { background:#111827; color:#e5e7eb; border-color:#374151; }
+    html.theme-dark #allNotesEditor:focus { background:#111827; color:#fff; }
+    html.theme-dark #allNotesPreviewPane { background:#1f2532; color:#e5e7eb; border-color:#334155; }
+    html.theme-dark .progress { background:#374151; }
+    html.theme-dark .progress-bar.bg-info { background:#0ea5e9 !important; }
+    html.theme-dark .progress-bar.bg-success { background:#16a34a !important; }
+    html.theme-dark .badge { background:#374151 !important; color:#f3f4f6 !important; border:1px solid #475569 !important; }
+    html.theme-dark .form-control, html.theme-dark .form-select { background:#1f2532; color:#e5e7eb; border-color:#374151; }
+    html.theme-dark .form-control:focus { background:#1f2532; color:#fff; }
+    html.theme-dark .btn-outline-secondary, html.theme-dark .btn-outline-primary, html.theme-dark .btn-outline-dark { color:#e2e8f0; border-color:#64748b; }
+    html.theme-dark .btn-outline-secondary:hover, html.theme-dark .btn-outline-primary:hover, html.theme-dark .btn-outline-dark:hover { background:#334155; color:#fff; }
+    html.theme-dark .allnotes-code { background:#0f172a; color:#e2e8f0; border:1px solid #334155; padding:6px 8px; border-radius:4px; }
+    html.theme-dark blockquote { border-left:4px solid #475569; background:#1e293b; padding:4px 8px; }
+    @media (prefers-color-scheme: dark){ :root:not(.fs-dark)[data-auto-dark='1'] { } body { background:#111827; } }
+    #themeToggleBtn { box-shadow:0 2px 6px rgba(0,0,0,.25); }
+    
 
         @keyframes headerFloat {
             0%, 100% { transform: scale(1) rotate(0deg); }
@@ -891,7 +1009,7 @@
             box-shadow: 0 10px 30px rgba(255,255,255,0.2);
             overflow: hidden;
             position: relative;
-            /* 使用flex确保PPT居中且尺寸自适应 */
+            /* 使用flex确保Slide居中且尺寸自适应 */
             width: 100%;
             height: 100%;
             {% if aspect_ratio_settings.ratio_css == "4/3" %}
@@ -3448,7 +3566,7 @@
         <div class="editor-header">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <h2><i class="fas fa-edit"></i> PPT编辑器</h2>
+                    <h2><i class="fas fa-edit"></i> Slide编辑器</h2>
                     <p class="mb-0">{{ project.title }} - 共 {{ project.slides_data|length if project.slides_data else 0 }} 页</p>
                 </div>
                 <div>
@@ -3485,7 +3603,7 @@
                             <div style="font-size: 48px; margin-bottom: 15px;">
                                 <i class="fas fa-magic"></i>
                             </div>
-                            <h5 style="margin-bottom: 10px;">PPT正在生成中...</h5>
+                            <h5 style="margin-bottom: 10px;">Slide正在生成中...</h5>
                             <p style="margin-bottom: 15px; font-size: 14px;">
                                 幻灯片生成完成后，您可以在这里进行编辑和管理
                             </p>
@@ -3552,8 +3670,8 @@
                                     <div style="font-size: 64px; margin-bottom: 20px;">
                                         <i class="fas fa-presentation-screen"></i>
                                     </div>
-                                    <h4 style="margin-bottom: 15px;">等待PPT生成</h4>
-                                    <p style="margin-bottom: 20px;">PPT生成完成后，预览将在这里显示</p>
+                                    <h4 style="margin-bottom: 15px;">等待Slide生成</h4>
+                                    <p style="margin-bottom: 20px;">Slide生成完成后，预览将在这里显示</p>
                                     <button class="btn btn-outline-primary" onclick="window.location.reload()">
                                         <i class="fas fa-refresh"></i> 刷新查看
                                     </button>
@@ -3734,7 +3852,11 @@
                                                 <button type="submit" class="btn btn-primary"><i class="fas fa-wand-magic-sparkles"></i> 开始生成</button>
                                                 <button type="button" class="btn btn-success" onclick="downloadNotesMarkdown()"><i class="fas fa-file-alt"></i> 导出Markdown</button>
                                                 <button type="button" class="btn btn-success" onclick="downloadNotesDocx()"><i class="fas fa-file-word"></i> 导出DOCX</button>
-                                                <button type="button" class="btn btn-outline-secondary" onclick="openAllNotesEditor()"><i class="fas fa-pen-to-square"></i> 查看与编辑全部演讲稿</button>
+                                                <button type="button" class="btn btn-outline-secondary" onclick="openAllNotesEditor()"><i class="fas fa-pen-to-square"></i> 查看与编辑演讲稿</button>
+                                                <div class="form-check form-check-inline ms-2" title="导出时在文件开头加入主题/统计等元数据">
+                                                    <input class="form-check-input" type="checkbox" id="ssIncludeMeta" />
+                                                    <label class="form-check-label" for="ssIncludeMeta">导出含元数据</label>
+                                                </div>
                                             </div>
                                         </form>
                                         <div id="speechScriptGenerationStatus" style="margin-top:12px; font-size:0.9rem; color:#555;"></div>
@@ -4386,14 +4508,14 @@
         })();
 
         // 调试信息
-        console.log('PPT编辑器调试信息:');
+    console.log('Slide编辑器调试信息:');
         console.log('- slidesData:', slidesData);
         console.log('- slidesData.length:', slidesData ? slidesData.length : 'undefined');
         console.log('- hasSlidesData:', hasSlidesData);
         console.log('- projectStatus:', projectStatus);
         console.log('- projectOutline:', projectOutline);
 
-        // 检查PPT是否生成完成 - 简化逻辑
+        // 检查Slide是否生成完成 - 简化逻辑
         function isPPTGenerationCompleted() {
             // 简单检查：有幻灯片数据就认为生成完成
             return hasSlidesData && slidesData.length > 0;
@@ -4445,7 +4567,7 @@
                 if (!isCompleted) {
                     [copyBtn, pasteBtn, insertBtn, duplicateBtn, deleteBtn].forEach(btn => {
                         if (btn) {
-                            btn.title = 'PPT生成完成后才能使用此功能';
+                            btn.title = 'Slide生成完成后才能使用此功能';
                         }
                     });
                 }
@@ -4475,7 +4597,7 @@
                 return;
             }
 
-            // PPT标准尺寸
+            // Slide标准尺寸
             const pptWidth = 1280;
             const pptHeight = 720;
 
@@ -7566,7 +7688,7 @@
                 closeBtn.style.borderColor = 'rgba(255,255,255,0.3)';
             });
 
-            // 创建PPT容器，使用与全屏放映相同的样式
+            // 创建Slide容器，使用与全屏放映相同的样式
             const slideContainer = document.createElement('div');
             slideContainer.style.cssText = `
                 background: white;
@@ -8580,7 +8702,7 @@
         async function exportToPPTX() {
             try {
                 // 显示提示信息
-                showNotification('正在生成PPTX文件...', 'info');
+                showNotification('正在生成 PPTX 文件...', 'info');
                 showNotification('此过程需要先生成PDF再转换为PPTX，请耐心等待...', 'warning');
 
                 // 使用fetch API进行下载，以便处理错误
@@ -8754,7 +8876,8 @@
         function downloadNotesMarkdown() {
             try {
                 const a = document.createElement('a');
-                a.href = `/api/projects/{{ project.project_id }}/export/scripts.md`;
+                const incMeta = document.getElementById('ssIncludeMeta')?.checked ? 1 : 0;
+                a.href = `/api/projects/{{ project.project_id }}/export/scripts.md?include_meta=${incMeta}`;
                 a.download = '';
                 a.style.display = 'none';
                 document.body.appendChild(a);
@@ -8770,7 +8893,8 @@
         function downloadNotesDocx() {
             try {
                 const a = document.createElement('a');
-                a.href = `/api/projects/{{ project.project_id }}/export/scripts.docx`;
+                const incMeta2 = document.getElementById('ssIncludeMeta')?.checked ? 1 : 0;
+                a.href = `/api/projects/{{ project.project_id }}/export/scripts.docx?include_meta=${incMeta2}`;
                 a.download = '';
                 a.style.display = 'none';
                 document.body.appendChild(a);
@@ -8931,9 +9055,16 @@
                     if(!r.ok) return;
                     const jd = await r.json();
                     if(!jd.success) return;
-                    const {completed,total,status,strategy,updated_indices} = jd;
+                    const {completed,total,status,strategy,failed,skipped,progress_pct,errors} = jd;
                     let label = strategy==='single_pass'?'整体一次性':'逐页';
-                    statusDiv.innerHTML = `<span class='text-info'>(${label}) 进度：${completed}/${total} (${Math.round((completed/Math.max(total,1))*100)}%)</span>`;
+                    const pct = progress_pct !== undefined ? progress_pct : (completed/Math.max(total||1,1))*100;
+                    let extra = '';
+                    if(failed) extra += ` 失败:${failed}`;
+                    if(skipped) extra += ` 跳过:${skipped}`;
+                    statusDiv.innerHTML = `<span class='text-info'>(${label}) 进度：${completed}/${total} (${pct.toFixed(1)}%)${extra}</span>`;
+                    if(errors && errors.length){
+                        statusDiv.innerHTML += `<br/><span class='text-danger' style='font-size:0.8rem'>错误页: ${errors.map(e=>e.index+1).join(', ')}</span>`;
+                    }
                     if(status==='finished'){
                         stopScriptsProgressPolling();
                         await refreshSlidesData();
@@ -9214,7 +9345,7 @@
                         <i class="fas fa-share" style="color: #007bff;"></i> 分享演示
                     </h4>
                     <p style="margin-bottom: 20px; color: #666;">
-                        使用以下链接分享您的PPT演示，观众可以在任何设备上观看
+                        使用以下链接分享您的Slide演示，观众可以在任何设备上观看
                     </p>
                     <div style="
                         background: #f8f9fa;
@@ -9816,7 +9947,7 @@
         function copySlide() {
             hideContextMenu();
             if (!isPPTGenerationCompleted()) {
-                showNotification('PPT生成完成后才能使用复制功能', 'warning');
+                showNotification('Slide生成完成后才能使用复制功能', 'warning');
                 return;
             }
             if (contextMenuSlideIndex >= 0 && contextMenuSlideIndex < slidesData.length) {
@@ -9828,7 +9959,7 @@
         async function pasteSlide() {
             hideContextMenu();
             if (!isPPTGenerationCompleted()) {
-                showNotification('PPT生成完成后才能使用粘贴功能', 'warning');
+                showNotification('Slide生成完成后才能使用粘贴功能', 'warning');
                 return;
             }
             if (!copiedSlideData) {
@@ -9884,7 +10015,7 @@
         async function insertNewSlide() {
             hideContextMenu();
             if (!isPPTGenerationCompleted()) {
-                showNotification('PPT生成完成后才能添加新幻灯片', 'warning');
+                showNotification('Slide生成完成后才能添加新幻灯片', 'warning');
                 return;
             }
 
@@ -9948,7 +10079,7 @@
         async function duplicateSlide() {
             hideContextMenu();
             if (!isPPTGenerationCompleted()) {
-                showNotification('PPT生成完成后才能复制幻灯片', 'warning');
+                showNotification('Slide生成完成后才能复制幻灯片', 'warning');
                 return;
             }
             if (contextMenuSlideIndex >= 0 && contextMenuSlideIndex < slidesData.length) {
@@ -10001,7 +10132,7 @@
         async function deleteSlide() {
             hideContextMenu();
             if (!isPPTGenerationCompleted()) {
-                showNotification('PPT生成完成后才能删除幻灯片', 'warning');
+                showNotification('Slide生成完成后才能删除幻灯片', 'warning');
                 return;
             }
             if (slidesData.length <= 1) {
@@ -10056,7 +10187,7 @@
                         <div style="font-size: 48px; margin-bottom: 15px;">
                             <i class="fas fa-magic"></i>
                         </div>
-                        <h5 style="margin-bottom: 10px;">PPT正在生成中...</h5>
+                        <h5 style="margin-bottom: 10px;">Slide正在生成中...</h5>
                         <p style="margin-bottom: 15px; font-size: 14px;">
                             幻灯片生成完成后，您可以在这里进行编辑和管理
                         </p>
@@ -10862,8 +10993,8 @@
                             <div style="font-size: 64px; margin-bottom: 20px;">
                                 <i class="fas fa-presentation-screen"></i>
                             </div>
-                            <h4 style="margin-bottom: 15px;">等待PPT生成</h4>
-                            <p style="margin-bottom: 20px;">PPT生成完成后，预览将在这里显示</p>
+                            <h4 style="margin-bottom: 15px;">等待Slide生成</h4>
+                            <p style="margin-bottom: 20px;">Slide生成完成后，预览将在这里显示</p>
                             <button class="btn btn-outline-primary" onclick="checkForUpdates()">
                                 <i class="fas fa-refresh"></i> 刷新页面
                             </button>
@@ -12518,6 +12649,19 @@
                 }
             }, 100);
         });
+    </script>
+    <!-- 主题切换按钮 -->
+    <button id="themeToggleBtn" type="button" onclick="toggleFsTheme()" class="btn btn-sm btn-outline-secondary" style="position:fixed;right:14px;bottom:14px;z-index:5600;">
+        <i class="fas fa-moon"></i>
+    </button>
+    <script>
+        (function(){
+            const saved = localStorage.getItem('fs-theme');
+            if(saved==='dark'){ document.documentElement.classList.add('theme-dark'); }
+            updateThemeToggleIcon();
+        })();
+    function toggleFsTheme(){ const root=document.documentElement; const dark=root.classList.toggle('theme-dark'); localStorage.setItem('fs-theme', dark?'dark':'github'); updateThemeToggleIcon(); }
+    function updateThemeToggleIcon(){ const btn=document.getElementById('themeToggleBtn'); if(!btn) return; const dark=document.documentElement.classList.contains('theme-dark'); btn.innerHTML = dark? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>'; btn.classList.toggle('btn-warning', dark); }
     </script>
 </body>
 </html>

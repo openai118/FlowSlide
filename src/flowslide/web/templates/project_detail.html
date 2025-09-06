@@ -250,7 +250,7 @@
 
             {% if project.status == 'completed' and project.slides_html %}
             <a href="/projects/{{ project.project_id }}/fullscreen" class="btn btn-success" target="_blank" style="flex: 1;">
-                🔍 预览 PPT
+                🔍 预览 Slide
             </a>
             {% endif %}
             
@@ -314,7 +314,7 @@
                             </a>
                         {% elif stage.id == 'ppt_creation' %}
                             <a href="/projects/{{ project.project_id }}/todo" class="btn btn-primary" style="font-size: 0.8em; padding: 6px 12px;">
-                                <i class="fas fa-magic"></i> 生成PPT
+                                <i class="fas fa-magic"></i> 生成Slide
                             </a>
                         {% else %}
                             <a href="/projects/{{ project.project_id }}/todo" class="btn btn-primary" style="font-size: 0.8em; padding: 6px 12px;">
@@ -342,11 +342,11 @@
     {% endif %}
 </div>
 
-<!-- PPT Outline Preview -->
+<!-- Slide Outline Preview -->
 {% if project.outline and project.outline is not none and project.outline.get('slides') %}
 <div style="margin-top: 40px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h3 style="color: #2c3e50; margin: 0;">📄 PPT 大纲</h3>
+    <h3 style="color: #2c3e50; margin: 0;">📄 Slide 大纲</h3>
         <div style="display: flex; gap: 10px;">
             <button onclick="toggleOutlineView()" class="btn btn-info" style="font-size: 0.9em;">
                 <i class="fas fa-eye"></i> <span id="viewToggleText">详细视图</span>
@@ -468,7 +468,7 @@
 {% elif project.outline and project.outline is not none %}
 <!-- Show outline content if it exists but doesn't have slides structure -->
 <div style="margin-top: 40px;">
-    <h3 style="color: #2c3e50; margin-bottom: 20px; text-align: center;">📄 PPT 大纲</h3>
+    <h3 style="color: #2c3e50; margin-bottom: 20px; text-align: center;">📄 Slide 大纲</h3>
 
     <div style="background: var(--panel-bg); border-radius: 15px; padding: 30px; box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border);">
         <div style="text-align: center; margin-bottom: 20px;">
@@ -697,7 +697,7 @@ function editOutline() {
 
     content.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h3 style="color: #2c3e50; margin: 0;">编辑PPT大纲</h3>
+            <h3 style="color: #2c3e50; margin: 0;">编辑Slide大纲</h3>
             <button onclick="this.closest('.modal').remove()" style="background: #e74c3c; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 16px;">×</button>
         </div>
         <div style="flex: 1; display: flex; flex-direction: column;">
@@ -757,7 +757,7 @@ function exportOutlineJSON() {
 
     const link = document.createElement('a');
     link.href = URL.createObjectURL(dataBlob);
-    link.download = `${(projectOutline.title || 'ppt_outline')}_${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `${(projectOutline.title || 'Slide_outline')}_${new Date().toISOString().split('T')[0]}.json`;
 
     document.body.appendChild(link);
     link.click();

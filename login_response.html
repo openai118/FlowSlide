@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FlowSlide - AI Slide Generator</title>
-    <link rel="icon" type="image/svg+xml" href="/static/images/flowslide-logo.svg">
+    <link id="site-favicon" rel="icon" type="image/svg+xml" href="/static/images/flowslide-logo-light.svg?v=102">
     <!-- Font Awesome icons inline -->
     <style>
         /* Font Awesome icons - inline minimal set */
@@ -960,11 +960,12 @@
     </style>
 </head>
 <body>
+        <script src="/static/js/theme.js"></script>
     <div class="container">
         <header class="header">
             <h1>
                 <span style="display: inline-flex; align-items: center; gap: 12px;">
-                    <img src="/static/images/flowslide-logo.svg" alt="FlowSlide Logo" style="width: 48px; height: 48px;">
+                    <img id="brand-logo" src="/static/images/flowslide-logo-light.svg?v=102" alt="FlowSlide Logo" style="width: 48px; height: 48px;">
                     FlowSlide
                 </span>
             </h1>
@@ -1006,7 +1007,7 @@
 <div style="text-align: center; margin-bottom: 40px;">
     <h2 class="home-accent-blue" style="margin-bottom: 20px;"><i class="fas fa-rocket home-accent-blue"></i> 欢迎使用 FlowSlide</h2>
     <p class="home-muted" style="font-size: 1.2em; margin-bottom: 20px;">
-        只需输入主题和需求，AI 即可自动生成专业的 PPT 演示文稿
+        只需输入主题和需求，AI 即可自动生成专业的 Slide 演示文稿
     </p>
     
     <div class="home-pill">
@@ -1024,8 +1025,8 @@
 <div class="grid">
     <div class="card">
         <h3 class="home-accent-blue" style="margin-bottom: 15px;"><i class="fas fa-bullseye"></i> 快速生成</h3>
-        <p style="margin-bottom: 20px;">选择场景模板，输入主题，一键生成专业PPT</p>
-        <a href="/scenarios" class="btn btn-primary">开始创建 PPT</a>
+        <p style="margin-bottom: 20px;">选择场景模板，输入主题，一键生成专业Slide</p>
+        <a href="/scenarios" class="btn btn-primary">开始创建 Slide</a>
     </div>
     
     <div class="card">

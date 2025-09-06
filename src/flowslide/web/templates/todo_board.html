@@ -845,7 +845,7 @@
                     <div class="page-count-option" data-mode="custom_range" style="border: 2px solid var(--glass-border); background: var(--glass-bg); border-radius: 10px; padding: 15px; cursor: pointer; text-align: center; transition: all 0.3s ease;">
                         <div style="font-size: 24px; margin-bottom: 8px;">📊</div>
                         <h5 style="color: var(--text-primary); margin-bottom: 5px;">自定义范围</h5>
-                        <p style="font-size: 12px; color: var(--text-secondary);">在指定范围内生成PPT页数</p>
+                        <p style="font-size: 12px; color: var(--text-secondary);">在指定范围内生成 Slide 页数</p>
                     </div>
                 </div>
                 <input type="hidden" id="page_count_mode" name="page_count_mode" value="ai_decide">
@@ -1164,7 +1164,7 @@ function startBrainAnimation(prefix = '') {
                 '正在构建逻辑框架',
                 '正在优化大纲层次',
                 '正在完善内容要点',
-                '正在生成PPT大纲'
+                '正在生成 Slide 大纲'
             ];
 
             const randomText = texts[Math.floor(Math.random() * texts.length)];
@@ -1424,7 +1424,7 @@ function showOutlineSection() {
                         <div class="loading-icon">
                             <i class="fas fa-brain"></i>
                         </div>
-                        <div class="loading-title">AI正在生成PPT大纲</div>
+                        <div class="loading-title">AI正在生成 Slide 大纲</div>
 
                         <div class="brain-container">
                             <div class="ai-brain" id="loading-brain-dynamic">
@@ -1455,7 +1455,7 @@ function showOutlineSection() {
 
                         <div class="loading-tips">
                             <h5><i class="fas fa-lightbulb"></i> 小贴士</h5>
-                            <p>AI正在根据您的需求智能生成PPT大纲，包括标题、内容要点和逻辑结构。生成完成后您可以实时编辑和调整。</p>
+                            <p>AI正在根据您的需求智能生成 Slide 大纲，包括标题、内容要点和逻辑结构。生成完成后您可以实时编辑和调整。</p>
                         </div>
                     </div>
 
@@ -1777,7 +1777,7 @@ async function startFileOutlineGeneration() {
             <div class="loading-icon">
                 <i class="fas fa-file-alt"></i>
             </div>
-            <div class="loading-title">正在从文件生成PPT大纲</div>
+            <div class="loading-title">正在从文件生成 Slide 大纲</div>
 
             <div class="brain-container">
                 <div class="ai-brain" id="loading-brain-file">
@@ -1946,7 +1946,7 @@ async function startOutlineGenerationNew() {
             <div class="loading-icon">
                 <i class="fas fa-brain"></i>
             </div>
-            <div class="loading-title">AI正在生成PPT大纲</div>
+            <div class="loading-title">AI正在生成 Slide 大纲</div>
 
             <div class="brain-container">
                 <div class="ai-brain" id="loading-brain-stream">
@@ -1969,7 +1969,7 @@ async function startOutlineGenerationNew() {
                         <div class="thought-bubble"></div>
                     </div>
                     <div class="text-generation">
-                        <div class="generating-text">正在生成PPT大纲</div>
+                        <div class="generating-text">正在生成 Slide 大纲</div>
                         <div class="generating-dots">• • •</div>
                     </div>
                 </div>
@@ -1977,7 +1977,7 @@ async function startOutlineGenerationNew() {
 
             <div class="loading-tips">
                 <h5><i class="fas fa-lightbulb"></i> 小贴士</h5>
-                <p>AI正在根据您的需求智能生成PPT大纲，包括标题、内容要点和逻辑结构。生成完成后将一次性显示完整大纲，您可以编辑和调整。</p>
+                <p>AI正在根据您的需求智能生成 Slide 大纲，包括标题、内容要点和逻辑结构。生成完成后将一次性显示完整大纲，您可以编辑和调整。</p>
             </div>
         `;
         placeholderDiv.className = 'loading-container';
@@ -2479,7 +2479,7 @@ function showStartPPTButton() {
 
             startPPTButton.innerHTML = `
                 <button onclick="startPPTGenerationFromOutline()" class="btn btn-success btn-lg" style="padding: 15px 30px; font-size: 18px;">
-                    <i class="fas fa-rocket"></i> 开始生成PPT
+                    <i class="fas fa-rocket"></i> 开始生成 Slide
                 </button>
             `;
 

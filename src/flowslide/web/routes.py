@@ -72,6 +72,158 @@ def get_aspect_ratio_settings() -> dict:
 
 
 router = APIRouter()
+@router.get("/api/research/reports")
+async def list_research_reports(user: User = Depends(get_current_user_required)):
+    """列出本地 research_reports 下的已生成研究报告（Markdown/Txt）。"""
+    from pathlib import Path
+    reports_dir = Path("research_reports")
+    items = []
+    try:
+        if reports_dir.exists():
+            for p in sorted(reports_dir.glob("*.md"), reverse=True):
+                try:
+                    head = p.read_text(encoding="utf-8", errors="ignore").splitlines()[:8]
+                    items.append(
+                        {
+                            "filename": p.name,
+                            "size": p.stat().st_size,
+                            "modified": int(p.stat().st_mtime),
+                            "preview": "\n".join(head),
+                        }
+                    )
+                except Exception:
+                    # 单个文件读取失败忽略
+                    continue
+            # 也允许 .txt
+            for p in sorted(reports_dir.glob("*.txt"), reverse=True):
+                if any(x["filename"] == p.name for x in items):
+                    continue
+                try:
+                    head = p.read_text(encoding="utf-8", errors="ignore").splitlines()[:8]
+                    items.append(
+                        {
+                            "filename": p.name,
+                            "size": p.stat().st_size,
+                            "modified": int(p.stat().st_mtime),
+                            "preview": "\n".join(head),
+                        }
+                    )
+                except Exception:
+                    continue
+    except Exception as e:
+        return {"success": False, "error": str(e), "reports": []}
+    return {"success": True, "reports": items}
+
+@router.get("/api/research/reports/{filename}")
+async def get_research_report(filename: str, user: User = Depends(get_current_user_required)):
+    """获取指定研究报告全文内容(安全限制)。"""
+    try:
+        safe = filename.replace("..", "").strip("/\\")
+        if not safe or safe != filename:
+            raise HTTPException(status_code=400, detail="非法文件名")
+        from pathlib import Path
+        reports_dir = Path("research_reports")
+        target = reports_dir / safe
+        if not (target.exists() and target.is_file()):
+            raise HTTPException(status_code=404, detail="文件不存在")
+        if target.suffix.lower() not in {".md", ".txt"}:
+            raise HTTPException(status_code=400, detail="不支持的文件类型")
+        content = target.read_text(encoding="utf-8", errors="ignore")
+        max_len = 300_000
+        truncated = False
+        if len(content) > max_len:
+            content = content[:max_len]
+            truncated = True
+        return {
+            "success": True,
+            "filename": safe,
+            "size": target.stat().st_size,
+            "modified": int(target.stat().st_mtime),
+            "truncated": truncated,
+            "content": content,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def _sanitize_report_filename(name: str) -> str:
+    base = name.replace('..','').replace('\r','').replace('\n','').strip().strip('/\\')
+    if not base:
+        base = f"report_{int(time.time())}.md"
+    # 只允许字母数字下划线中划线点和中文
+    import re
+    base = re.sub(r"[^A-Za-z0-9_.\-\u4e00-\u9fa5]", "_", base)
+    # 强制后缀
+    if not base.lower().endswith(('.md','.txt')):
+        base += '.md'
+    return base[:120]
+
+@router.get("/api/research/reports/{filename}/chunk")
+async def get_research_report_chunk(
+    filename: str,
+    offset: int = 0,
+    limit: int = 20000,
+    user: User = Depends(get_current_user_required)
+):
+    """分页获取报告内容，便于前端懒加载。"""
+    try:
+        safe = filename.replace("..", "").strip("/\\")
+        from pathlib import Path
+        reports_dir = Path("research_reports")
+        target = reports_dir / safe
+        if not (target.exists() and target.is_file()):
+            raise HTTPException(status_code=404, detail="文件不存在")
+        if target.suffix.lower() not in {".md", ".txt"}:
+            raise HTTPException(status_code=400, detail="不支持的文件类型")
+        data = target.read_text(encoding="utf-8", errors="ignore")
+        size = len(data)
+        if offset < 0: offset = 0
+        if limit <= 0: limit = 20000
+        if limit > 50000: limit = 50000
+        chunk = data[offset: offset+limit]
+        next_offset = offset + len(chunk)
+        has_more = next_offset < size
+        return {"success": True, "filename": safe, "offset": offset, "next_offset": next_offset, "has_more": has_more, "size": size, "content": chunk}
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@router.post("/api/research/reports/upload")
+async def upload_research_report(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user_required)
+):
+    """单独上传并缓存研究报告到 research_reports 目录，供后续复用。"""
+    try:
+        fname = file.filename or "uploaded_report.md"
+        if not any(fname.lower().endswith(ext) for ext in [".md", ".txt"]):
+            raise HTTPException(status_code=400, detail="仅支持 .md/.txt")
+        raw = await file.read()
+        text = raw.decode("utf-8", errors="ignore")
+        stored_name = _sanitize_report_filename(fname)
+        from pathlib import Path
+        reports_dir = Path("research_reports")
+        reports_dir.mkdir(exist_ok=True)
+        # 若存在则加时间戳避免覆盖
+        candidate = stored_name
+        if (reports_dir / candidate).exists():
+            stem, ext = os.path.splitext(candidate)
+            candidate = f"{stem}_{int(time.time())}{ext}"
+        path = reports_dir / candidate
+        # 限制文件大小写入（最多 400k 字符）
+        truncated = False
+        if len(text) > 400_000:
+            text = text[:400_000]
+            truncated = True
+        path.write_text(text, encoding="utf-8")
+        preview = "\n".join(text.splitlines()[:8])
+        return {"success": True, "filename": candidate, "size": len(text), "truncated": truncated, "preview": preview}
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 def _build_provider_status(ai_config_obj) -> dict:
@@ -252,6 +404,14 @@ class AIBulletPointEnhanceRequest(BaseModel):
     contextInfo: Optional[Dict[str, Any]] = None  # 包含原始要点、其他要点等上下文信息
 
 
+# 简单通用补全请求（用于演讲稿润色等轻量场景）
+class SimpleCompletionRequest(BaseModel):
+    prompt: str
+    max_tokens: Optional[int] = None
+    temperature: Optional[float] = None
+    provider: Optional[str] = None  # 预留：未来可切换不同模型
+
+
 # 图像重新生成请求数据模型
 class AIImageRegenerateRequest(BaseModel):
     slide_index: int
@@ -351,7 +511,7 @@ async def _extract_slides_from_html(slides_html: str, existing_slides_data: list
         if not updated_slides_data and slides_html.strip():
             slide_data = {
                 "page_number": 1,
-                "title": "编辑后的PPT",
+                "title": "编辑后的Slide",
                 "html_content": slides_html,
                 "is_user_edited": True,
             }
@@ -1101,43 +1261,43 @@ async def web_scenarios(
         {
             "id": "general",
             "name": "通用",
-            "description": "适用于各种通用场景的PPT模板",
+            "description": "适用于各种通用场景的Slide模板",
             "icon": "📋",
         },
         {
             "id": "tourism",
             "name": "旅游观光",
-            "description": "旅游线路、景点介绍等旅游相关PPT",
+            "description": "旅游线路、景点介绍等旅游相关Slide",
             "icon": "🌍",
         },
         {
             "id": "education",
             "name": "儿童科普",
-            "description": "适合儿童的科普教育PPT",
+            "description": "适合儿童的科普教育Slide",
             "icon": "🎓",
         },
         {
             "id": "analysis",
             "name": "深入分析",
-            "description": "数据分析、研究报告等深度分析PPT",
+            "description": "数据分析、研究报告等深度分析Slide",
             "icon": "📊",
         },
         {
             "id": "history",
             "name": "历史文化",
-            "description": "历史事件、文化介绍等人文类PPT",
+            "description": "历史事件、文化介绍等人文类Slide",
             "icon": "🏛️",
         },
         {
             "id": "technology",
             "name": "科技技术",
-            "description": "技术介绍、产品发布等科技类PPT",
+            "description": "技术介绍、产品发布等科技类Slide",
             "icon": "💻",
         },
         {
             "id": "business",
             "name": "方案汇报",
-            "description": "商业计划、项目汇报等商务PPT",
+            "description": "商业计划、项目汇报等商务Slide",
             "icon": "💼",
         },
     ]
@@ -1210,8 +1370,8 @@ async def web_upload_file(
 
 @router.get("/demo", response_class=HTMLResponse)
 async def web_demo(request: Request, user: User = Depends(get_current_user_required)):
-    """Demo page with sample PPT"""
-    # Create a demo PPT
+    """Demo page with sample Slide"""
+    # Create a demo Slide
     demo_request = PPTGenerationRequest(
         scenario="technology",
         topic="人工智能技术发展趋势",
@@ -1435,7 +1595,7 @@ async def web_project_todo_board(
             )
         )
 
-        # Also use integrated editor if PPT creation stage is about to start or running
+        # Also use integrated editor if Slide creation stage is about to start or running
         if (
             project
             and project.confirmed_requirements
@@ -1469,7 +1629,7 @@ async def web_project_todo_board(
 async def web_project_fullscreen(
     request: Request, project_id: str, user: User = Depends(get_current_user_required)
 ):
-    """Fullscreen preview of project PPT with modern presentation interface"""
+    """Fullscreen preview of project Slide with modern presentation interface"""
     try:
         # 直接从数据库获取最新的项目数据，确保数据实时性
         from ..services.db_project_manager import DatabaseProjectManager
@@ -1489,7 +1649,7 @@ async def web_project_fullscreen(
         # 检查是否有幻灯片数据
         if not project.slides_data or len(project.slides_data) == 0:
             return templates.TemplateResponse(
-                "error.html", {"request": request, "error": "PPT尚未生成或无幻灯片内容"}
+                "error.html", {"request": request, "error": "Slide尚未生成或无幻灯片内容"}
             )
 
         # 使用新的分享演示模板
@@ -1527,7 +1687,7 @@ async def get_project_slides_data(project_id: str, user: User = Depends(get_curr
         if not project.slides_data or len(project.slides_data) == 0:
             return {
                 "status": "no_slides",
-                "message": "PPT尚未生成",
+                "message": "Slide尚未生成",
                 "slides_data": [],
                 "total_slides": 0,
             }
@@ -1607,17 +1767,76 @@ async def web_create_project(
     requirements: str = Form(None),
     language: str = Form("zh"),
     network_mode: bool = Form(False),
+    existing_report: str = Form(None),
+    report_file: UploadFile | None = File(None),
     user: User = Depends(get_current_user_required),
 ):
     """Create new project via web interface"""
     try:
         # Create project request
+        uploaded_content = None
+        use_file_content = False
+        # 1. 处理用户上传的研究报告文件（优先级高于选择现有）
+        if report_file and report_file.filename:
+            try:
+                fname = report_file.filename
+                if not any(fname.lower().endswith(ext) for ext in [".md", ".txt"]):
+                    raise ValueError("仅支持 .md 或 .txt 研究报告文件")
+                raw = await report_file.read()
+                text = raw.decode("utf-8", errors="ignore")
+                if len(text) > 120_000:
+                    text = text[:120_000]
+                uploaded_content = text
+                use_file_content = True
+                network_mode = False  # 使用本地内容不再联网
+                tag = f"(使用上传研究报告: {fname})"
+                requirements = (requirements + "\n" + tag) if requirements else tag
+                # 将上传内容持久化写入 research_reports 目录（不覆盖已有，同 upload API 规则简化版）
+                try:
+                    from pathlib import Path
+                    reports_dir = Path("research_reports"); reports_dir.mkdir(exist_ok=True)
+                    import re, os, time as _t
+                    safe = re.sub(r"[^A-Za-z0-9_.\-\u4e00-\u9fa5]", "_", fname)[:100]
+                    if not safe.lower().endswith(('.md','.txt')): safe += '.md'
+                    candidate = safe
+                    if (reports_dir / candidate).exists():
+                        stem, ext = os.path.splitext(candidate)
+                        candidate = f"{stem}_{int(_t.time())}{ext}"
+                    (reports_dir / candidate).write_text(text, encoding='utf-8')
+                except Exception as _se:
+                    logger.warning(f"保存上传研究报告副本失败: {_se}")
+            except Exception as e:
+                logger.warning(f"读取上传研究报告失败: {e}")
+        # 2. 否则如果选择已有本地报告
+        elif existing_report:
+            from pathlib import Path
+            reports_dir = Path("research_reports")
+            safe_name = existing_report.replace("..", "").strip("/\\")
+            target = reports_dir / safe_name
+            if target.is_file() and target.suffix.lower() in {".md", ".txt"}:
+                try:
+                    uploaded_content = target.read_text(encoding="utf-8", errors="ignore")
+                    # 限制大小防止过长
+                    if len(uploaded_content) > 120_000:
+                        uploaded_content = uploaded_content[:120_000]
+                    use_file_content = True
+                    # 如果选了已有报告，就不再联网
+                    network_mode = False
+                    if requirements:
+                        requirements = requirements + f"\n(使用已有研究报告: {safe_name})"
+                    else:
+                        requirements = f"使用已有研究报告: {safe_name}"
+                except Exception as e:
+                    logger.warning(f"读取已有研究报告失败: {e}")
+
         project_request = PPTGenerationRequest(
             scenario=scenario,
             topic=topic,
             requirements=requirements,
             network_mode=network_mode,
             language=language,
+            uploaded_content=uploaded_content,
+            use_file_content=use_file_content,
         )
 
         # Create project with TODO board (without starting workflow yet)
@@ -2462,7 +2681,7 @@ async def edit_project_ppt(
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
-        # 允许编辑器在PPT生成过程中显示，提供更好的用户体验
+        # 允许编辑器在Slide生成过程中显示，提供更好的用户体验
         # 如果没有slides_data，创建一个空的结构供编辑器使用
         if not project.slides_data:
             project.slides_data = []
@@ -2946,7 +3165,7 @@ async def ai_slide_edit(
 """
 
         context = f"""
-你是一位专业的PPT设计师和编辑助手。用户想要对当前幻灯片进行编辑修改。
+你是一位专业的Slide设计师和编辑助手。用户想要对当前幻灯片进行编辑修改。
 
 当前幻灯片信息：
 - 页码：第{request.slideIndex}页
@@ -2966,9 +3185,9 @@ async def ai_slide_edit(
 3. 如果需要，提供修改后的完整HTML代码
 
 注意事项：
-- 确保修改后的内容符合PPT演示的专业标准和大纲要求
+- 确保修改后的内容符合Slide演示的专业标准和大纲要求
 - 生成的HTML应该是完整的，包含必要的CSS样式
-- 保持1280x720的PPT标准尺寸
+- 保持1280x720的Slide标准尺寸
 - 参考大纲信息中的要点和描述来优化内容
 """
 
@@ -2976,7 +3195,7 @@ async def ai_slide_edit(
         messages = [
             AIMessage(
                 role=MessageRole.SYSTEM,
-                content="你是一位专业的PPT设计师和编辑助手，擅长根据用户需求修改和优化PPT内容。",
+                content="你是一位专业的Slide设计师和编辑助手，擅长根据用户需求修改和优化Slide内容。",
             )
         ]
 
@@ -3057,7 +3276,7 @@ async def ai_slide_edit_stream(
 """
 
         context = f"""
-你是一位专业的PPT设计师和编辑助手。用户想要对当前幻灯片进行编辑修改。
+你是一位专业的Slide设计师和编辑助手。用户想要对当前幻灯片进行编辑修改。
 
 当前幻灯片信息：
 - 页码：第{request.slideIndex}页
@@ -3078,10 +3297,10 @@ async def ai_slide_edit_stream(
 
 注意事项：
 - 保持原有的设计风格和布局结构
-- 确保修改后的内容符合PPT演示的专业标准和大纲要求
+- 确保修改后的内容符合Slide演示的专业标准和大纲要求
 - 如果用户要求不明确，请提供多个可选方案
 - 生成的HTML应该是完整的，包含必要的CSS样式
-- 保持1280x720的PPT标准尺寸
+- 保持1280x720的Slide标准尺寸
 - 参考大纲信息中的要点和描述来优化内容
 """
 
@@ -3089,7 +3308,7 @@ async def ai_slide_edit_stream(
         messages = [
             AIMessage(
                 role=MessageRole.SYSTEM,
-                content="你是一位专业的PPT设计师和编辑助手，擅长根据用户需求修改和优化PPT内容。",
+                content="你是一位专业的Slide设计师和编辑助手，擅长根据用户需求修改和优化Slide内容。",
             )
         ]
 
@@ -3201,7 +3420,7 @@ async def ai_regenerate_image(
                 "message": "没有启用任何图片来源，请在配置中启用至少一种图片来源",
             }
 
-        # 初始化PPT图像处理器
+        # 初始化Slide图像处理器
         from ..services.ppt_image_processor import PPTImageProcessor
 
         image_processor = PPTImageProcessor(image_service=image_service, ai_provider=ai_provider)
@@ -3387,7 +3606,7 @@ async def ai_auto_generate_slide_images(
         logger.info(f"开始为第{request.slide_index + 1}页进行一键配图")
 
         # 第一步：AI分析幻灯片内容，确定是否需要配图以及配图需求
-        analysis_prompt = f"""作为专业的PPT设计师，请分析以下幻灯片内容，判断是否需要配图以及配图需求。
+        analysis_prompt = f"""作为专业的Slide设计师，请分析以下幻灯片内容，判断是否需要配图以及配图需求。
 
 项目主题：{request.project_topic}
 项目场景：{request.project_scenario}
@@ -3614,7 +3833,7 @@ async def ai_enhance_bullet_point(
 
         # 构建AI增强提示词
         context = f"""
-你是一位专业的PPT内容编辑专家。用户需要你增强和优化一个PPT要点的内容。
+你是一位专业的Slide内容编辑专家。用户需要你增强和优化一个Slide要点的内容。
 
 项目信息：
 - 项目标题：{request.projectInfo.get('title', '未知')}
@@ -3709,7 +3928,7 @@ async def ai_enhance_all_bullet_points(
 
         # 构建AI增强提示词
         context = f"""
-请对以下PPT要点进行增强和优化。
+请对以下Slide要点进行增强和优化。
 
 项目背景：
 - 项目：{request.projectInfo.get('title', '未知')}
@@ -3859,6 +4078,50 @@ async def ai_enhance_all_bullet_points(
             "error": str(e),
             "message": "抱歉，AI要点增强服务暂时不可用。请稍后重试。",
         }
+
+
+@router.post("/api/ai/simple_completion")
+async def api_simple_completion(
+    request: SimpleCompletionRequest,
+    user: User = Depends(get_current_user_required),
+):
+    """轻量级通用文本补全/润色接口。
+
+    前端仅需提供 prompt 字段。返回：{ success, content }
+    - 默认使用较低温度（0.55）保证润色稳定性
+    - max_tokens 默认使用全局配置 1/2，用户可覆盖
+    """
+    try:
+        if not request.prompt or len(request.prompt.strip()) < 4:
+            return {"success": False, "error": "提示词过短"}
+
+        ai_provider = get_ai_provider()
+        max_tokens = request.max_tokens or max(256, ai_config.max_tokens // 2)
+        temperature = 0.55 if request.temperature is None else request.temperature
+
+        # 调用底层 completion
+        resp = await ai_provider.text_completion(
+            prompt=request.prompt.strip(),
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+
+        content = (resp.content or "").strip()
+
+        # 简单清洗：去除典型开场语句
+        if content.startswith("当然") or content.startswith("好的"):
+            # 只移除首句的这些寒暄，避免删过多
+            parts = re.split(r"[。.!？!?]", content, 1)
+            if len(parts) == 2:
+                content = parts[1].strip()
+
+        if not content:
+            return {"success": False, "error": "AI返回为空"}
+
+        return {"success": True, "content": content}
+    except Exception as e:
+        logger.error(f"simple_completion 失败: {e}")
+        return {"success": False, "error": str(e)}
 
 
 @router.get("/api/projects/{project_id}/selected-global-template")
@@ -4461,13 +4724,13 @@ async def export_project_html(project_id: str, user: User = Depends(get_current_
 
         # Check if we have slides data
         if not project.slides_data or len(project.slides_data) == 0:
-            raise HTTPException(status_code=400, detail="PPT not generated yet")
+            raise HTTPException(status_code=400, detail="Slide not generated yet")
 
         # Create temporary directory and generate files in thread pool
         zip_content = await run_blocking_io(_generate_html_export_sync, project)
 
         # URL encode the filename to handle Chinese characters
-        zip_filename = f"{project.topic}_PPT.zip"
+        zip_filename = f"{project.topic}_Slide.zip"
         safe_filename = urllib.parse.quote(zip_filename, safe="")
 
         from fastapi.responses import Response
@@ -4509,7 +4772,7 @@ def _generate_html_export_sync(project) -> bytes:
             f.write(index_html)
 
         # Create ZIP file
-        zip_filename = f"{project.topic}_PPT.zip"
+        zip_filename = f"{project.topic}_Slide.zip"
         zip_path = temp_path / zip_filename
 
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
@@ -4620,7 +4883,7 @@ def _generate_slideshow_index_sync(project, slide_files: list) -> str:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{project.topic} - PPT放映</title>
+    <title>{project.topic} - Slide放映</title>
     <style>
         body {{
             margin: 0;
@@ -4680,7 +4943,7 @@ def _generate_slideshow_index_sync(project, slide_files: list) -> str:
 <body>
     <div class="header">
         <h1>{project.topic}</h1>
-        <p>PPT演示文稿 - 共{len(slide_files)}页</p>
+        <p>Slide演示文稿 - 共{len(slide_files)}页</p>
     </div>
     <div class="slides-grid">
         {slides_list}
@@ -4710,7 +4973,7 @@ async def _generate_combined_html_for_export(project, export_type: str) -> str:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{project.topic} - PPT导出</title>
+    <title>{project.topic} - Slide导出</title>
     <style>
         body {{
             margin: 0;
@@ -4826,7 +5089,7 @@ async def _generate_combined_html_for_export(project, export_type: str) -> str:
 <body>
     <h1>导出失败</h1>
     <p>错误信息: {str(e)}</p>
-    <p>请确保PPT已经生成完成后再尝试导出。</p>
+    <p>请确保Slide已经生成完成后再尝试导出。</p>
 </body>
 </html>"""
 
@@ -5358,6 +5621,36 @@ async def generate_speaker_notes_endpoint(
         return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
 
 
+@router.get("/api/scripts/tasks/{task_id}")
+async def get_scripts_task_status(task_id: str, user: User = Depends(get_current_user_required)):
+    task = ppt_service.scripts_tasks.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return JSONResponse({"success": True, **task, "task_id": task_id})
+
+@router.put("/api/projects/{project_id}/slides/{slide_number}/speaker_notes")
+async def update_single_speaker_notes(project_id: str, slide_number: int, payload: dict, user: User = Depends(get_current_user_required)):
+    """Update speaker notes for one slide (slide_number 1-based)."""
+    project = await ppt_service.project_manager.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not _user_can_access_project(user, project):
+        raise HTTPException(status_code=403, detail="Access denied")
+    idx = slide_number - 1
+    if idx < 0 or idx >= len(project.slides_data or []):
+        raise HTTPException(status_code=400, detail="Invalid slide number")
+    notes = (payload.get('notes') or '').strip()
+    slide = project.slides_data[idx] or {}
+    meta = slide.get('metadata') or {}
+    meta['speaker_notes'] = notes
+    slide['metadata'] = meta
+    slide['speaker_notes'] = notes
+    project.slides_data[idx] = slide
+    await ppt_service.project_manager.save_single_slide(project_id, idx, slide)
+    await ppt_service.project_manager.update_project_data(project_id, {"slides_data": project.slides_data})
+    return JSONResponse({"success": True, "index": slide_number, "length": len(notes)})
+
+
 def _build_notes_markdown(project, indices: list[int] | None = None) -> str:
     """Assemble Markdown with titles and notes for selected slides."""
     lines = []
@@ -5386,6 +5679,7 @@ def _build_notes_markdown(project, indices: list[int] | None = None) -> str:
 async def export_speaker_notes_markdown(
     project_id: str,
     indices: Optional[str] = None,  # comma-separated 1-based
+    include_meta: Optional[str] = "0",  # accept flexible truthy values
     user: User = Depends(get_current_user_required),
 ):
     """Export speaker notes as a Markdown file for selected or all slides."""
@@ -5403,6 +5697,43 @@ async def export_speaker_notes_markdown(
             raise HTTPException(status_code=400, detail="Invalid indices parameter")
 
     md = _build_notes_markdown(project, idx0)
+
+    # Normalize include_meta flag (supports 1/true/yes/on)
+    flag = False
+    try:
+        if isinstance(include_meta, int):
+            flag = include_meta == 1
+        elif isinstance(include_meta, str):
+            flag = include_meta.strip().lower() in {"1", "true", "yes", "on"}
+    except Exception:
+        flag = False
+
+    # Optional metadata header (YAML-like front matter)
+    if flag:
+        try:
+            total_slides = len(project.slides_data or [])
+            # 统计已有演讲稿页数
+            notes_count = 0
+            for s in (project.slides_data or []):
+                note_txt = (s.get("metadata", {}).get("speaker_notes") or s.get("speaker_notes") or "").strip()
+                if note_txt:
+                    notes_count += 1
+            # 可扩展的统计：如果后续任务结构里存储了生成策略，可在这里补充
+            meta_lines = [
+                "---",
+                f"topic: {project.topic}",
+                f"slides_total: {total_slides}",
+                f"slides_with_notes: {notes_count}",
+                f"export_time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}",
+                "generator: flowslide",
+                "metadata_included: true",
+                "format_version: 1",
+                "---",
+                "",
+            ]
+            md = "\n".join(meta_lines) + md
+        except Exception:
+            pass
 
     # Prepare response (avoid non-ASCII in plain filename= to prevent latin-1 header encoding errors)
     # 1) Build a human-readable Unicode filename for filename*
@@ -5430,6 +5761,7 @@ async def export_speaker_notes_markdown(
 async def export_speaker_notes_docx(
     project_id: str,
     indices: Optional[str] = None,  # comma-separated 1-based
+    include_meta: Optional[str] = "0",
     user: User = Depends(get_current_user_required),
 ):
     """Export speaker notes as a DOCX file using python-docx."""
@@ -5459,8 +5791,31 @@ async def export_speaker_notes_docx(
     document = Document()
     document.core_properties.title = f"{project.topic} - 演讲稿"
 
-    # Title
-    document.add_heading(f"{project.topic} - 演讲稿", level=0)
+    # Title + optional metadata
+    heading = document.add_heading(f"{project.topic} - 演讲稿", level=0)
+    # Parse include_meta for docx same as markdown
+    flag_docx = False
+    try:
+        if isinstance(include_meta, int):
+            flag_docx = include_meta == 1
+        elif isinstance(include_meta, str):
+            flag_docx = include_meta.strip().lower() in {"1", "true", "yes", "on"}
+    except Exception:
+        flag_docx = False
+    if flag_docx:
+        try:
+            total_slides = len(slides)
+            notes_count = 0
+            for s in slides:
+                txt = (s.get("metadata", {}).get("speaker_notes") or s.get("speaker_notes") or "").strip()
+                if txt:
+                    notes_count += 1
+            meta_para = document.add_paragraph()
+            meta_para.add_run(f"导出时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}\n")
+            meta_para.add_run(f"总页数: {total_slides}  有演讲稿页数: {notes_count}\n")
+            meta_para.add_run("生成器: flowslide  (metadata_included=true, format_version=1)\n")
+        except Exception:
+            pass
 
     for i in chosen:
         s = slides[i]
@@ -5830,7 +6185,7 @@ async def _generate_slideshow_index(project, slide_files: list) -> str:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{project.topic} - PPT放映</title>
+    <title>{project.topic} - Slide放映</title>
     <style>
         body {{
             margin: 0;
@@ -5938,7 +6293,7 @@ async def _generate_slideshow_index(project, slide_files: list) -> str:
 <body>
     <div class="header">
         <h1>{project.topic}</h1>
-        <p>PPT演示文稿 - 共{len(slide_files)}页</p>
+        <p>Slide演示文稿 - 共{len(slide_files)}页</p>
     </div>
 
     <div class="container">
@@ -5996,7 +6351,7 @@ async def _process_uploaded_file_for_outline(
     content_analysis_depth: str,
     requirements: str = None,
 ) -> Optional[Dict[str, Any]]:
-    """处理上传的文件并生成PPT大纲"""
+    """处理上传的文件并生成Slide大纲"""
     try:
         # 验证文件
         from ..services.file_processor import FileProcessor
@@ -6115,7 +6470,7 @@ async def image_generation_test_page(
 async def template_selection_page(
     request: Request, project_id: str, user: User = Depends(get_current_user_required)
 ):
-    """Template selection page for PPT generation"""
+    """Template selection page for Slide generation"""
     try:
         # Get project info
         project = await ppt_service.project_manager.get_project(project_id)

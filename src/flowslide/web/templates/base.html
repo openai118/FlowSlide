@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}FlowSlide - AI Slide Generator{% endblock %}</title>
-    <link rel="icon" type="image/svg+xml" href="/static/images/flowslide-logo.svg">
+    <link id="site-favicon" rel="icon" type="image/svg+xml" href="/static/images/flowslide-logo-light.svg?v=102">
     <!-- Font Awesome icons inline -->
     <style>
         /* Font Awesome icons - inline minimal set */
@@ -675,20 +675,7 @@
         }
     </style>
     {% block extra_css %}{% endblock %}
-    <!-- Early theme bootstrap to avoid FOUC (uses saved or system preference) -->
-    <script>
-        (function() {
-            try {
-                var saved = localStorage.getItem('fs-theme'); // 'github' | 'dark' | null
-                var mql = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
-                var sys = (mql && mql.matches) ? 'dark' : 'github';
-                var theme = saved || sys;
-                document.documentElement.classList.remove('theme-github','theme-dark');
-                if (theme === 'dark') { document.documentElement.classList.add('theme-dark'); }
-                else { document.documentElement.classList.add('theme-github'); }
-            } catch (e) {}
-        })();
-    </script>
+    <script src="/static/js/theme.js"></script>
     <!-- Global console guard: silence non-error logs unless window.__FS_DEBUG is true -->
     <script>
         (function(){
@@ -939,11 +926,11 @@
         <header class="header">
             <h1>
                 <span style="display: inline-flex; align-items: center; gap: 12px;">
-                    <img src="/static/images/flowslide-logo.svg" alt="FlowSlide Logo" style="width: 48px; height: 48px;">
+                    <img id="brand-logo" src="/static/images/flowslide-logo-light.svg?v=102" alt="FlowSlide Logo" style="width: 48px; height: 48px;">
                     FlowSlide
                 </span>
             </h1>
-            <p>AI-powered presentation generation platform</p>
+            <p class="tagline">AI 驱动的多模型 Slide 智能生成与管理平台 · 研究增强 · 模板与主题 · 备份监控</p>
             <nav class="nav">
                 <div class="nav-main">
                     <a href="/home" class="{% if request.url.path == '/home' %}active{% endif %}"><i class="fas fa-home"></i> 首页</a>
@@ -999,56 +986,6 @@
     
     {% block extra_js %}{% endblock %}
     <script>
-        (function(){
-            var btn = document.getElementById('theme-toggle');
-            if(!btn) return;
-            var label = btn.querySelector('.theme-label');
-            var icon = btn.querySelector('i');
-            var mql = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
-
-            function apply(theme){
-                document.documentElement.classList.remove('theme-github','theme-dark');
-                if (theme === 'dark') document.documentElement.classList.add('theme-dark');
-                else document.documentElement.classList.add('theme-github');
-            }
-
-            function effectiveMode(){
-                var saved = null;
-                try { saved = localStorage.getItem('fs-theme'); } catch(e) {}
-                if (saved === 'github' || saved === 'dark') return saved;
-                return (mql && mql.matches) ? 'dark' : 'github';
-            }
-
-            function refresh(){
-                var mode = effectiveMode();
-                apply(mode);
-                // icon-only toggle: no text label
-                if (icon) icon.className = (mode === 'dark') ? 'fas fa-moon' : 'fas fa-sun';
-            }
-
-            function toggle(){
-                var mode = effectiveMode();
-                var next = (mode === 'dark') ? 'github' : 'dark';
-                try { localStorage.setItem('fs-theme', next); } catch(e) {}
-                refresh();
-            }
-
-            if (mql && mql.addEventListener) {
-                mql.addEventListener('change', function(){
-                    // Only react to system changes when user hasn't chosen explicitly
-                    var saved = null; try { saved = localStorage.getItem('fs-theme'); } catch(e) {}
-                    if (!saved) refresh();
-                });
-            } else if (mql && mql.addListener) {
-                mql.addListener(function(){
-                    var saved = null; try { saved = localStorage.getItem('fs-theme'); } catch(e) {}
-                    if (!saved) refresh();
-                });
-            }
-
-            btn.addEventListener('click', toggle);
-            refresh();
-        })();
         // Version info and update hint
         (function(){
             try {
