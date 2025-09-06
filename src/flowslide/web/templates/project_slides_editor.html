@@ -46,6 +46,151 @@
             }).catch(function(e){ console.warn('Failed to load CDN mirrors config', e); });
         })();
     </script>
+
+    <!-- 全部演讲稿查看与批量编辑 Modal（增强版） -->
+    <div class="modal fade" id="allNotesEditorModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content" style="max-height:90vh;">
+                <div class="modal-header" style="background:linear-gradient(90deg,#6366f1,#0ea5e9);color:#fff;">
+                    <h5 class="modal-title"><i class="fas fa-pen-to-square"></i> 全部演讲稿查看与编辑</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" style="padding-top:10px;">
+                    <div id="allNotesTimingSummary" class="alert alert-light py-2 px-3 mb-2" style="font-size:12px;border:1px solid #e5e7eb;display:flex;flex-wrap:wrap;gap:14px;">
+                        <span id="allNotesTargetDuration">目标: -</span>
+                        <span id="allNotesEstimatedDuration">当前估算: -</span>
+                        <span id="allNotesDurationDelta">偏差: -</span>
+                        <span id="allNotesAvgPace">平均语速: -</span>
+                    </div>
+                    <div id="allNotesEditorContainer" class="mb-2" style="display:flex; gap:12px;">
+                        <div style="flex:1; min-width:320px; display:flex; flex-direction:column;">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <strong>幻灯片列表</strong>
+                                <div style="font-size:12px;color:#666;" id="allNotesCount"></div>
+                            </div>
+                            <div id="allNotesSlidesList" style="border:1px solid var(--border-color,#e5e7eb);border-radius:6px;overflow:auto;max-height:60vh;background:var(--panel-bg,#fff);"></div>
+                        </div>
+                        <div style="flex:2; min-width:420px; display:flex; flex-direction:column; gap:6px;">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <strong id="allNotesCurrentTitle">—</strong>
+                                <div id="allNotesCurrentStats" style="font-size:11px;color:#555;"></div>
+                            </div>
+                            <textarea id="allNotesEditor" class="form-control" style="flex:1; min-height:300px; font-size:13px; line-height:1.6; white-space:pre-wrap;"></textarea>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button class="btn btn-sm btn-primary" onclick="saveCurrentAllNotes()"><i class="fas fa-save"></i> 保存</button>
+                                <button class="btn btn-sm btn-secondary" onclick="reloadCurrentAllNotes()"><i class="fas fa-rotate"></i> 还原</button>
+                                <button class="btn btn-sm btn-info" onclick="applyNotesAIRefine()"><i class="fas fa-wand-magic-sparkles"></i> AI润色</button>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="recalcAllNotesStats()"><i class="fas fa-clock"></i> 重新估算</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <div style="font-size:12px;color:#666;">显示：分配秒(若有) / 动态估算秒 / 字数 / 建议字数。编辑后自动刷新总时长估算。</div>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 提升该弹窗层级，防止被其他固定层（如侧边栏/顶部栏/编辑浮层）遮挡
+        (function(){
+            const styleEl = document.createElement('style');
+            styleEl.textContent = `#allNotesEditorModal{z-index:5005;} .modal-backdrop.all-notes-backdrop{z-index:5000;}`;
+            document.head.appendChild(styleEl);
+        })();
+        // ====== 增强：演讲稿时长/字数统计 ======
+        let allNotesSlidesCache = [];
+        let allNotesCurrentIndex = null; // 0-based
+        let allNotesBackdropEl = null;
+        let allNotesAvgCharPerSec = 3.2;
+        let allNotesTargetTotalSeconds = null;
+
+        function getSlideAllocationMeta(slide){
+            const m = (slide && slide.metadata) || {};
+            const allocObj = m.speaker_notes_allocation || m.notes_allocation || m.allocation || null;
+            const seconds = m.speaker_notes_allocated_seconds ?? m.allocated_seconds ?? (allocObj && allocObj.seconds) ?? m.speaker_notes_seconds ?? null;
+            const targetWords = m.speaker_notes_target_words ?? m.target_words ?? (allocObj && allocObj.target_words) ?? m.speaker_notes_words ?? null;
+            return { seconds: seconds!=null? Number(seconds): null, target_words: targetWords!=null? Number(targetWords): null };
+        }
+        function detectTargetTotalSeconds(){
+            for(const s of slidesData||[]){ if(!s || !s.metadata) continue; const m=s.metadata; const cand=m.speaker_notes_target_total_seconds||m.target_total_seconds||m.scripts_target_total_seconds||null; if(cand) return Number(cand); }
+            return null;
+        }
+        function countWordsAdaptive(text){ if(!text) return 0; const pure=text.replace(/\s+/g,' ').trim(); if(!pure) return 0; const han=(pure.match(/[\u4e00-\u9fa5]/g)||[]).length; const ratio=han/pure.length; if(ratio>0.25){ const chars=pure.replace(/[\s，。！？、；：：“”‘’.!?;:'"()\[\]{}<>《》…—\-]+/g,''); return chars.length; } else { return pure.split(/[\s]+/).filter(w=>w).length; } }
+        function estimateSecondsFromText(text){ if(!text) return 0; const pure=text.replace(/\s+/g,' ').trim(); if(!pure) return 0; const han=(pure.match(/[\u4e00-\u9fa5]/g)||[]).length; const ratio=han/pure.length; if(ratio>0.25){ const chars=countWordsAdaptive(text); return chars / allNotesAvgCharPerSec; } else { const words=countWordsAdaptive(text); return words / 2.0; } }
+        async function openAllNotesEditor(){ try { await refreshSlidesData(); allNotesTargetTotalSeconds=detectTargetTotalSeconds(); allNotesSlidesCache=(slidesData||[]).map((s,i)=>{ const alloc=getSlideAllocationMeta(s); return { index:i, title:s.title||('第'+(i+1)+'页'), notes:(s.metadata&&s.metadata.speaker_notes)||s.speaker_notes||'', allocated_seconds:alloc.seconds, target_words:alloc.target_words }; }); let allocChars=0,allocSecs=0; allNotesSlidesCache.forEach(c=>{ if(c.allocated_seconds){ const w=countWordsAdaptive(c.notes); allocChars+=w; allocSecs+=c.allocated_seconds; }}); if(allocChars>0&&allocSecs>0){ const r=allocChars/allocSecs; if(r>=2&&r<=6) allNotesAvgCharPerSec=r; } buildAllNotesList(); const m=new bootstrap.Modal(document.getElementById('allNotesEditorModal')); m.show(); setTimeout(()=>{ const backs=[...document.querySelectorAll('.modal-backdrop')]; if(backs.length){ const last=backs[backs.length-1]; last.classList.add('all-notes-backdrop'); allNotesBackdropEl=last; } },30); if(allNotesSlidesCache.length>0){ selectAllNotesSlide(0); } recalcAllNotesStats(); } catch(e){ showNotification('加载演讲稿失败: '+e,'danger'); } }
+
+        // 关闭时移除自定义 backdrop，避免遮挡点击
+        document.addEventListener('hidden.bs.modal', function(ev){
+            if(ev.target && ev.target.id === 'allNotesEditorModal'){
+                if(allNotesBackdropEl && allNotesBackdropEl.parentNode){
+                    try{ allNotesBackdropEl.remove(); }catch(_){ }
+                }
+                allNotesBackdropEl = null;
+                // 再次兜底：清理遗留的该类 backdrop
+                document.querySelectorAll('.modal-backdrop.all-notes-backdrop').forEach(b=>{ if(b.parentNode) b.parentNode.removeChild(b); });
+            }
+        });
+
+    function buildAllNotesList(){ const listEl=document.getElementById('allNotesSlidesList'); listEl.innerHTML=''; allNotesSlidesCache.forEach(slide=>{ const wordCount=countWordsAdaptive(slide.notes); const estSeconds=estimateSecondsFromText(slide.notes); const allocSec=slide.allocated_seconds; const badgeAlloc=allocSec!=null?`<span style="background:#eef;padding:2px 6px;border-radius:12px;">分配${Math.round(allocSec)}s</span>`:''; const badgeEst=`<span style="background:#f5f5f5;padding:2px 6px;border-radius:12px;">估算${Math.round(estSeconds)}s</span>`; const badgeWords=`<span style="background:#f5f5f5;padding:2px 6px;border-radius:12px;">字${wordCount}</span>`; const badgeTarget=slide.target_words!=null?`<span style="background:#e8f7f2;padding:2px 6px;border-radius:12px;">建议${slide.target_words}</span>`:''; const item=document.createElement('div'); item.className='all-notes-slide-item'; item.style.cssText='padding:8px 10px;border-bottom:1px solid #eee;cursor:pointer;font-size:12px;'; if(slide.index===allNotesCurrentIndex){ item.style.background='var(--accent-bg,#f0f7ff)'; } item.innerHTML=`<div style=\"font-weight:600;font-size:13px;\">第${slide.index+1}页 · ${escapeHtml(slide.title)}</div><div style=\"font-size:12px;color:#666;max-height:38px;overflow:hidden;white-space:pre-wrap;\">${escapeHtml((slide.notes||'').slice(0,120))}</div><div style=\"margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;\">${badgeAlloc}${badgeEst}${badgeWords}${badgeTarget}</div>`; item.onclick=()=>selectAllNotesSlide(slide.index); listEl.appendChild(item); }); const countEl=document.getElementById('allNotesCount'); if(countEl) countEl.textContent=allNotesSlidesCache.length+' 页'; }
+
+    function selectAllNotesSlide(idx){ saveCurrentAllNotes(true); allNotesCurrentIndex=idx; const data=allNotesSlidesCache[idx]; document.getElementById('allNotesCurrentTitle').textContent=`第${idx+1}页 · ${data.title}`; document.getElementById('allNotesEditor').value=data.notes||''; updateCurrentAllNotesStats(); buildAllNotesList(); }
+
+    function updateCurrentAllNotesStats(){ if(allNotesCurrentIndex==null) return; const data=allNotesSlidesCache[allNotesCurrentIndex]; const words=countWordsAdaptive(data.notes); const est=estimateSecondsFromText(data.notes); const alloc=data.allocated_seconds; const tgt=data.target_words; const el=document.getElementById('allNotesCurrentStats'); if(!el) return; el.innerHTML=[ alloc!=null?`分配${Math.round(alloc)}s`:null, `估算${Math.round(est)}s`, `字${words}`, tgt!=null?`建议字${tgt}`:null ].filter(Boolean).join(' | '); }
+    async function saveCurrentAllNotes(silent){ if(allNotesCurrentIndex==null) return; const textarea=document.getElementById('allNotesEditor'); const newVal=textarea.value.trim(); const data=allNotesSlidesCache[allNotesCurrentIndex]; if(data.notes===newVal) return; try{ const resp=await fetch(`/api/projects/${projectId}/slides/${data.index+1}/speaker_notes`,{ method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ notes:newVal }) }); const j=await resp.json(); if(!j.success) throw new Error(j.error||'保存失败'); data.notes=newVal; if(!silent) showNotification('已保存当前页演讲稿','success'); if(slidesData && slidesData[data.index]){ slidesData[data.index].speaker_notes=newVal; slidesData[data.index].metadata=slidesData[data.index].metadata||{}; slidesData[data.index].metadata.speaker_notes=newVal; } updateCurrentAllNotesStats(); recalcAllNotesStats(); buildAllNotesList(); if(currentSlideIndex===data.index){ renderNotesPreview(); } }catch(e){ if(!silent) showNotification('保存失败: '+e,'danger'); } }
+    function recalcAllNotesStats(){ let totalSeconds=0,totalWords=0; allNotesSlidesCache.forEach(s=>{ const w=countWordsAdaptive(s.notes); totalWords+=w; totalSeconds+=estimateSecondsFromText(s.notes); }); const targetSec=allNotesTargetTotalSeconds; const estMin=totalSeconds/60; if(totalWords>0 && totalSeconds>0){ const rate=totalWords/totalSeconds; if(rate>=2 && rate<=6) allNotesAvgCharPerSec=rate; } const targetEl=document.getElementById('allNotesTargetDuration'); const estEl=document.getElementById('allNotesEstimatedDuration'); const deltaEl=document.getElementById('allNotesDurationDelta'); const paceEl=document.getElementById('allNotesAvgPace'); if(targetEl) targetEl.textContent='目标: '+(targetSec? (targetSec/60).toFixed(1)+' 分':'-'); if(estEl) estEl.textContent='当前估算: '+estMin.toFixed(1)+' 分'; if(deltaEl){ if(!targetSec){ deltaEl.textContent='偏差: -'; } else { const diff=totalSeconds-targetSec; const pct=(diff/targetSec)*100; deltaEl.textContent=`偏差: ${(diff/60).toFixed(2)} 分 (${diff>0?'+':''}${pct.toFixed(1)}%)`; deltaEl.style.color=Math.abs(pct)<=5?'#16a34a':(diff>0?'#dc2626':'#2563eb'); } } if(paceEl) paceEl.textContent='平均语速: '+allNotesAvgCharPerSec.toFixed(2)+' 字/秒'; updateCurrentAllNotesStats(); }
+    function reloadCurrentAllNotes(){ if(allNotesCurrentIndex==null) return; const data=allNotesSlidesCache[allNotesCurrentIndex]; document.getElementById('allNotesEditor').value=data.notes||''; updateCurrentAllNotesStats(); }
+
+        async function saveCurrentAllNotes(silent){
+            if(allNotesCurrentIndex==null) return;
+            const textarea = document.getElementById('allNotesEditor');
+            const newVal = textarea.value.trim();
+            const data = allNotesSlidesCache[allNotesCurrentIndex];
+            if(data.notes === newVal) return; // 未变化
+            try{
+                const resp = await fetch(`/api/projects/${projectId}/slides/${data.index+1}/speaker_notes`,{
+                    method:'PUT',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ notes:newVal })
+                });
+                const j = await resp.json();
+                if(!j.success){ throw new Error(j.error||'保存失败'); }
+                data.notes = newVal;
+                if(!silent) showNotification('已保存当前页演讲稿','success');
+                // 同步到全局 slidesData
+                if(slidesData && slidesData[data.index]){
+                    slidesData[data.index].speaker_notes = newVal;
+                    if(!slidesData[data.index].metadata) slidesData[data.index].metadata={};
+                    slidesData[data.index].metadata.speaker_notes = newVal;
+                }
+                buildAllNotesList();
+                if(currentSlideIndex === data.index){ renderNotesPreview(); }
+            }catch(e){ if(!silent) showNotification('保存失败: '+e,'danger'); }
+        }
+
+        async function applyNotesAIRefine(){
+            if(allNotesCurrentIndex==null) return;
+            const textarea = document.getElementById('allNotesEditor');
+            const original = textarea.value.trim();
+            if(!original){ showNotification('当前内容为空','warning'); return; }
+            textarea.disabled = true;
+            try{
+                const prompt = `请在不改变核心信息的前提下润色以下演讲稿，优化逻辑、衔接与口语自然度，并保持语言种类不变：\n\n${original}`;
+                const resp = await fetch('/api/ai/simple_completion',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
+                const j = await resp.json();
+                if(!j.success){ throw new Error(j.error||'AI请求失败'); }
+                const refined = (j.content||'').trim();
+                if(refined){ textarea.value = refined; showNotification('AI润色完成，请确认后保存','info'); }
+            }catch(e){ showNotification('润色失败: '+e,'danger'); }
+            finally{ textarea.disabled = false; }
+        }
+
+        function escapeHtml(str){
+            return str.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+        }
+    </script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- CodeMirror CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
@@ -418,6 +563,12 @@
             overflow-x: hidden !important;
             overflow-y: auto !important;
         }
+
+    /* --- Speech Script Modal Enhancements --- */
+    #speechScriptModal .modal-dialog { max-width: 1000px; width: 95%; }
+    #speechScriptModal .modal-body { max-height: 70vh; overflow-y: auto; }
+    #speechScriptModal.manual-show { position: fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:20020; display:block; width:95%; }
+    .speech-script-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:20010; }
 
         .CodeMirror-hscrollbar {
             bottom: 0 !important;
@@ -3434,33 +3585,210 @@
                 <button class="btn btn-info" onclick="sharePresentation()">
                     <i class="fas fa-share"></i> 分享演示
                 </button>
-                <!-- Speaker notes actions -->
-                <button class="btn btn-info" onclick="generateNotesForCurrent()" title="为当前页生成演讲稿">
-                    <i class="fas fa-microphone"></i> 生成演讲稿（本页）
-                </button>
-                <button class="btn btn-info" onclick="generateNotesForAll()" title="为全部页生成演讲稿">
-                    <i class="fas fa-microphone-lines"></i> 生成演讲稿（全部）
-                </button>
-                <button class="btn btn-success" onclick="downloadNotesMarkdown()" title="导出演讲稿为Markdown">
-                    <i class="fas fa-file-alt"></i> 导出演讲稿（Markdown）
-                </button>
-                <button class="btn btn-success" onclick="downloadNotesDocx()" title="导出演讲稿为DOCX">
-                    <i class="fas fa-file-word"></i> 导出演讲稿（DOCX）
+                                <!-- Unified Speech Script Button -->
+                                <button class="btn btn-info" onclick="openSpeechScriptModal()" title="生成/导出演讲稿">
+                                        <i class="fas fa-microphone"></i> 生成演讲稿
+                                </button>
+                <!-- Toggle Current Slide Speaker Notes Preview -->
+                <button class="btn btn-outline-secondary" id="toggleNotesBtn" onclick="toggleNotesPanel()" title="显示/隐藏当前页演讲稿预览">
+                    <i class="fas fa-comment-dots"></i> 演讲稿
                 </button>
             </div>
-            <!-- Speaker Notes Preview Panel -->
-            <div id="speakerNotesPreview" style="margin-top:12px; padding:12px; border:1px solid var(--border-color, #e5e7eb); border-radius:8px; background: var(--panel-bg, #fff);">
+                        <!-- Speech Script Modal -->
+                        <div class="modal fade" id="speechScriptModal" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                                <div class="modal-content" style="border-radius:16px;">
+                                    <div class="modal-header" style="background:linear-gradient(135deg,#4facfe,#00f2fe);color:#fff;">
+                                        <h5 class="modal-title"><i class="fas fa-microphone-lines"></i> 演讲稿生成与导出</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body" style="padding:16px 20px;">
+                                        <form id="speechScriptForm" onsubmit="event.preventDefault(); submitSpeechScriptGeneration();">
+                                            <div class="row g-3">
+                                                <div class="col-12">
+                                                    <label class="form-label">预设模板</label>
+                                                    <div class="d-flex gap-2">
+                                                        <select id="ssPreset" class="form-select" style="max-width:240px" onchange="loadSpeechPreset()"></select>
+                                                        <input id="ssPresetName" class="form-control" placeholder="新模板名称" style="max-width:180px" />
+                                                        <button type="button" class="btn btn-outline-secondary" onclick="saveSpeechPreset()">保存当前为模板</button>
+                                                        <button type="button" class="btn btn-outline-danger" onclick="deleteSpeechPreset()">删除模板</button>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">生成范围</label>
+                                                    <select class="form-select" id="ssGenerationScope" onchange="toggleSlideIndicesInput()">
+                                                        <option value="current">当前页</option>
+                                                        <option value="multi">多选页</option>
+                                                        <option value="all" selected>全部</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-8" id="ssIndicesWrapper" style="display:none;">
+                                                    <label class="form-label">指定页码（逗号分隔，如 1,3,5-7）</label>
+                                                    <input type="text" class="form-control" id="ssSlideIndices" placeholder="例：1,2,5-7" />
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">语言</label>
+                                                    <select class="form-select" id="ssLanguage">
+                                                        <option value="zh" selected>中文</option>
+                                                        <option value="en">English</option>
+                                                    </select>
+                                                </div>
+                                                <!-- 生成策略改为后端自动，前端不再暴露选择 -->
+                                                <div class="col-md-4">
+                                                    <label class="form-label">语气/基调</label>
+                                                    <select class="form-select" id="ssTone">
+                                                        <option value="">自动</option>
+                                                        <option value="专业">专业</option>
+                                                        <option value="友好">友好</option>
+                                                        <option value="鼓舞">鼓舞/激励</option>
+                                                        <option value="故事化">故事化</option>
+                                                        <option value="数据驱动">数据驱动</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">每页字数(约)</label>
+                                                    <input type="number" min="30" max="800" class="form-control" id="ssWordsPerSlide" placeholder="自动" />
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">时长(分钟)</label>
+                                                    <input type="number" min="1" max="600" class="form-control" id="ssTotalDuration" placeholder="自动" />
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">场景(Scenario)</label>
+                                                    <select class="form-select" id="ssScenario">
+                                                        <option value="">自动</option>
+                                                        <option value="business_review">方案/业务汇报</option>
+                                                        <option value="product_launch">产品发布</option>
+                                                        <option value="education">教育培训</option>
+                                                        <option value="research">研究报告</option>
+                                                        <option value="marketing">市场推广</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">受众(Audience)</label>
+                                                    <select class="form-select" id="ssAudience" onchange="toggleCustomAudience()">
+                                                        <option value="">自动</option>
+                                                        <option value="企业管理层">企业管理层</option>
+                                                        <option value="技术团队">技术团队</option>
+                                                        <option value="销售团队">销售团队</option>
+                                                        <option value="学生群体">学生群体</option>
+                                                        <option value="学术研究者">学术研究者</option>
+                                                        <option value="投资人">投资人</option>
+                                                        <option value="客户群体">客户群体</option>
+                                                        <option value="培训学员">培训学员</option>
+                                                        <option value="项目团队">项目团队</option>
+                                                        <option value="行业专家">行业专家</option>
+                                                        <option value="普通大众">普通大众</option>
+                                                        <option value="custom">自定义受众</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-4" id="ssAudienceCustomWrapper" style="display:none;">
+                                                    <label class="form-label">自定义受众描述</label>
+                                                    <input type="text" class="form-control" id="ssAudienceCustom" placeholder="例如：一线客服人员 / 医院护理团队" />
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">语言风格</label>
+                                                    <select class="form-select" id="ssLanguageStyle">
+                                                        <option value="">自动</option>
+                                                        <!-- 兼容原有值（旧模板） -->
+                                                        <option value="concise">精炼/简洁</option>
+                                                        <option value="business">商务专业</option>
+                                                        <option value="technical_rigorous">技术严谨</option>
+                                                        <option value="data_driven">数据驱动</option>
+                                                        <option value="storytelling">故事化</option>
+                                                        <option value="persuasive">说服力/营销</option>
+                                                        <option value="investor_pitch">投资路演</option>
+                                                        <option value="training_guidance">培训引导</option>
+                                                        <option value="academic">学术严谨</option>
+                                                        <option value="industry_insight">行业洞察</option>
+                                                        <option value="motivational">激励鼓舞</option>
+                                                        <option value="plain_language">通俗易懂</option>
+                                                        <option value="call_to_action">行动号召</option>
+                                                        <option value="deep_expert">深入专家向</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">语速建议</label>
+                                                    <select class="form-select" id="ssSpeakingPace">
+                                                        <option value="">自动</option>
+                                                        <option value="slow">慢速(强调)</option>
+                                                        <option value="normal" selected>正常</option>
+                                                        <option value="fast">稍快</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label">附加要求</label>
+                                                    <textarea class="form-control" id="ssExtra" rows="2" placeholder="可填写：加入过渡语、添加适当幽默、突出风险提示、加入行动号召等"></textarea>
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label">表达提示(语气/眼神/动作)</label>
+                                                    <textarea class="form-control" id="ssDelivery" rows="2" placeholder="如：热情开场；讲到数据时语速放慢并环视；关键结论时前进一步做手势"></textarea>
+                                                </div>
+                                                <div class="col-md-12 form-check" style="margin-top:4px;">
+                                                    <input class="form-check-input" type="checkbox" id="ssOverwrite" checked />
+                                                    <label class="form-check-label" for="ssOverwrite">覆盖已有演讲稿</label>
+                                                </div>
+                                            </div>
+                                            <hr />
+                                            <div class="d-flex flex-wrap gap-2">
+                                                <button type="submit" class="btn btn-primary"><i class="fas fa-wand-magic-sparkles"></i> 开始生成</button>
+                                                <button type="button" class="btn btn-success" onclick="downloadNotesMarkdown()"><i class="fas fa-file-alt"></i> 导出Markdown</button>
+                                                <button type="button" class="btn btn-success" onclick="downloadNotesDocx()"><i class="fas fa-file-word"></i> 导出DOCX</button>
+                                                <button type="button" class="btn btn-outline-secondary" onclick="openAllNotesEditor()"><i class="fas fa-pen-to-square"></i> 查看与编辑全部演讲稿</button>
+                                            </div>
+                                        </form>
+                                        <div id="speechScriptGenerationStatus" style="margin-top:12px; font-size:0.9rem; color:#555;"></div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+            <script>
+            function toggleNotesPanel(){
+                const panel = document.getElementById('speakerNotesPreview');
+                const btn = document.getElementById('toggleNotesBtn');
+                if(!panel||!btn) return;
+                const visible = panel.style.display !== 'none';
+                if(visible){
+                    panel.style.display='none';
+                    btn.classList.remove('btn-secondary');
+                    btn.classList.add('btn-outline-secondary');
+                } else {
+                    panel.style.display='block';
+                    btn.classList.remove('btn-outline-secondary');
+                    btn.classList.add('btn-secondary');
+                    if(!panel.dataset.inited){
+                        try{ renderNotesPreview(); }catch(e){}
+                        panel.dataset.inited='1';
+                    }
+                }
+            }
+            </script>
+
+            <!-- Speaker Notes Preview Panel (default hidden) -->
+            <div id="speakerNotesPreview" style="display:none; margin-top:12px; padding:12px; border:1px solid var(--border-color, #e5e7eb); border-radius:8px; background: var(--panel-bg, #fff);">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
                     <div style="font-weight:600;">
                         <i class="fas fa-comment-dots" aria-hidden="true"></i>
                         <span>演讲稿预览（当前页）</span>
                     </div>
-                    <button class="btn btn-sm" onclick="renderNotesPreview()" title="刷新预览" style="padding:4px 8px;">
-                        <i class="fas fa-rotate"></i> 刷新
-                    </button>
+                    <div style="display:flex; gap:6px;">
+                        <button class="btn btn-sm btn-light" onclick="renderNotesPreview()" title="刷新预览" style="padding:4px 8px;">
+                            <i class="fas fa-rotate"></i> 刷新
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="toggleNotesPanel()" style="padding:4px 8px;">
+                            关闭
+                        </button>
+                    </div>
                 </div>
-                <div id="speakerNotesPreviewBody" style="max-height:200px; overflow:auto; white-space:pre-wrap; line-height:1.6; font-size:14px; color:var(--text-color, #111827);"></div>
+                <div id="speakerNotesPreviewBody" style="max-height:240px; overflow:auto; white-space:pre-wrap; line-height:1.6; font-size:14px; color:var(--text-color, #111827);"></div>
             </div>
+            <style>
+            #speakerNotesPreviewBody::-webkit-scrollbar{width:10px;}#speakerNotesPreviewBody::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.25);border-radius:6px;}#toggleNotesBtn.btn-secondary{background:linear-gradient(90deg,#6366f1,#8b5cf6);color:#fff;border:1px solid rgba(255,255,255,0.2);}#toggleNotesBtn.btn-secondary:hover{filter:brightness(1.05);}#toggleNotesBtn.btn-outline-secondary{background:rgba(255,255,255,0.35);backdrop-filter:blur(4px);}#toggleNotesBtn.btn-outline-secondary:hover{background:rgba(255,255,255,0.55);} 
+            </style>
+            
         </div>
     </div>
 
@@ -8453,6 +8781,304 @@
                 console.error('导出演讲稿DOCX失败:', err);
                 showNotification(`导出失败：${err.message}`, 'error');
             }
+        }
+
+        // === Unified Speech Script Modal Logic ===
+        let speechScriptModalInstance = null;
+        function openSpeechScriptModal(){
+            try {
+                if(!speechScriptModalInstance){
+                    const m = document.getElementById('speechScriptModal');
+                    if(window.bootstrap && window.bootstrap.Modal){
+                        speechScriptModalInstance = new bootstrap.Modal(m, {backdrop: 'static'});
+                    } else {
+                        // Fallback: simple display
+                        m.style.display='block';
+                    }
+                }
+                if(speechScriptModalInstance){ speechScriptModalInstance.show(); }
+                else document.getElementById('speechScriptModal').style.display='block';
+            } catch(e){ console.error(e); }
+        }
+
+        function toggleSlideIndicesInput(){
+            const scope = document.getElementById('ssGenerationScope').value;
+            const wrap = document.getElementById('ssIndicesWrapper');
+            wrap.style.display = (scope === 'multi') ? 'block' : 'none';
+        }
+
+        function parseIndicesRange(str){
+            if(!str) return [];
+            const parts = str.split(/[，,\s]+/).filter(Boolean);
+            const out = new Set();
+            for(const p of parts){
+                if(/^(\d+)-(\d+)$/.test(p)){
+                    const [_, a, b] = p.match(/(\d+)-(\d+)/); // range
+                    let start = parseInt(a,10), end = parseInt(b,10);
+                    if(end < start){ [start,end] = [end,start]; }
+                    for(let i=start;i<=end;i++) out.add(i);
+                } else if(/^(\d+)$/.test(p)) {
+                    out.add(parseInt(p,10));
+                }
+            }
+            return Array.from(out).sort((a,b)=>a-b);
+        }
+
+        async function submitSpeechScriptGeneration(){
+            try {
+                const scope = document.getElementById('ssGenerationScope').value;
+                const language = document.getElementById('ssLanguage').value;
+                const tone = document.getElementById('ssTone').value || null;
+                const words = parseInt(document.getElementById('ssWordsPerSlide').value,10) || null;
+                const scenario = document.getElementById('ssScenario').value || null;
+                let audienceSelectVal = document.getElementById('ssAudience').value;
+                let audience = audienceSelectVal || null;
+                if(audienceSelectVal==='custom'){
+                    const customVal = document.getElementById('ssAudienceCustom').value.trim();
+                    if(customVal){ audience = customVal; }
+                    else { showNotification('请输入自定义受众描述','warning'); return; }
+                }
+                const langStyle = document.getElementById('ssLanguageStyle').value || null;
+                const pace = document.getElementById('ssSpeakingPace').value || null;
+                const extra = document.getElementById('ssExtra').value.trim() || null;
+                const strategy = 'auto'; // 生成策略后端自动
+                const overwrite = document.getElementById('ssOverwrite').checked;
+                const totalDuration = parseFloat(document.getElementById('ssTotalDuration').value)||null;
+                const delivery = document.getElementById('ssDelivery').value.trim()||null;
+                let indices = [];
+                let all = false;
+                if(scope === 'current'){
+                    indices = [currentSlideIndex + 1];
+                } else if(scope === 'multi') {
+                    indices = parseIndicesRange(document.getElementById('ssSlideIndices').value);
+                } else {
+                    all = true;
+                }
+                if(scope === 'multi' && indices.length===0){
+                    showNotification('请填写有效的页码范围', 'warning');
+                    return;
+                }
+                showNotification('演讲稿生成任务已提交…', 'info');
+                document.getElementById('speechScriptGenerationStatus').innerHTML = '<span class="text-info">正在向服务器提交，请稍候...</span>';
+                const payload = {
+                    indices: indices.length ? indices : null,
+                    all: all,
+                    overwrite: overwrite,
+                    language: language,
+                    tone: tone,
+                    words_per_slide: words,
+                    scenario: scenario,
+                    target_audience: audience,
+                    language_style: langStyle,
+                    speaking_pace: pace,
+                    additional_requirements: extra,
+                    total_duration_minutes: totalDuration,
+                    delivery_instructions: delivery
+                    ,generation_strategy: strategy
+                };
+                const resp = await fetch(`/api/projects/{{ project.project_id }}/scripts/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if(!resp.ok){
+                    const text = await resp.text();
+                    throw new Error(text || ('HTTP '+resp.status));
+                }
+                const data = await resp.json();
+                const usedStrategy = data.strategy || 'per_slide';
+                let strategyLabel = usedStrategy === 'single_pass' ? '整体一次性' : (usedStrategy === 'per_slide' ? '逐页' : usedStrategy);
+                     if(data.task_id){
+                         startScriptsProgressPolling(data.task_id);
+                         document.getElementById('speechScriptGenerationStatus').innerHTML = `<span class='text-info'>(${strategyLabel}) 任务已启动，正在生成... (0/${data.total||'?'})</span>`;
+                     } else {
+                        let extraInfo = '';
+                        if(data.target_total_seconds){
+                            const targetMin = (data.target_total_seconds/60).toFixed(1);
+                            let est = data.estimated_total_seconds || data.target_total_seconds;
+                            const estMin = (est/60).toFixed(1);
+                            const diff = est - data.target_total_seconds;
+                            const diffAbs = Math.abs(diff);
+                            const diffPct = ((diff / data.target_total_seconds) * 100).toFixed(1);
+                            extraInfo += `目标${targetMin}分钟，估算${estMin}分钟`;
+                            if(diffAbs>30){
+                                extraInfo += `，偏差 ${diff>0?'+':'-'}${(diffAbs/60).toFixed(1)} 分钟 (${diffPct}%)`;
+                            }
+                            if(data.allocation_summary){
+                                extraInfo += `；页时分配(秒) avg ${data.allocation_summary.avg_seconds}, range ${data.allocation_summary.min_seconds}-${data.allocation_summary.max_seconds}`;
+                            }
+                        }
+                        document.getElementById('speechScriptGenerationStatus').innerHTML = `<span class='text-success'>(${strategyLabel}) 生成完成：更新 ${data.updated} 页，跳过 ${data.skipped} 页。${extraInfo?('<br/>'+extraInfo):''} 正在刷新本地数据...</span>`;
+                         await refreshSlidesData();
+                         renderNotesPreview();
+                         showNotification(`演讲稿生成完成（${strategyLabel}）`, 'success');
+                     }
+            } catch(err){
+                console.error('演讲稿统一生成失败', err);
+                document.getElementById('speechScriptGenerationStatus').innerHTML = `<span class='text-danger'>生成失败：${err.message}</span>`;
+                showNotification('演讲稿生成失败：'+err.message, 'error');
+            }
+        }
+
+        // 进度轮询
+        let scriptsProgressTimer = null;
+        function startScriptsProgressPolling(taskId){
+            stopScriptsProgressPolling();
+            const statusDiv = document.getElementById('speechScriptGenerationStatus');
+            scriptsProgressTimer = setInterval(async ()=>{
+                try {
+                    const r = await fetch(`/api/scripts/tasks/${taskId}`);
+                    if(!r.ok) return;
+                    const jd = await r.json();
+                    if(!jd.success) return;
+                    const {completed,total,status,strategy,updated_indices} = jd;
+                    let label = strategy==='single_pass'?'整体一次性':'逐页';
+                    statusDiv.innerHTML = `<span class='text-info'>(${label}) 进度：${completed}/${total} (${Math.round((completed/Math.max(total,1))*100)}%)</span>`;
+                    if(status==='finished'){
+                        stopScriptsProgressPolling();
+                        await refreshSlidesData();
+                        renderNotesPreview();
+                    } else if(status==='failed') {
+                        stopScriptsProgressPolling();
+                        statusDiv.innerHTML = `<span class='text-danger'>任务失败</span>`;
+                    }
+                } catch(e){}
+            }, 1200);
+        }
+        function stopScriptsProgressPolling(){ if(scriptsProgressTimer){ clearInterval(scriptsProgressTimer); scriptsProgressTimer=null; } }
+
+        // 覆盖fetch提交逻辑，启动轮询（在提交前）
+        const __orig_submitSpeechScriptGeneration = submitSpeechScriptGeneration;
+        submitSpeechScriptGeneration = async function(){
+            try {
+                // 先读取表单并发起请求
+                let scope = document.getElementById('ssGenerationScope').value; // 复用原函数变量逻辑，直接调用原函数拿task_id
+                await __orig_submitSpeechScriptGeneration();
+                // 原函数的响应中包含 task_id 已写入status区域后端未展示，这里重新fetch last task? 简化：改写原函数上方插入，在其成功后 data.task_id 已有
+                // 为确保拿到 task_id 再轮询，这里尝试从 lastResponseTaskId 全局变量。
+            } catch(e){ console.error(e); }
+        }
+
+        // 预设模板：存 localStorage
+        function listSpeechPresets(){
+            try { return JSON.parse(localStorage.getItem('speechScriptPresets')||'[]'); } catch(e){ return []; }
+        }
+        function saveSpeechPresets(arr){ localStorage.setItem('speechScriptPresets', JSON.stringify(arr)); }
+        function refreshSpeechPresetSelect(){
+            const sel = document.getElementById('ssPreset'); if(!sel) return;
+            const arr = listSpeechPresets();
+            sel.innerHTML = '<option value="">(选择模板)</option>' + arr.map(p=>`<option value="${p.name}">${p.name}</option>`).join('');
+        }
+        function collectSpeechForm(){
+            return {
+                language: document.getElementById('ssLanguage').value,
+                tone: document.getElementById('ssTone').value,
+                words_per_slide: document.getElementById('ssWordsPerSlide').value,
+                scenario: document.getElementById('ssScenario').value,
+                target_audience: (function(){ const sel=document.getElementById('ssAudience').value; if(sel==='custom'){ return document.getElementById('ssAudienceCustom').value.trim(); } return sel; })(),
+                language_style: document.getElementById('ssLanguageStyle').value,
+                speaking_pace: document.getElementById('ssSpeakingPace').value,
+                additional_requirements: document.getElementById('ssExtra').value,
+                total_duration_minutes: document.getElementById('ssTotalDuration').value,
+                delivery_instructions: document.getElementById('ssDelivery').value
+            };
+        }
+    function applySpeechForm(cfg){ if(!cfg) return; const map={language:'ssLanguage',tone:'ssTone',words_per_slide:'ssWordsPerSlide',scenario:'ssScenario',target_audience:'ssAudience',language_style:'ssLanguageStyle',speaking_pace:'ssSpeakingPace',additional_requirements:'ssExtra',total_duration_minutes:'ssTotalDuration',delivery_instructions:'ssDelivery'}; Object.entries(map).forEach(([k,id])=>{ if(cfg[k]!==undefined && cfg[k]!==null && document.getElementById(id)) document.getElementById(id).value = cfg[k]; }); if(cfg.target_audience && ![...document.getElementById('ssAudience').options].some(o=>o.value===cfg.target_audience)){ document.getElementById('ssAudience').value='custom'; document.getElementById('ssAudienceCustom').value=cfg.target_audience; toggleCustomAudience(); } else { toggleCustomAudience(); } }
+    function toggleCustomAudience(){ const sel=document.getElementById('ssAudience'); const wrap=document.getElementById('ssAudienceCustomWrapper'); if(!sel||!wrap) return; if(sel.value==='custom'){ wrap.style.display='block'; } else { wrap.style.display='none'; } }
+    // 受众 -> 语言风格建议（仅当语言风格当前为空/自动时自动填入，可被用户覆盖）
+    document.addEventListener('DOMContentLoaded', ()=>{
+        const audienceSel=document.getElementById('ssAudience');
+        const styleSel=document.getElementById('ssLanguageStyle');
+        if(audienceSel){
+            audienceSel.addEventListener('change',()=>{
+                if(!styleSel) return;
+                if(styleSel.value!=='' ) return; // 用户已经选过就不动
+                const map={
+                    '企业管理层':'business',
+                    '技术团队':'technical_rigorous',
+                    '销售团队':'persuasive',
+                    '学生群体':'storytelling',
+                    '学术研究者':'academic',
+                    '投资人':'investor_pitch',
+                    '客户群体':'persuasive',
+                    '培训学员':'training_guidance',
+                    '项目团队':'concise',
+                    '行业专家':'deep_expert',
+                    '普通大众':'plain_language'
+                };
+                const v=audienceSel.value;
+                if(v && map[v]) styleSel.value=map[v];
+            });
+        }
+    });
+        function saveSpeechPreset(){
+            const name = document.getElementById('ssPresetName').value.trim(); if(!name){ showNotification('请输入模板名称','warning'); return; }
+            const arr = listSpeechPresets();
+            const existing = arr.find(p=>p.name===name);
+            const cfg = collectSpeechForm(); cfg.name = name;
+            if(existing){ Object.assign(existing, cfg); } else { arr.push(cfg); }
+            saveSpeechPresets(arr); refreshSpeechPresetSelect(); document.getElementById('ssPreset').value=name; showNotification('模板已保存','success');
+        }
+        function loadSpeechPreset(){ const name=document.getElementById('ssPreset').value; if(!name) return; const cfg=listSpeechPresets().find(p=>p.name===name); applySpeechForm(cfg); }
+        function deleteSpeechPreset(){ const name=document.getElementById('ssPreset').value; if(!name) return; let arr=listSpeechPresets().filter(p=>p.name!==name); saveSpeechPresets(arr); refreshSpeechPresetSelect(); showNotification('模板已删除','info'); }
+        document.addEventListener('DOMContentLoaded', refreshSpeechPresetSelect);
+
+        async function refreshSlidesData(){
+            try {
+                const resp = await fetch(`/api/projects/{{ project.project_id }}/slides-data`);
+                if(!resp.ok) return;
+                const jd = await resp.json();
+                if(jd && jd.slides_data){
+                    slidesData = jd.slides_data;
+                    try { if(typeof updateThumbnailsContent==='function') updateThumbnailsContent(); } catch(e){}
+                    try { renderNotesPreview(); } catch(e){}
+                }
+            } catch(e){ console.warn('刷新slidesData失败', e); }
+        }
+
+        // ---- Enhancement: ensure modal appended to body & fallback backdrop ----
+        document.addEventListener('DOMContentLoaded', () => {
+            const modalEl = document.getElementById('speechScriptModal');
+            if(modalEl && modalEl.parentElement !== document.body){
+                document.body.appendChild(modalEl);
+            }
+        });
+        function ensureSpeechBackdrop(){
+            if(!document.getElementById('speechScriptBackdrop')){
+                const d=document.createElement('div');
+                d.id='speechScriptBackdrop';
+                d.className='speech-script-backdrop';
+                d.onclick=closeSpeechScriptModal;
+                document.body.appendChild(d);
+            }
+        }
+        function closeSpeechScriptModal(){
+            const m=document.getElementById('speechScriptModal');
+            if(window.bootstrap && window.bootstrap.Modal && speechScriptModalInstance){
+                speechScriptModalInstance.hide();
+            } else if(m){
+                m.classList.remove('manual-show','show');
+                m.style.display='none';
+            }
+            const bd=document.getElementById('speechScriptBackdrop');
+            if(bd) bd.remove();
+        }
+        // Override open function with enhanced fallback
+        const __origOpenSpeechScriptModal = openSpeechScriptModal;
+        openSpeechScriptModal = function(){
+            try {
+                const m=document.getElementById('speechScriptModal');
+                if(window.bootstrap && window.bootstrap.Modal){
+                    if(!speechScriptModalInstance){
+                        speechScriptModalInstance = new bootstrap.Modal(m, {backdrop:'static'});
+                    }
+                    speechScriptModalInstance.show();
+                } else {
+                    ensureSpeechBackdrop();
+                    m.classList.add('manual-show','show');
+                    m.style.display='block';
+                }
+            } catch(e){ console.error(e); __origOpenSpeechScriptModal && __origOpenSpeechScriptModal(); }
         }
 
         function showNotification(message, type = 'info') {

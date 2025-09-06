@@ -114,6 +114,41 @@ class EnhancedPPTService(PPTService):
         self.image_service = None
         self._initialize_image_service()
 
+        # 脚本生成任务进度缓存 (简单内存，不持久化)
+        self.scripts_tasks: Dict[str, Dict[str, Any]] = {}
+
+    # ---------------- Speaker Notes Task Progress Helpers -----------------
+    def create_scripts_task(self, total: int, strategy: str) -> str:
+        import uuid, time
+        task_id = uuid.uuid4().hex
+        self.scripts_tasks[task_id] = {
+            "status": "running",
+            "total": total,
+            "completed": 0,
+            "updated_indices": [],
+            "strategy": strategy,
+            "created_at": time.time(),
+        }
+        return task_id
+
+    def update_scripts_task(self, task_id: str, slide_index: int):
+        task = self.scripts_tasks.get(task_id)
+        if not task or task.get("status") != "running":
+            return
+        task["completed"] = min(task.get("completed", 0) + 1, task.get("total", 0))
+        task.setdefault("updated_indices", []).append(slide_index)
+
+    def finish_scripts_task(self, task_id: str):
+        task = self.scripts_tasks.get(task_id)
+        if task:
+            task["status"] = "finished"
+
+    def fail_scripts_task(self, task_id: str, error: str):
+        task = self.scripts_tasks.get(task_id)
+        if task:
+            task["status"] = "failed"
+            task["error"] = error
+
     @property
     def ai_provider(self):
         """Dynamically get AI provider to ensure latest config"""
@@ -584,79 +619,460 @@ class EnhancedPPTService(PPTService):
     async def generate_speaker_notes(
         self, project_id: str, req: SpeakerNotesGenerationRequest
     ) -> Dict[str, Any]:
-        """Generate speaker notes for selected slides and persist them.
+        """Generate speaker notes for selected slides.
 
-        Returns a dict: { 'updated': int, 'skipped': int, 'total': int, 'slides': [ {index, title, has_notes} ] }
+        Returns: dict with counts and slide status.
         """
+        # --- Load project ---
         project = await self.project_manager.get_project(project_id)
         if not project:
             raise ValueError("Project not found")
-
-        if not project.slides_data or len(project.slides_data) == 0:
+        if not project.slides_data:
             raise ValueError("PPT not generated yet")
 
         total = len(project.slides_data)
-        # Determine target indices (0-based)
+
+        # --- Decide strategy ---
+        strategy = getattr(req, 'generation_strategy', 'auto') or 'auto'
+        if strategy == 'auto':
+            # 若页数较少或总时长(若提供)非常短则倾向整体一次性以提升连贯性
+            very_short_total = False
+            if getattr(req, 'total_duration_minutes', None) is not None:
+                try:
+                    very_short_total = req.total_duration_minutes <= 5 and total > 1
+                except Exception:
+                    very_short_total = False
+            if total <= 12 or very_short_total:
+                strategy = 'single_pass'
+            else:
+                strategy = 'per_slide'
+        task_id = self.create_scripts_task(total=total, strategy=strategy)
+
+        # --- Single pass path ---
+        if strategy == 'single_pass' and (req.all or not req.indices or len(getattr(req, 'indices', []) or []) > 1):
+            try:
+                result = await self._generate_speaker_notes_single_pass(project, project_id, req, total)
+                self.finish_scripts_task(task_id)
+                result['task_id'] = task_id
+                return result
+            except Exception as e:
+                self.fail_scripts_task(task_id, str(e))
+                raise
+
+        # --- Determine target indices (per-slide) ---
         if req.all or not req.indices:
             target_indices = list(range(total))
         else:
-            # Convert 1-based to 0-based; filter invalid
             target_indices = [i - 1 for i in req.indices if 1 <= i <= total]
 
         updated = 0
         skipped = 0
-        result_slides = []
+        result_slides: List[Dict[str, Any]] = []
+
+        outline_titles = [(s.get('title') or f'第{i+1}页').strip() for i, s in enumerate(project.slides_data)]
+        deck_outline_text = ' | '.join(outline_titles[:30])
+        previous_generated_notes: Dict[int, str] = {}
+
+        # ---- 智能时长 & 字数分配（仅在 per_slide 策略或被迫 per-slide 逐页生成路径） ----
+        allocation_map: Dict[int, Dict[str, Any]] = {}
+        target_total_seconds = None
+        if getattr(req, 'total_duration_minutes', None):
+            try:
+                target_total_seconds = int(req.total_duration_minutes * 60)
+            except Exception:
+                target_total_seconds = None
+
+        if target_total_seconds and len(target_indices) > 0:
+            # 计算每页基础复杂度：根据文本长度 + 角色权重
+            raw_scores = []
+            for idx in target_indices:
+                slide = project.slides_data[idx]
+                title = (slide.get('title') or '').strip()
+                html_content = slide.get('html_content','') or ''
+                text = self._extract_text_from_html(html_content)
+                length_score = min(len(text) / 300, 3)  # 正规化，300字≈1，设上限3
+                role = self._classify_slide_role(title, idx, len(project.slides_data))
+                role_weight = 1.0
+                if role == 'opening':
+                    role_weight = 1.25
+                elif role == 'closing':
+                    role_weight = 1.3
+                elif role in ('transition','section'):
+                    role_weight = 0.85
+                complexity = 0.6 * length_score + 0.4 * role_weight
+                raw_scores.append((idx, complexity))
+            # 防止全部为0
+            base = sum(score for _, score in raw_scores) or 1.0
+            # 最低保障：每页至少占比 = 目标总秒 * 0.02（但不超过15秒），剩余按权重分配
+            min_per = min( max(int(target_total_seconds * 0.02), 5), 15)
+            remaining_seconds = target_total_seconds - min_per * len(target_indices)
+            if remaining_seconds < len(target_indices):
+                # 总时长太短，放弃最低保障策略，退化为直接权重平均
+                remaining_seconds = target_total_seconds
+                min_per = 0
+            for idx, score in raw_scores:
+                share = (score / base) * remaining_seconds
+                seconds = int(share + min_per)
+                allocation_map[idx] = {"allocated_seconds": max(seconds, 5)}
+            # 调整四舍五入偏差
+            allocated_sum = sum(v['allocated_seconds'] for v in allocation_map.values())
+            if allocated_sum != target_total_seconds:
+                diff = target_total_seconds - allocated_sum
+                # 按权重顺序增减
+                sorted_indices = [i for i,_ in sorted(raw_scores, key=lambda x: x[1], reverse=(diff>0))]
+                for i in sorted_indices:
+                    if diff == 0:
+                        break
+                    allocation_map[i]['allocated_seconds'] += 1 if diff>0 else -1
+                    allocation_map[i]['allocated_seconds'] = max(allocation_map[i]['allocated_seconds'], 3)
+                    diff += -1 if diff>0 else 1
+
+            # 估算语速→字数：中文每秒 3.2 字，英文每秒 2.0 词（这里也用字统计），pace 调整
+            pace = getattr(req, 'speaking_pace', None) or 'normal'
+            pace_factor = 1.0
+            if pace == 'fast':
+                pace_factor = 1.2
+            elif pace == 'slow':
+                pace_factor = 0.8
+            language = req.language or (project.project_metadata or {}).get('language', 'zh')
+            base_chars_per_sec = 3.2 if language.startswith('zh') else 2.0
+            base_chars_per_sec *= pace_factor
+
+            # 若用户给了 words_per_slide 则使用其与时间的关系进行调和
+            user_words = getattr(req, 'words_per_slide', None)
+            for idx in target_indices:
+                sec = allocation_map.get(idx, {}).get('allocated_seconds') if allocation_map else None
+                if sec and not user_words:
+                    target_words = int(sec * base_chars_per_sec)
+                elif sec and user_words:
+                    # 以时长为主，字数向时长期望靠拢：取 (时间推算字数 *0.7 + 用户值*0.3)
+                    target_words = int(sec * base_chars_per_sec * 0.7 + user_words * 0.3)
+                else:
+                    target_words = user_words or None
+                if idx in allocation_map:
+                    allocation_map[idx]['target_words'] = target_words
 
         for idx in target_indices:
             slide = project.slides_data[idx]
-            meta = slide.get("metadata", {}) or {}
-            existing = meta.get("speaker_notes") or slide.get("speaker_notes")
+            meta = slide.get('metadata', {}) or {}
+            existing = meta.get('speaker_notes') or slide.get('speaker_notes')
             if existing and not req.overwrite:
                 skipped += 1
-                result_slides.append({"index": idx + 1, "title": slide.get("title", ""), "has_notes": True})
+                result_slides.append({"index": idx + 1, "title": slide.get('title', ''), "has_notes": True})
+                self.update_scripts_task(task_id, idx)
                 continue
 
-            title = slide.get("title") or f"第{idx+1}页"
-            # Try to extract visible text from html_content for context
-            html_content = slide.get("html_content", "") or ""
+            title = slide.get('title') or f'第{idx+1}页'
+            html_content = slide.get('html_content', '') or ''
             plain_context = self._extract_text_from_html(html_content)
+
+            is_first_generated = (len(previous_generated_notes) == 0)
+            is_last_in_batch = (idx == target_indices[-1])
+
+            prev_idx = None
+            for back in range(1, 4):
+                cand = idx - back
+                if cand in previous_generated_notes:
+                    prev_idx = cand
+                    break
+            prev_notes = previous_generated_notes.get(prev_idx) if prev_idx is not None else None
+            prev_title = outline_titles[prev_idx] if prev_idx is not None else None
+            after_candidates = [i for i in target_indices if i > idx]
+            next_title = outline_titles[after_candidates[0]] if after_candidates else None
+
+            slide_role = self._classify_slide_role(title, idx, len(project.slides_data))
+            language = req.language or (project.project_metadata or {}).get('language', 'zh')
+
+            # 计算本页建议时长：若有智能分配则使用；否则保持 None
+            per_slide_sec = None
+            if allocation_map.get(idx, {}).get('allocated_seconds'):
+                per_slide_sec = allocation_map[idx]['allocated_seconds']
 
             prompt = self._build_speaker_notes_prompt(
                 project_topic=project.topic,
                 slide_title=title,
                 slide_text=plain_context,
-                language=req.language or (project.project_metadata or {}).get("language", "zh"),
+                language=language,
                 tone=req.tone,
-                words=req.words_per_slide,
+                words=allocation_map.get(idx, {}).get('target_words') or req.words_per_slide,
+                scenario=getattr(req, 'scenario', None),
+                target_audience=getattr(req, 'target_audience', None),
+                language_style=getattr(req, 'language_style', None),
+                speaking_pace=getattr(req, 'speaking_pace', None),
+                additional_requirements=getattr(req, 'additional_requirements', None),
+                total_duration_minutes=getattr(req, 'total_duration_minutes', None),
+                per_slide_duration_seconds=per_slide_sec,
+                delivery_instructions=getattr(req, 'delivery_instructions', None),
+                deck_outline=deck_outline_text,
+                previous_title=prev_title,
+                previous_notes=prev_notes,
+                next_title=next_title,
+                is_first=is_first_generated,
+                is_last=is_last_in_batch,
+                slide_role=slide_role,
             )
 
             try:
                 resp = await self.ai_provider.text_completion(
                     prompt=prompt,
-                    max_tokens=min(getattr(ai_config, "max_tokens", 2000), 2000),
-                    temperature=max(getattr(ai_config, "temperature", 0.7) - 0.1, 0.1),
+                    max_tokens=min(getattr(ai_config, 'max_tokens', 2000), 2000),
+                    temperature=max(getattr(ai_config, 'temperature', 0.7) - 0.1, 0.1),
                 )
                 notes = resp.content.strip()
             except Exception as e:
                 notes = f"(生成失败: {str(e)})"
 
-            # Persist into slides_data JSON and slide_metadata
-            # Prefer storing inside metadata to keep schema tidy
-            meta["speaker_notes"] = notes
-            slide["metadata"] = meta
-            # Keep a top-level alias for compatibility if any future consumer expects it
-            slide["speaker_notes"] = notes
+            notes = self._post_process_notes(
+                notes,
+                is_first=is_first_generated,
+                is_last=is_last_in_batch,
+                previous_title=prev_title,
+                next_title=next_title,
+                slide_role=slide_role,
+                language=language,
+                scenario=getattr(req, 'scenario', None),
+            )
 
-            # Save single slide immediately for durability
+            meta['speaker_notes'] = notes
+            # 保存智能分配数据（若存在）
+            if allocation_map.get(idx):
+                alloc_entry = allocation_map[idx]
+                if alloc_entry.get('allocated_seconds') is not None:
+                    meta['speaker_notes_allocated_seconds'] = alloc_entry['allocated_seconds']
+                if alloc_entry.get('target_words') is not None:
+                    meta['speaker_notes_target_words'] = alloc_entry['target_words']
+            if target_total_seconds and 'speaker_notes_target_total_seconds' not in meta:
+                meta['speaker_notes_target_total_seconds'] = target_total_seconds
+            slide['metadata'] = meta
+            slide['speaker_notes'] = notes
+            previous_generated_notes[idx] = notes
             await self.project_manager.save_single_slide(project_id, idx, slide)
-
             updated += 1
-            result_slides.append({"index": idx + 1, "title": title, "has_notes": True})
+            alloc_info = allocation_map.get(idx) or {}
+            result_slides.append({"index": idx + 1, "title": title, "has_notes": True, **alloc_info})
+            self.update_scripts_task(task_id, idx)
 
-        # Also update the project aggregate slides_data to reflect changes
         await self.project_manager.update_project_data(project_id, {"slides_data": project.slides_data})
+        self.finish_scripts_task(task_id)
+        # 统计估算总时长
+        estimated_total_seconds = None
+        if allocation_map:
+            estimated_total_seconds = sum(v.get('allocated_seconds', 0) for v in allocation_map.values()) or None
+        response = {
+            "updated": updated,
+            "skipped": skipped,
+            "total": len(target_indices),
+            "slides": result_slides,
+            "strategy": "per_slide",
+            "task_id": task_id,
+        }
+        if target_total_seconds:
+            response["target_total_seconds"] = target_total_seconds
+        if estimated_total_seconds:
+            response["estimated_total_seconds"] = estimated_total_seconds
+        if allocation_map:
+            response["allocation_summary"] = {
+                "avg_seconds": round(sum(v['allocated_seconds'] for v in allocation_map.values())/len(allocation_map),2),
+                "min_seconds": min(v['allocated_seconds'] for v in allocation_map.values()),
+                "max_seconds": max(v['allocated_seconds'] for v in allocation_map.values()),
+            }
+        return response
 
-        return {"updated": updated, "skipped": skipped, "total": len(target_indices), "slides": result_slides}
+    async def _generate_speaker_notes_single_pass(self, project, project_id: str, req: SpeakerNotesGenerationRequest, total: int) -> Dict[str, Any]:
+        """一次性生成整套演讲稿后拆分：提高连贯性。"""
+        try:
+            titles = [(s.get('title') or f'第{i+1}页').strip() for i,s in enumerate(project.slides_data)]
+            visible_texts = []
+            for s in project.slides_data:
+                html_content = s.get('html_content','') or ''
+                visible_texts.append(self._extract_text_from_html(html_content)[:400])
+            language = req.language or (project.project_metadata or {}).get('language','zh')
+            outline_lines = []
+            for i,(t,v) in enumerate(zip(titles, visible_texts)):
+                outline_lines.append(f"[{i+1}] {t} :: {v}")
+            outline_block = "\n".join(outline_lines)
+            words_hint = f"每页约{req.words_per_slide}字" if (language=='zh' and req.words_per_slide) else (f"~{req.words_per_slide} words each" if req.words_per_slide else "")
+            if language=='zh':
+                prompt = (
+                    f"请一次性为以下演示文稿生成逐页演讲稿，要求整体连贯：\n"
+                    f"主题：{project.topic}\n"
+                    f"共{total}页，{words_hint}\n"
+                    f"页结构与可见要点：\n{outline_block}\n"
+                    "输出格式：按照页顺序，用标记 '## 第X页' 开头，然后正文。不要再输出目录；避免重复开场寒暄；每页之间加入自然过渡（上一页结尾自然引向下一页）；最后一页做收束和致谢。只输出演讲稿，不要额外说明。"
+                )
+            else:
+                prompt = (
+                    f"Generate the full set of presenter scripts in one pass for coherence.\n"
+                    f"Topic: {project.topic}\nSlides: {total} {words_hint}\n"
+                    f"Slides with extracted visible text:\n{outline_block}\n"
+                    "Format: For each slide use a heading '## Slide X' then body. Provide smooth transitions; no repeated greetings; final slide concludes succinctly. Output scripts only."
+                )
+            resp = await self.ai_provider.text_completion(
+                prompt=prompt,
+                max_tokens=min(getattr(ai_config,'max_tokens',3500),3500),
+                temperature=max(getattr(ai_config,'temperature',0.7)-0.1,0.1)
+            )
+            raw_full = resp.content.strip()
+            # 拆分
+            import re
+            pattern = re.compile(r"^##\s*(第?(\d+)[^\n]*)", re.MULTILINE)
+            parts = list(pattern.finditer(raw_full))
+            slide_text_map = {}
+            for i,match in enumerate(parts):
+                start = match.end()
+                end = parts[i+1].start() if i+1 < len(parts) else len(raw_full)
+                number = match.group(2)
+                try:
+                    idx = int(number)-1
+                    content = raw_full[start:end].strip()
+                    slide_text_map[idx]=content
+                except:
+                    continue
+            updated=0; skipped=0; result_slides=[]
+            # 找到一个 running single_pass task_id（调用者预先创建）
+            active_task_id = None
+            for tid, t in getattr(self, 'scripts_tasks', {}).items():
+                if t.get('strategy')=='single_pass' and t.get('status')=='running':
+                    active_task_id = tid
+                    break
+
+            # --- 二次：基于生成后的内容做时长 & 字数推荐（与 per_slide 类似） ---
+            allocation_map: Dict[int, Dict[str, Any]] = {}
+            target_total_seconds = None
+            if getattr(req, 'total_duration_minutes', None):
+                try:
+                    target_total_seconds = int(req.total_duration_minutes * 60)
+                except Exception:
+                    target_total_seconds = None
+            if target_total_seconds:
+                raw_scores = []
+                for idx in range(total):
+                    notes_text = slide_text_map.get(idx,'')
+                    length_score = min(len(notes_text)/300, 3)
+                    role = self._classify_slide_role(titles[idx], idx, total)
+                    role_weight = 1.0
+                    if role == 'opening':
+                        role_weight = 1.25
+                    elif role == 'closing':
+                        role_weight = 1.3
+                    elif role in ('transition','section'):
+                        role_weight = 0.85
+                    complexity = 0.6*length_score + 0.4*role_weight
+                    raw_scores.append((idx, complexity))
+                base = sum(s for _,s in raw_scores) or 1.0
+                min_per = min(max(int(target_total_seconds*0.02),5),15)
+                remaining_seconds = target_total_seconds - min_per * total
+                if remaining_seconds < total:
+                    remaining_seconds = target_total_seconds
+                    min_per = 0
+                for idx, score in raw_scores:
+                    share = (score/base) * remaining_seconds
+                    seconds = int(share + min_per)
+                    allocation_map[idx] = {"allocated_seconds": max(seconds,5)}
+                allocated_sum = sum(v['allocated_seconds'] for v in allocation_map.values())
+                if allocated_sum != target_total_seconds:
+                    diff = target_total_seconds - allocated_sum
+                    ordered = [i for i,_ in sorted(raw_scores, key=lambda x: x[1], reverse=(diff>0))]
+                    for i in ordered:
+                        if diff==0: break
+                        allocation_map[i]['allocated_seconds'] += 1 if diff>0 else -1
+                        allocation_map[i]['allocated_seconds'] = max(allocation_map[i]['allocated_seconds'],3)
+                        diff += -1 if diff>0 else 1
+                pace = getattr(req,'speaking_pace', None) or 'normal'
+                pace_factor = 1.0
+                if pace=='fast': pace_factor = 1.2
+                elif pace=='slow': pace_factor = 0.8
+                base_chars_per_sec = 3.2 if language.startswith('zh') else 2.0
+                base_chars_per_sec *= pace_factor
+                user_words = getattr(req,'words_per_slide', None)
+                for idx in range(total):
+                    sec = allocation_map.get(idx,{}).get('allocated_seconds')
+                    if sec and not user_words:
+                        target_words = int(sec * base_chars_per_sec)
+                    elif sec and user_words:
+                        target_words = int(sec * base_chars_per_sec * 0.7 + user_words * 0.3)
+                    else:
+                        target_words = user_words or None
+                    if idx in allocation_map:
+                        allocation_map[idx]['target_words'] = target_words
+            for idx in range(total):
+                if idx not in slide_text_map:
+                    skipped+=1
+                    result_slides.append({"index":idx+1,"title":titles[idx],"has_notes":False})
+                    continue
+                notes = slide_text_map[idx]
+                notes = self._post_process_notes(
+                    notes,
+                    is_first=(idx==0),
+                    is_last=(idx==total-1),
+                    previous_title=titles[idx-1] if idx>0 else None,
+                    next_title=titles[idx+1] if idx<total-1 else None,
+                    slide_role=self._classify_slide_role(titles[idx], idx, total),
+                    language=language,
+                    scenario=getattr(req,'scenario',None)
+                )
+                slide = project.slides_data[idx]
+                meta = slide.get('metadata',{}) or {}
+                meta['speaker_notes']=notes
+                slide['metadata']=meta
+                slide['speaker_notes']=notes
+                await self.project_manager.save_single_slide(project_id, idx, slide)
+                updated+=1
+                if active_task_id:
+                    self.update_scripts_task(active_task_id, idx)
+                alloc_info = allocation_map.get(idx) or {}
+                result_slides.append({"index":idx+1,"title":titles[idx],"has_notes":True, **alloc_info})
+            await self.project_manager.update_project_data(project_id, {"slides_data": project.slides_data})
+            if active_task_id:
+                self.finish_scripts_task(active_task_id)
+                resp = {"updated":updated,"skipped":skipped,"total":total,"slides":result_slides,"strategy":"single_pass","task_id":active_task_id}
+            else:
+                resp = {"updated":updated,"skipped":skipped,"total":total,"slides":result_slides,"strategy":"single_pass"}
+            if allocation_map:
+                resp['estimated_total_seconds'] = sum(v.get('allocated_seconds',0) for v in allocation_map.values())
+                resp['target_total_seconds'] = target_total_seconds
+                resp['allocation_summary'] = {
+                    'avg_seconds': round(sum(v['allocated_seconds'] for v in allocation_map.values())/len(allocation_map),2),
+                    'min_seconds': min(v['allocated_seconds'] for v in allocation_map.values()),
+                    'max_seconds': max(v['allocated_seconds'] for v in allocation_map.values()),
+                }
+            return resp
+        except Exception as e:
+            logger.error(f"Single-pass speech script generation failed: {e}")
+            raise
+
+    def _post_process_notes(self, raw_notes: str, is_first: bool, is_last: bool, previous_title: Optional[str], next_title: Optional[str], slide_role: Optional[str], language: str, scenario: Optional[str]):
+        """Rule-based cleanup & transition insertion."""
+        if not raw_notes:
+            return raw_notes
+        import re
+        text = raw_notes.strip()
+        # 1. 去除多次问候
+        if not is_first:
+            text = re.sub(r'^(?:大家好|同学们好|各位.*?好)[！!。,.\s]*', '', text)
+        # 2. 过滤跑题商业语段（非商务场景）
+        if scenario not in ('business_review','product_launch','marketing'):
+            bad_patterns = [r'市场潜力', r'用户满意度', r'交付周期', r'客户转化', r'盈利模式']
+            def _filter_para(p):
+                for bp in bad_patterns:
+                    if re.search(bp, p):
+                        return ''
+                return p
+            paragraphs = [p.strip() for p in re.split(r'\n{2,}', text) if p.strip()]
+            paragraphs = [_filter_para(p) for p in paragraphs]
+            paragraphs = [p for p in paragraphs if p]
+            text = '\n\n'.join(paragraphs)
+    # 3. 过渡句：不再强制插入固定格式“承接…现在来看…”，仅保留内容本身
+    # 若未来需要更柔和的自动过渡，可在此处检测首句是否直接重复上一页标题再做简短改写。
+    # 4. 根据角色微调首句
+        if slide_role and slide_role.startswith('目录'):
+            text = re.sub(r'^.*?(我们|今天).*?(将|会).*?\n', '', text, count=1)
+        # 5. 去除多余感叹号
+        text = re.sub(r'！{2,}', '！', text)
+        # 6. 最后一页收束
+        if is_last and not re.search(r'(谢谢|感谢)', text):
+            text += ("\n\n" + ("谢谢大家！" if language=='zh' else "Thank you!"))
+        return text.strip()
 
     def _extract_text_from_html(self, html: str) -> str:
         """Very lightweight HTML to text extractor to supply context for notes."""
@@ -685,6 +1101,21 @@ class EnhancedPPTService(PPTService):
         language: str = "zh",
         tone: Optional[str] = None,
         words: Optional[int] = None,
+        scenario: Optional[str] = None,
+        target_audience: Optional[str] = None,
+        language_style: Optional[str] = None,
+        speaking_pace: Optional[str] = None,
+        additional_requirements: Optional[str] = None,
+    total_duration_minutes: Optional[float] = None,
+    per_slide_duration_seconds: Optional[int] = None,
+    delivery_instructions: Optional[str] = None,
+    deck_outline: Optional[str] = None,
+    previous_title: Optional[str] = None,
+    previous_notes: Optional[str] = None,
+    next_title: Optional[str] = None,
+    is_first: bool = False,
+    is_last: bool = False,
+    slide_role: Optional[str] = None,
     ) -> str:
         """Create a focused prompt for generating a presenter script for one slide."""
         tone_hint = f"\n- 语气风格：{tone}" if tone else ""
@@ -693,26 +1124,130 @@ class EnhancedPPTService(PPTService):
                 f"\n- Length: around {words} words, natural paragraphs, spoken-friendly" if words else ""
             )
         )
+        scenario_hint = f"\n- 演示场景：{scenario}" if scenario else ""
+        audience_hint = f"\n- 目标受众：{target_audience}" if target_audience else ""
+    # 语言风格英文映射及描述（用于提示模型）
+        style_map = {
+            'concise': 'concise / succinct',
+            'business': 'business professional',
+            'technical_rigorous': 'technically rigorous with precise terminology',
+            'data_driven': 'data-driven with quantitative emphasis',
+            'storytelling': 'narrative storytelling with engaging transitions',
+            'persuasive': 'persuasive / marketing oriented focusing on value & benefits',
+            'investor_pitch': 'investor pitch style (clear market/problem/solution/traction)',
+            'training_guidance': 'training & instructional (step-by-step, guiding)',
+            'academic': 'academic formal tone with logical rigor',
+            'industry_insight': 'industry insights & trends oriented',
+            'motivational': 'motivational & inspiring',
+            'plain_language': 'plain language accessible to general public',
+            'call_to_action': 'strong call-to-action driven',
+            'deep_expert': 'expert-level depth with advanced terminology'
+        }
+        if language_style and language_style in style_map:
+            style_hint = f"\n- 语言风格偏好：{language_style} ({style_map[language_style]})"
+        elif language_style:
+            style_hint = f"\n- 语言风格偏好：{language_style}"
+        else:
+            # 若用户未指定语言风格，尝试根据 target_audience 推断一个建议（仅提示，不强制）
+            inferred = None
+            inf_map = {
+                '企业管理层': 'business professional concise',
+                '技术团队': 'technically rigorous concise',
+                '销售团队': 'persuasive value-oriented',
+                '学生群体': 'storytelling clear examples',
+                '学术研究者': 'academic formal rigorous',
+                '投资人': 'investor pitch crisp and opportunity-focused',
+                '客户群体': 'persuasive benefit-focused',
+                '培训学员': 'instructional guiding step-by-step',
+                '项目团队': 'concise action-oriented',
+                '行业专家': 'deep expert-level analytical',
+                '普通大众': 'plain language accessible',
+            }
+            if target_audience and target_audience in inf_map:
+                inferred = inf_map[target_audience]
+            style_hint = f"\n- 若未特别指定，请采用适合受众的语言风格：{inferred}" if inferred else ""
+        pace_hint = f"\n- 语速/节奏建议：{speaking_pace}" if speaking_pace else ""
+        extra_hint = (
+            f"\n- 其他定制要求：{additional_requirements}" if additional_requirements else ""
+        )
+        duration_hint_cn = ""
+        duration_hint_en = ""
+        if total_duration_minutes:
+            duration_hint_cn += f"\n- 全场目标总时长：约{total_duration_minutes}分钟，请按剩余页数合理分配。"
+            duration_hint_en += f"\n- Target total talk time: ~{total_duration_minutes} minutes; distribute sensibly across remaining slides."
+        if per_slide_duration_seconds:
+            duration_hint_cn += f"\n- 本页建议口述时长：约{per_slide_duration_seconds}秒。"
+            duration_hint_en += f"\n- Suggested time for THIS slide: ~{per_slide_duration_seconds} seconds."
+        delivery_hint_cn = f"\n- 演讲提示：在合适处加入括号舞台提示，例如（{delivery_instructions}）。保持适度，不要喧宾夺主。" if delivery_instructions else ""
+        delivery_hint_en = f"\n- Delivery cues: Insert concise stage directions in parentheses when helpful, e.g. ({delivery_instructions}). Use sparingly." if delivery_instructions else ""
+        continuity_cn = ""
+        continuity_en = ""
+        if previous_title or next_title:
+            continuity_cn = (
+                f"\n- 上一页：{previous_title or '（无）'}；如果不是第一张，请用自然过渡短句（不要重复‘大家好’等问候）承接上一页逻辑。"  # noqa: E501
+                f"\n- 下一页提示：{next_title or '（无）'}；如有下一页，可用一句引导或悬念性短语收尾。"
+            )
+            continuity_en = (
+                f"\n- Previous slide: {previous_title or '(none)'}; if not first, start with a smooth transitional phrase (no repeated generic greetings)."
+                f"\n- Next slide: {next_title or '(none)'}; optionally end with a forward-looking hook if there is a next slide."
+            )
+        role_hint_cn = f"\n- 内容角色定位：{slide_role}" if slide_role else ""
+        role_hint_en = f"\n- Slide role: {slide_role}" if slide_role else ""
+        first_rule_cn = "\n- 若不是第一张，禁止再次使用‘大家好’、‘欢迎’等开场寒暄。" if not is_first else "\n- 这是开场，可用一句自然而不冗长的欢迎语。"
+        first_rule_en = "\n- If not first, do NOT repeat greeting phrases; if first, one concise welcome is allowed." if not is_first else "\n- This is the opening; one concise welcome line is allowed."  # noqa: E501
+        last_rule_cn = "\n- 如果这是最后一页，请自然收束，简短致谢，避免再展开新话题。" if is_last else ""
+        last_rule_en = "\n- If this is the final slide, conclude gracefully with concise thanks." if is_last else ""
+
         if language == "zh":
             return (
-                f"请为演示文稿的单页生成演讲稿（Presenter Notes），用于口播：\n"
-                f"- 整体主题：{project_topic}\n"
+                f"请为演示文稿单页生成高质量演讲稿：\n"
+                f"- 主题：{project_topic}\n"
                 f"- 当前页标题：{slide_title}\n"
-                f"- 页面可见要点/文字（可用作上下文）：{slide_text[:800]}\n"
-                f"- 要求：口语化、逻辑清晰、信息准确，适合2-3分钟讲述；尽量避免重复逐字朗读幻灯片上的文字，更多补充解释与示例；使用中文输出。"
-                f"{tone_hint}{length_hint}"
-                "\n请直接输出完整演讲稿正文，不要包含多余前后缀或Markdown标题。"
+                f"- 页面可见要点（截断800字内）：{slide_text[:800]}\n"
+                f"- 全部页标题概览：{deck_outline or '(略)'}"
+                f"{continuity_cn}{role_hint_cn}{first_rule_cn}{last_rule_cn}{duration_hint_cn}{delivery_hint_cn}"
+                f"\n- 写作要点：逻辑连贯、过渡自然、避免逐字朗读；优先补充解释/原因/示例/隐含意义；必要时加入1句过渡或反问增强节奏。"
+                f"{tone_hint}{length_hint}{scenario_hint}{audience_hint}{style_hint}{pace_hint}{extra_hint}"
+                "\n输出：只输出正文（多段），不要Markdown标题、不要再次列出提纲。"
             )
         else:
             return (
-                f"Write a presenter script (speaker notes) for one slide:\n"
+                f"Generate a coherent presenter script for ONE slide:\n"
                 f"- Deck topic: {project_topic}\n"
                 f"- Slide title: {slide_title}\n"
-                f"- Visible points/text for context: {slide_text[:800]}\n"
-                f"- Requirements: conversational, structured, factually correct; suitable for a 2–3 minute talk; avoid reading the bullets verbatim—expand with explanations and examples; respond in English."
-                f"{tone_hint}{length_hint}"
-                "\nReturn only the script body, no extra headings."
+                f"- Visible text context (truncated 800 chars): {slide_text[:800]}\n"
+                f"- Deck outline titles: {deck_outline or '(omitted)'}"
+                f"{continuity_en}{role_hint_en}{first_rule_en}{last_rule_en}{duration_hint_en}{delivery_hint_en}"
+                f"\n- Writing focus: coherence, natural transitions, expand beyond on-screen bullets; explain rationale, give examples, optional rhetorical question; no verbatim reading."
+                f"{tone_hint}{length_hint}{scenario_hint}{audience_hint}{style_hint}{pace_hint}{extra_hint}"
+                "\nReturn only the body text (paragraphs), no headings or list formatting."
             )
+
+    def _classify_slide_role(self, title: str, index: int, total: int) -> str:
+        """Heuristic slide role classification to guide prompt nuance."""
+        t = (title or "").lower()
+        if index == 0:
+            return "开场 / Introduction"
+        if index == total - 1:
+            return "结束 / Conclusion"
+        keywords = {
+            "目录": "目录 / Agenda",
+            "agenda": "目录 / Agenda",
+            "目标": "目标 / Objectives",
+            "objective": "目标 / Objectives",
+            "概念": "概念解释 / Concept",
+            "定义": "概念解释 / Concept",
+            "案例": "示例讲解 / Example",
+            "实例": "示例讲解 / Example",
+            "活动": "互动 / Activity",
+            "互动": "互动 / Activity",
+            "总结": "总结 / Summary",
+            "回顾": "总结 / Summary",
+        }
+        for k, v in keywords.items():
+            if k in t:
+                return v
+        return "正文 / Body"
 
     def _create_outline_prompt(
         self,
