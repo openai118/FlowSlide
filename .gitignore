@@ -154,3 +154,7 @@ login_resp.json
 uvicorn_*.txt
 tmp_*.py
 /scripts/*.py
+
+# Auto-generated backup snapshots (light/env restore safety copies)
+*.before_light_merge_*
+*.before_restore_*
