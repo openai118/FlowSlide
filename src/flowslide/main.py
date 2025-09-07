@@ -149,6 +149,25 @@ async def startup_event():
             from .services.data_sync_service import start_data_sync
             asyncio.create_task(start_data_sync())
 
+        # 注册模式切换回调以实现热重载
+        try:
+            from .core.deployment_mode_manager import mode_manager
+            from .services.service_instances import reload_services
+
+            async def mode_change_reload_callback(new_mode, switch_context):
+                """模式切换时的服务重载回调"""
+                try:
+                    logger.info(f"🔄 Mode switched to {new_mode}, reloading services...")
+                    reload_services()
+                    logger.info("✅ Services reloaded after mode switch")
+                except Exception as e:
+                    logger.error(f"❌ Service reload after mode switch failed: {e}")
+
+            mode_manager.add_mode_change_callback(mode_change_reload_callback)
+            logger.info("✅ Mode change reload callback registered")
+        except Exception as e:
+            logger.warning(f"Failed to register mode change callback: {e}")
+
         # 如果配置了R2，启动定期备份
         if os.getenv("R2_ACCESS_KEY_ID"):
             from .services.backup_service import create_backup

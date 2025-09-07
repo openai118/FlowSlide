@@ -176,7 +176,8 @@ class BackupService:
                         (data_dir / name).write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding='utf-8')
                     except Exception as ie:
                         logger.warning(f"light ephemeral dump {name} failed: {ie}")
-                dump("SELECT id, username, email, is_active, is_admin, created_at, updated_at, last_login, password_hash FROM users", "users.json")
+                # dump("SELECT id, username, email, is_active, is_admin, created_at, updated_at, last_login, password_hash FROM users", "users.json")
+                logger.info("ℹ️ User data excluded from light ephemeral backup (user isolation policy)")
                 dump("SELECT id, project_id, title, scenario, topic, requirements, status, owner_id, outline, slides_html, slides_data, confirmed_requirements, project_metadata, version, created_at, updated_at FROM projects", "projects.json")
                 dump("SELECT id, project_id, template_type, template_name, description, html_template, applicable_scenarios, style_config, usage_count, created_at, updated_at FROM ppt_templates", "ppt_templates.json")
                 dump("SELECT id, template_name, description, html_template, preview_image, style_config, tags, is_default, is_active, usage_count, created_by, created_at, updated_at FROM global_master_templates", "global_master_templates.json")
@@ -330,8 +331,9 @@ class BackupService:
                         json.dump(rows, f, ensure_ascii=False, indent=2)
                     logger.info(f"🗂️ light backup wrote {out_name} ({len(rows)} rows)")
 
-                # users (最小字段集合即可，保持列名一致以便未来合并，排除密码hash? -> 保留hash 才能无缝登陆)
-                dump_table("SELECT id, username, email, is_active, is_admin, created_at, updated_at, last_login, password_hash FROM users", "users.json")
+                # users - EXCLUDED from backup as per user isolation requirements
+                # dump_table("SELECT id, username, email, is_active, is_admin, created_at, updated_at, last_login, password_hash FROM users", "users.json")
+                logger.info("ℹ️ User data excluded from light backup (user isolation policy)")
                 # projects (核心内容: project_id 及关键字段，slides_html/slides_data 保留)
                 dump_table("SELECT id, project_id, title, scenario, topic, requirements, status, owner_id, outline, slides_html, slides_data, confirmed_requirements, project_metadata, version, created_at, updated_at FROM projects", "projects.json")
                 # ppt_templates
@@ -1059,6 +1061,14 @@ class BackupService:
                     except Exception:
                         pass
 
+                    # 恢复后重载所有服务以应用新配置
+                    try:
+                        from .service_instances import reload_services
+                        reload_services()
+                        logger.info("🔄 Services reloaded after backup restore")
+                    except Exception as reload_e:
+                        logger.warning(f"Service reload after restore failed: {reload_e}")
+
                     logger.info("✅ Backup restored successfully")
                     return True
 
@@ -1197,8 +1207,10 @@ class BackupService:
                         set_clause = ','.join([f"{c}=?" for c in cols])
                         cur.execute(f"UPDATE {table} SET {set_clause} WHERE {key_field}=?", tuple(row[c] for c in cols)+(key,))
 
-            for u in users:
-                upsert('users', u)
+            # User data recovery EXCLUDED as per user isolation requirements
+            # for u in users:
+            #     upsert('users', u)
+            logger.info("ℹ️ User data recovery skipped (user isolation policy)")
             for p in projects:
                 upsert('projects', p)
             for t in ppt_templates:
@@ -1264,6 +1276,15 @@ class BackupService:
                         self._reload_env()
                     except Exception:
                         pass
+
+                    # 恢复后重载所有服务以应用新配置
+                    try:
+                        from .service_instances import reload_services
+                        reload_services()
+                        logger.info("🔄 Services reloaded after light backup restore")
+                    except Exception as reload_e:
+                        logger.warning(f"Service reload after light restore failed: {reload_e}")
+
             except Exception as e_env_merge:
                 logger.warning(f"⚠️ 轻量恢复 .env 处理异常: {e_env_merge}")
         except Exception as e:

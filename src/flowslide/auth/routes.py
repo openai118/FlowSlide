@@ -12,7 +12,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from ..core.simple_config import app_config
-from ..database.database import get_db
+from ..database.database import get_auth_db
 from ..database.models import User
 from .auth_service import AuthService, get_auth_service
 from ..core.deployment_mode_manager import get_current_deployment_mode
@@ -79,7 +79,7 @@ async def login(
     password: str = Form(...),
     cf_turnstile_response: str = Form(None, alias="cf-turnstile-response"),
     hcaptcha_response: str = Form(None, alias="h-captcha-response"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_auth_db),
     auth_service: AuthService = Depends(get_auth_service),
 ):
     """Handle login form submission"""
@@ -197,7 +197,7 @@ async def register(
     password: str = Form(...),
     confirm_password: str = Form(...),
     email: str = Form(None),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_auth_db),
     auth_service: AuthService = Depends(get_auth_service),
 ):
     """Handle registration form submission"""
@@ -270,7 +270,7 @@ async def register(
 @router.get("/auth/logout")
 async def logout(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_auth_db),
     auth_service: AuthService = Depends(get_auth_service),
 ):
     """Logout user"""
@@ -298,7 +298,7 @@ async def change_password(
     new_password: str = Form(...),
     confirm_password: str = Form(...),
     user: User = Depends(get_current_user_required),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_auth_db),
     auth_service: AuthService = Depends(get_auth_service),
 ):
     """Change user password"""
@@ -338,12 +338,8 @@ async def change_password(
             try:
                 mode_val = get_current_deployment_mode().value
                 if 'external' in mode_val:
-                    from ..services.data_sync_service import sync_service
-                    try:
-                        sync_service.trigger_user_sync_background(direction="local_to_external_force")
-                        triggered_external = True
-                    except Exception:
-                        pass
+                    # Note: User sync disabled as per requirements
+                    triggered_external = False
                 if 'r2' in mode_val:
                     async def _r2_task():
                         try:
@@ -393,7 +389,7 @@ async def change_password(
 async def api_login(
     username: str = Form(...),
     password: str = Form(...),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_auth_db),
     auth_service: AuthService = Depends(get_auth_service),
 ):
     """API login endpoint"""
@@ -413,7 +409,7 @@ async def api_change_password(
     new_password: str = Form(...),
     confirm_password: str = Form(...),
     user: User = Depends(get_current_user_required),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_auth_db),
     auth_service: AuthService = Depends(get_auth_service),
 ):
     if not user.check_password(current_password):
@@ -429,12 +425,8 @@ async def api_change_password(
     try:
         mode_val = get_current_deployment_mode().value
         if 'external' in mode_val:
-            from ..services.data_sync_service import sync_service
-            try:
-                sync_service.trigger_user_sync_background(direction="local_to_external_force")
-                triggered_external = True
-            except Exception:
-                pass
+            # Note: User sync disabled as per requirements
+            triggered_external = False
         if 'r2' in mode_val:
             async def _r2_task():
                 try:
@@ -459,7 +451,7 @@ async def api_change_password(
 @router.post("/api/auth/logout")
 async def api_logout(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_auth_db),
     auth_service: AuthService = Depends(get_auth_service),
 ):
     """API logout endpoint"""
@@ -480,7 +472,7 @@ async def api_current_user(user: User = Depends(get_current_user_required)):
 # Admin and user management API
 @router.get("/api/admin/users")
 async def api_list_users(
-    request: Request, admin: User = Depends(get_current_admin_user), db: Session = Depends(get_db)
+    request: Request, admin: User = Depends(get_current_admin_user), db: Session = Depends(get_auth_db)
 ):
     users = db.query(User).all()
     return {"success": True, "users": [u.to_dict() for u in users]}
@@ -494,7 +486,7 @@ async def api_create_user(
     email: str = Form(None),
     is_admin: bool = Form(False),
     admin: User = Depends(get_current_admin_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_auth_db),
     auth_service: AuthService = Depends(get_auth_service),
 ):
     try:
@@ -510,7 +502,7 @@ async def api_create_user(
 async def api_delete_user(
     user_id: int,
     admin: User = Depends(get_current_admin_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_auth_db),
     auth_service: AuthService = Depends(get_auth_service),
 ):
     if admin.id == user_id:
@@ -527,7 +519,7 @@ async def api_update_profile(
     username: str = Form(None),
     email: str = Form(None),
     user: User = Depends(get_current_user_required),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_auth_db),
     auth_service: AuthService = Depends(get_auth_service),
 ):
     try:
@@ -543,12 +535,8 @@ async def api_update_profile(
             mode_val = get_current_deployment_mode().value
             if (changed_username or changed_email):
                 if 'external' in mode_val:
-                    from ..services.data_sync_service import sync_service  # 延迟导入
-                    try:
-                        sync_service.trigger_user_sync_background(direction="local_to_external_force")
-                        external_triggered = True
-                    except Exception:
-                        pass
+                    # Note: User sync disabled as per requirements
+                    external_triggered = False
                 if 'r2' in mode_val:
                     async def _r2_task():
                         try:
@@ -580,7 +568,7 @@ async def api_update_profile(
 
 
 @router.get("/api/auth/check")
-async def api_check_auth(request: Request, db: Session = Depends(get_db)):
+async def api_check_auth(request: Request, db: Session = Depends(get_auth_db)):
     """Check authentication status"""
     user = get_current_user_optional(request)
 

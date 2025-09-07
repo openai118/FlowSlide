@@ -2,6 +2,7 @@
 Authentication service for FlowSlide
 """
 
+import logging
 import secrets
 import time
 from typing import Optional
@@ -12,6 +13,8 @@ from sqlalchemy.orm import Session
 from ..core.simple_config import app_config
 from ..database.models import User, UserSession
 from ..services.data_sync_service import sync_service
+
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -33,7 +36,7 @@ class AuthService:
         is_admin: bool = False,
     ) -> User:
         """Create a new user"""
-        # Check if user already exists in local database
+        # Check if user already exists
         existing_user = db.query(User).filter(User.username == username).first()
         if existing_user:
             raise ValueError("用户名已存在")
@@ -43,28 +46,8 @@ class AuthService:
             if existing_email:
                 raise ValueError("邮箱已存在")
 
-        # Check if user exists in external database
-        from ..database.database import db_manager
-        if db_manager.external_engine:
-            try:
-                with db_manager.external_engine.connect() as external_conn:
-                    from sqlalchemy import text
-                    result = external_conn.execute(
-                        text("SELECT id, username FROM users WHERE username = :username"),
-                        {"username": username}
-                    ).fetchone()
-
-                    if result:
-                        raise ValueError(f"用户名 '{username}' 在外部数据库中已存在，无法创建本地用户")
-            except ValueError:
-                # 重新抛出用户名冲突错误
-                raise
-            except Exception as e:
-                # 如果外部数据库连接失败，为了数据一致性，阻止创建
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.warning(f"无法检查外部数据库中的用户名冲突: {e}")
-                raise ValueError("无法验证用户名唯一性，请稍后重试或联系管理员")
+        # Note: No external database check needed as per requirements
+        # User synchronization is disabled
 
         # Create new user
         user = User(username=username, email=email, is_admin=is_admin)
@@ -74,12 +57,7 @@ class AuthService:
         db.commit()
         db.refresh(user)
 
-        # Trigger immediate user sync to external in background
-        try:
-            # Use forced direction to ensure local changes are pushed even if external is authoritative
-            sync_service.trigger_user_sync_background(direction="local_to_external_force")
-        except Exception:
-            pass
+        # Note: No user sync triggered as per requirements
 
         return user
 
@@ -188,10 +166,7 @@ class AuthService:
         try:
             user.set_password(new_password)
             db.commit()
-            try:
-                sync_service.trigger_user_sync_background(direction="local_to_external_force")
-            except Exception:
-                pass
+            # Note: No user sync triggered as per requirements
             return True
         except Exception:
             db.rollback()
@@ -206,10 +181,7 @@ class AuthService:
             for session in sessions:
                 session.is_active = False
             db.commit()
-            try:
-                sync_service.trigger_user_sync_background(direction="local_to_external_force")
-            except Exception:
-                pass
+            # Note: User sync disabled as per requirements
             return True
         except Exception:
             db.rollback()
@@ -237,11 +209,7 @@ class AuthService:
                 if exists:
                     raise ValueError("用户名已存在")
                 user.username = username
-                # push username change to external immediately
-                try:
-                    sync_service.trigger_user_sync_background(direction="local_to_external_force")
-                except Exception:
-                    pass
+                # Note: User sync disabled as per requirements
             if email is not None and email != user.email:
                 if email:
                     exists = db.query(User).filter(User.email == email).first()
@@ -265,10 +233,7 @@ class AuthService:
             # Delete user
             db.delete(user)
             db.commit()
-            try:
-                sync_service.trigger_user_sync_background(direction="local_to_external")
-            except Exception:
-                pass
+            # Note: User sync disabled as per requirements
             return True
         except Exception:
             db.rollback()

@@ -147,8 +147,8 @@ class DataSyncService:
         try:
             logger.info("🔄 Syncing local changes to external database...")
 
-            # 同步用户表
-            await self._sync_users_local_to_external()
+            # Note: User sync disabled as per requirements
+            # await self._sync_users_local_to_external()
 
             # 同步演示文稿表
             await self._sync_presentations_local_to_external()
@@ -172,8 +172,8 @@ class DataSyncService:
         try:
             logger.info("🔄 Syncing external changes to local database...")
 
-            # 同步用户表
-            await self._sync_users_external_to_local()
+            # Note: User sync disabled as per requirements
+            # await self._sync_users_external_to_local()
 
             # 同步演示文稿表
             await self._sync_presentations_external_to_local()
@@ -1556,8 +1556,8 @@ class DataSyncService:
         try:
             logger.info("🔄 Starting full sync from local to external...")
 
-            # 同步所有用户
-            await self._sync_users_local_to_external()
+            # Note: User sync disabled as per requirements
+            # await self._sync_users_local_to_external()
 
             # 同步所有演示文稿
             await self._sync_presentations_local_to_external()
@@ -1575,8 +1575,8 @@ class DataSyncService:
         try:
             logger.info("🔄 Starting full sync from external to local...")
 
-            # 同步所有用户
-            await self._sync_users_external_to_local()
+            # Note: User sync disabled as per requirements
+            # await self._sync_users_external_to_local()
 
             # 同步所有演示文稿
             await self._sync_presentations_external_to_local()
@@ -2300,39 +2300,14 @@ class DataSyncService:
     def trigger_user_sync_background(self, direction: str = "local_to_external") -> None:
         """Trigger a user-only sync in a background thread to avoid blocking the caller.
 
+        NOTE: User synchronization is DISABLED as per requirements.
+        This method now does nothing to prevent user data syncing between local/external/R2.
+
         direction: 'local_to_external' or 'external_to_local' or 'both'
         """
-        import threading
-        import asyncio
-
-        def _runner():
-            try:
-                # Ensure external engine exists if DATABASE_URL configured but engine not yet created
-                try:
-                    if not getattr(db_manager, 'external_engine', None) and getattr(db_manager, 'external_url', None):
-                        try:
-                            # Try to create backup/external engine on demand
-                            db_manager._create_backup_engine()
-                            db_manager.sync_enabled = True
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-
-                if direction == "local_to_external":
-                    asyncio.run(self._sync_users_local_to_external())
-                elif direction == "local_to_external_force" or direction == "local_to_external_force_now":
-                    # Force push local users to external regardless of authoritative_source
-                    asyncio.run(self._sync_users_local_to_external_force())
-                elif direction == "external_to_local":
-                    asyncio.run(self._sync_users_external_to_local())
-                else:
-                    asyncio.run(self.sync_data())
-            except Exception as e:
-                logger.error(f"❌ Background user sync failed: {e}")
-
-        t = threading.Thread(target=_runner, daemon=True)
-        t.start()
+        logger.info("ℹ️ User synchronization is disabled - no action taken")
+        # User sync is disabled - do nothing
+        return
 
 
 # 创建全局同步服务实例
