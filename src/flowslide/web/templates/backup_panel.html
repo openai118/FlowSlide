@@ -48,14 +48,18 @@
         }));
 
         qs('#btn-create-backup').addEventListener('click', async ()=>{
-            const name = prompt('Backup name (optional)');
-            const resp = await fetch('/api/backups/create', {
-                method: 'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({type: currentType, name})
-            });
-            const j = await resp.json();
-            alert('Backup created: '+(j.id || JSON.stringify(j)));
-            fetchList();
+            const typeMap = {db:'db_only', artifact:'full', media:'media_only', cache:'scripts_only'};
+            const mappedType = typeMap[currentType] || 'db_only';
+            try {
+                const resp = await fetch('/api/backup/local/create', {
+                    method: 'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({backup_type: mappedType})
+                });
+                const j = await resp.json();
+                if(!resp.ok || !j.success){ throw new Error(j.error||'create failed'); }
+                alert('Backup created: '+ (j.path||mappedType));
+                fetchList();
+            } catch(e){ alert('Create failed: '+e.message); }
         });
 
         qs('#chk-all').addEventListener('change', (ev)=>{
@@ -65,42 +69,54 @@
         async function fetchList(){
             const tbody = qs('#backup-table tbody');
             tbody.innerHTML = '<tr><td colspan="8">Loading...</td></tr>';
-            const resp = await fetch(`/api/backups?type=${encodeURIComponent(currentType)}`);
-            const list = await resp.json();
-            tbody.innerHTML = '';
-            for(const r of list){
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td><input class="row-chk" data-id="${r.id}" type="checkbox"/></td>
-                    <td>${r.name||''}</td>
-                    <td>${r.type||''}</td>
-                    <td>${r.project_id||''}</td>
-                    <td>${r.size||''}</td>
-                    <td>${r.created_at?new Date(r.created_at*1000).toLocaleString():''}</td>
-                    <td>${r.storage_key||''}</td>
-                    <td><button data-id="${r.id}" class="btn-download">Download</button>
-                        <button data-id="${r.id}" class="btn-sync">Sync</button>
-                        <button data-id="${r.id}" class="btn-restore">Restore</button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
+            try {
+                // 复用新的本地备份列表 & R2 列表融合展示（只展示本地 zip）
+                const resp = await fetch('/api/backup/local/list');
+                const list = await resp.json();
+                tbody.innerHTML = '';
+                for(const r of list){
+                    const fname = r.name || r.filename || r.file || '';
+                    const size = r.size || r.file_size || '';
+                    const created = r.created || r.created_at || '';
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td><input class="row-chk" data-name="${fname}" type="checkbox"/></td>
+                        <td>${fname}</td>
+                        <td>${(r.type||'local')}</td>
+                        <td></td>
+                        <td>${size||''}</td>
+                        <td>${created?new Date(created).toLocaleString():''}</td>
+                        <td>${r.category||''}</td>
+                        <td><button data-name="${fname}" class="btn-download">Download</button>
+                            <button data-name="${fname}" class="btn-restore">Restore</button>
+                            <button data-name="${fname}" class="btn-delete">Delete</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                }
+                bindRowActions();
+            } catch(e){
+                tbody.innerHTML = `<tr><td colspan=8>Load failed: ${e.message}</td></tr>`;
             }
+        }
 
+        function bindRowActions(){
             qsa('.btn-download').forEach(b=>b.addEventListener('click', (ev)=>{
-                const id = ev.target.dataset.id;
-                window.location = `/api/backups/${id}/download`;
-            }));
-            qsa('.btn-sync').forEach(b=>b.addEventListener('click', async (ev)=>{
-                const id = ev.target.dataset.id;
-                await fetch(`/api/backups/${id}/sync-to-r2`, {method:'POST'});
-                alert('sync enqueued');
-                fetchList();
+                const name = ev.target.dataset.name;
+                window.location = `/api/backup/local/download?backup_name=${encodeURIComponent(name)}`;
             }));
             qsa('.btn-restore').forEach(b=>b.addEventListener('click', async (ev)=>{
-                const id = ev.target.dataset.id;
-                const resp = await fetch(`/api/backups/${id}/restore`, {method:'POST'});
+                const name = ev.target.dataset.name;
+                if(!confirm('Restore '+name+' ?')) return;
+                const resp = await fetch(`/api/backup/local/restore?backup_name=${encodeURIComponent(name)}`, {method:'POST'});
                 const j = await resp.json();
-                alert('restore started: '+JSON.stringify(j));
+                alert(j.success?'Restore OK':'Restore failed: '+(j.error||j.detail||''));
+            }));
+            qsa('.btn-delete').forEach(b=>b.addEventListener('click', async (ev)=>{
+                const name = ev.target.dataset.name;
+                if(!confirm('Delete '+name+' ?')) return;
+                const resp = await fetch(`/api/backup/local?backup_name=${encodeURIComponent(name)}`, {method:'DELETE'});
+                if(resp.ok){ fetchList(); } else { alert('Delete failed'); }
             }));
         }
 

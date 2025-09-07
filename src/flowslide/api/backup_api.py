@@ -10,7 +10,8 @@ from datetime import datetime
 from sqlalchemy import text
 
 from ..auth.middleware import require_admin, require_auth
-from ..services.backup_manager import BackupManager, ensure_schema, get_conn
+# 旧 BackupManager (占位式) 已弃用：改用统一 backup_service；如仍有模板引用 /api/backups/* 需同步更新前端
+# from ..services.backup_manager import BackupManager, ensure_schema, get_conn  # deprecated
 # Backup service (zip-based) helpers for R2 and local zip backups
 from ..services.backup_service import (
     backup_service,
@@ -31,7 +32,7 @@ except Exception:  # pragma: no cover - optional at runtime
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-ensure_schema()
+# ensure_schema()  # deprecated
 
 
 @router.get('/api/backup/ping')
@@ -56,73 +57,7 @@ class BackupRecord(BaseModel):
     storage_key: Optional[str]
 
 
-@router.get('/api/backups', response_model=List[BackupRecord])
-def list_backups(type: Optional[str] = None, admin=Depends(require_admin)):
-    mgr = BackupManager()
-    try:
-        rows = mgr.list_backups(type=type)
-        return [BackupRecord(**r) for r in rows]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post('/api/backups/create', response_model=BackupRecord)
-def create_backup(req: BackupCreateRequest, background_tasks: BackgroundTasks, admin=Depends(require_admin)):
-    mgr = BackupManager()
-    try:
-        rec = mgr.create_backup(req.type, name=req.name, project_id=req.project_id)
-        # Enqueue upload to R2 (non-blocking)
-        background_tasks.add_task(mgr.sync_to_r2, rec['id'])
-        return BackupRecord(**rec)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post('/api/backups/{backup_id}/sync-to-r2')
-def sync_to_r2(backup_id: str, admin=Depends(require_admin)):
-    mgr = BackupManager()
-    try:
-        ok = mgr.sync_to_r2(backup_id)
-        return JSONResponse(content={'success': ok})
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post('/api/backups/{backup_id}/restore')
-def restore(backup_id: str, admin=Depends(require_admin)):
-    mgr = BackupManager()
-    try:
-        task = mgr.restore_from_r2(backup_id)
-        return JSONResponse(content={'task': task})
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get('/api/backups/{backup_id}/download')
-def download_backup(backup_id: str, admin=Depends(require_admin)):
-    mgr = BackupManager()
-    try:
-        conn = get_conn()
-        cur = conn.cursor()
-        cur.execute('SELECT local_path,storage_key FROM backups WHERE id=?', (backup_id,))
-        row = cur.fetchone()
-        conn.close()
-        if not row:
-            raise HTTPException(status_code=404, detail='backup not found')
-        local_path, storage_key = row
-
-        if storage_key and (not local_path or not os.path.exists(local_path)):
-            # download from r2 to local temp
-            local_path = mgr.download_from_r2(backup_id)
-
-        if not local_path or not os.path.exists(local_path):
-            raise HTTPException(status_code=404, detail='local backup file not available')
-
-        return FileResponse(path=local_path, filename=os.path.basename(local_path), media_type='application/octet-stream')
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# 已移除 /api/backups* 旧接口；请使用 /api/backup/* 新接口
 
 
 # ---- New: Zip-based backup service endpoints (local + R2) ----
