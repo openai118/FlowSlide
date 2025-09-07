@@ -2152,6 +2152,12 @@ class DataSyncService:
             try:
                 assert db_manager.external_engine is not None  # type: ignore[assert-type]
                 with db_manager.external_engine.connect() as conn:  # type: ignore[union-attr]
+                    # 先显式开启一个独立事务用于读取（某些驱动默认 autocommit=False 时异常会留下 aborted 状态）
+                    read_trans = None
+                    try:
+                        read_trans = conn.begin()
+                    except Exception:
+                        read_trans = None
                     # 尝试增加 file_mtime 列（如果旧版本表无此列）
                     try:
                         conn.exec_driver_sql("ALTER TABLE flowslide_config_files ADD COLUMN file_mtime DOUBLE PRECISION")
@@ -2160,7 +2166,25 @@ class DataSyncService:
                             conn.exec_driver_sql("ALTER TABLE flowslide_config_files ADD COLUMN file_mtime DOUBLE")
                         except Exception:
                             pass
-                    rows = conn.execute(text("SELECT name, checksum, file_mtime, updated_at FROM flowslide_config_files")).fetchall()
+                    try:
+                        rows = conn.execute(text("SELECT name, checksum, file_mtime, updated_at FROM flowslide_config_files")).fetchall()
+                    except Exception as read_err:
+                        # 若读取失败尝试回滚事务并重试一次
+                        try:
+                            if read_trans is not None:
+                                read_trans.rollback()
+                        except Exception:
+                            pass
+                        try:
+                            rows = conn.execute(text("SELECT name, checksum, file_mtime, updated_at FROM flowslide_config_files")).fetchall()
+                        except Exception:
+                            raise read_err
+                    finally:
+                        try:
+                            if read_trans is not None and read_trans.is_active:
+                                read_trans.commit()
+                        except Exception:
+                            pass
                     for r in rows:
                         try:
                             external_map[r.name] = {"checksum": r.checksum, "updated_at": r.updated_at, "file_mtime": getattr(r, 'file_mtime', None)}
@@ -2225,37 +2249,49 @@ class DataSyncService:
             use_stmt = pg_stmt if 'postgres' in dialect else mysql_stmt if dialect in ('mysql','mariadb') else None
 
             with engine.connect() as conn:  # type: ignore[union-attr]
-                trans = conn.begin()
-                for name, checksum, content, file_mtime in to_upsert:
-                    params = {"name": name, "checksum": checksum, "content": content, "file_mtime": file_mtime}
-                    try:
-                        if use_stmt is not None:
-                            conn.execute(use_stmt, params)
-                        else:
-                            # 尝试 PostgreSQL 语法 -> MySQL 语法 兜底
+                # 对于 Postgres，单条失败会使事务 abort，改为逐条独立事务提交，避免整体失败
+                if 'postgres' in dialect:
+                    for name, checksum, content, file_mtime in to_upsert:
+                        params = {"name": name, "checksum": checksum, "content": content, "file_mtime": file_mtime}
+                        try:
+                            trans = conn.begin()
                             try:
-                                conn.execute(pg_stmt, params)
+                                if use_stmt is not None:
+                                    conn.execute(use_stmt, params)
+                                else:
+                                    conn.execute(pg_stmt, params)
+                                trans.commit()
                             except Exception:
-                                conn.execute(mysql_stmt, params)
-                    except Exception as e_up:
-                        logger.warning(f"⚠️ Upsert config file {name} failed (will continue): {e_up}")
-                        # 当前事务已失效则回滚并开启新事务，保证后续文件继续
+                                trans.rollback()
+                                raise
+                        except Exception as e_up:
+                            logger.warning(f"⚠️ Upsert config file {name} failed (isolated): {e_up}")
+                            continue
+                else:
+                    trans = conn.begin()
+                    for name, checksum, content, file_mtime in to_upsert:
+                        params = {"name": name, "checksum": checksum, "content": content, "file_mtime": file_mtime}
+                        try:
+                            if use_stmt is not None:
+                                conn.execute(use_stmt, params)
+                            else:
+                                # 尝试双语法
+                                try:
+                                    conn.execute(pg_stmt, params)
+                                except Exception:
+                                    conn.execute(mysql_stmt, params)
+                        except Exception as e_up:
+                            logger.warning(f"⚠️ Upsert config file {name} failed (will continue): {e_up}")
+                            # 非 Postgres 继续复用事务（MySQL 不会进入 failed 状态阻塞后续）
+                            continue
+                    try:
+                        trans.commit()
+                    except Exception as final_err:
                         try:
                             trans.rollback()
                         except Exception:
                             pass
-                        try:
-                            trans = conn.begin()
-                        except Exception:
-                            pass
-                        continue
-                try:
-                    trans.commit()
-                except Exception:
-                    try:
-                        trans.rollback()
-                    except Exception:
-                        pass
+                        logger.warning(f"⚠️ Final commit of config upserts failed: {final_err}")
             logger.info("✅ Config files sync local->external completed")
         except Exception as e:
             logger.error(f"❌ Config sync local->external failed: {e}")
