@@ -38,6 +38,12 @@ class ModeSwitchContext:
     rollback_plan: Optional[Dict[str, Any]] = None
 
 
+def get_current_deployment_mode() -> DeploymentMode:
+    """获取当前部署模式"""
+    manager = DeploymentModeManager()
+    return manager.current_mode or DeploymentMode.LOCAL_ONLY
+
+
 class DeploymentModeManager:
     """部署模式管理器"""
 
@@ -579,6 +585,12 @@ class DeploymentModeManager:
             except Exception as e:
                 logger.error(f"后置操作 {action} 失败: {e}")
 
+        # 额外的后置操作：确保目标数据库有默认用户
+        try:
+            await self._ensure_default_user_in_target_db()
+        except Exception as e:
+            logger.error(f"确保默认用户失败: {e}")
+
     def _record_mode_switch(self, success: bool, error: Optional[str] = None) -> None:
         """记录模式切换历史"""
         record = {
@@ -727,6 +739,76 @@ class DeploymentModeManager:
                 "data_migration_required": self.switch_context.data_migration_required if self.switch_context else None
             } if self.switch_context else None
         }
+
+
+    async def _ensure_default_user_in_target_db(self) -> None:
+        """确保目标数据库有默认用户"""
+        from ..database import db_manager
+        from ..auth.auth_service import init_default_admin
+        from sqlalchemy.orm import sessionmaker
+
+        target_mode = self.current_mode
+        if not target_mode:
+            return
+
+        # 如果是包含外部数据库的模式，确保外部数据库有默认用户
+        if target_mode.value in ['local_external', 'local_external_r2']:
+            if db_manager.external_engine:
+                try:
+                    logger.info("🔍 检查外部数据库是否有用户...")
+
+                    # 创建外部数据库会话
+                    ExternalSession = sessionmaker(bind=db_manager.external_engine)
+                    external_db = ExternalSession()
+
+                    try:
+                        # 检查外部数据库是否有用户
+                        from ..database.models import User
+                        user_count = external_db.query(User).count()
+
+                        if user_count == 0:
+                            logger.info("📝 外部数据库没有用户，创建默认管理员...")
+                            # 在外部数据库中创建默认用户
+                            init_default_admin(external_db)
+                            logger.info("✅ 外部数据库默认管理员创建完成")
+                        else:
+                            logger.info(f"✅ 外部数据库已有 {user_count} 个用户")
+
+                    finally:
+                        external_db.close()
+
+                except Exception as e:
+                    logger.error(f"❌ 检查/创建外部数据库默认用户失败: {e}")
+            else:
+                logger.warning("⚠️ 外部数据库引擎不可用")
+
+        # 如果是只使用本地数据库的模式，确保本地数据库有默认用户
+        elif target_mode.value in ['local_only', 'local_r2']:
+            try:
+                logger.info("🔍 检查本地数据库是否有用户...")
+
+                # 使用现有的本地数据库会话
+                from ..database.database import SessionLocal
+                local_db = SessionLocal()
+
+                try:
+                    # 检查本地数据库是否有用户
+                    from ..database.models import User
+                    user_count = local_db.query(User).count()
+
+                    if user_count == 0:
+                        logger.info("📝 本地数据库没有用户，创建默认管理员...")
+                        # 在本地数据库中创建默认用户
+                        init_default_admin(local_db)
+                        logger.info("✅ 本地数据库默认管理员创建完成")
+                    else:
+                        logger.info(f"✅ 本地数据库已有 {user_count} 个用户")
+
+                finally:
+                    local_db.close()
+
+            except Exception as e:
+                logger.error(f"❌ 检查/创建本地数据库默认用户失败: {e}")
 
 
 # 全局模式管理器实例

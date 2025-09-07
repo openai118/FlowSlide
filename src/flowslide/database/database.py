@@ -135,6 +135,7 @@ class DatabaseManager:
             )
 
         self.engine = self.primary_engine  # 设置向后兼容的别名
+        self.external_engine = self.primary_engine  # 设置外部引擎引用
         self.database_type = "postgresql" if "postgresql" in self.external_url else "external"
         logger.info(f"✅ External database ready: {self.database_type}")
 
@@ -181,8 +182,13 @@ class DatabaseManager:
     def initialize(self):
         """初始化数据库管理器"""
         try:
+            # 获取当前部署模式
+            from ..core.deployment_mode_manager import mode_manager
+            current_mode = mode_manager.current_mode or mode_manager.detect_current_mode()
+            mode_name = current_mode.value if current_mode else 'local_only'
+
             # 根据模式选择主数据库
-            if DATABASE_MODE == "external" and self.external_url:
+            if (DATABASE_MODE == "external" or mode_name in ['local_external', 'local_external_r2']) and self.external_url:
                 try:
                     self._create_external_engine()
                     logger.info("🎯 Using external database as primary")
@@ -194,8 +200,8 @@ class DatabaseManager:
                 self._create_local_engine()
                 logger.info("🏠 Using local database as primary")
 
-            # 如果配置了外部数据库，创建备份引擎用于同步
-            if self.external_url and DATABASE_MODE != "external":
+            # 如果配置了外部数据库且不是external模式，创建备份引擎用于同步
+            if self.external_url and DATABASE_MODE != "external" and mode_name not in ['local_external', 'local_external_r2']:
                 try:
                     self._create_backup_engine()
                     self.sync_enabled = True
@@ -362,6 +368,10 @@ def update_session_makers():
 def get_auth_db():
     """Dependency to get database session for authentication (based on deployment mode)"""
     from ..core.deployment_mode_manager import mode_manager
+
+    # Ensure database manager is initialized
+    if not db_manager.primary_engine:
+        db_manager.initialize()
 
     try:
         current_mode = mode_manager.current_mode or mode_manager.detect_current_mode()
