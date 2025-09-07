@@ -156,6 +156,9 @@ class DataSyncService:
             # 同步模板表
             await self._sync_templates_local_to_external()
 
+            # 同步配置文件
+            await self._sync_configs_local_to_external()
+
             logger.info("✅ Local to external sync completed")
 
         except Exception as e:
@@ -177,6 +180,9 @@ class DataSyncService:
 
             # 同步模板表
             await self._sync_templates_external_to_local()
+
+            # 同步配置文件
+            await self._sync_configs_external_to_local()
 
             logger.info("✅ External to local sync completed")
 
@@ -226,7 +232,7 @@ class DataSyncService:
                     logger.info(f"📤 Found {len(changed_users)} local users with changes")
 
                     # 同步到外部数据库
-                    with db_manager.external_engine.connect() as external_conn:
+                    with db_manager.external_engine.connect() as external_conn:  # type: ignore[union-attr]
                         for user in changed_users:
                             # Safer approach: prefer to find external user by username first, then by id.
                             existing_by_id = external_conn.execute(
@@ -681,7 +687,7 @@ class DataSyncService:
                     logger.warning("External engine not available")
                     return
 
-                with db_manager.external_engine.connect() as external_conn:
+                with db_manager.external_engine.connect() as external_conn:  # type: ignore[union-attr]
                     # 查询外部新增或更新的用户
                     external_users = external_conn.execute(
                         text("SELECT * FROM users WHERE created_at > :cutoff OR updated_at > :cutoff OR last_login > :cutoff"),
@@ -1421,7 +1427,7 @@ class DataSyncService:
                     logger.info("📭 No local users to push")
                     return
 
-                with db_manager.external_engine.connect() as external_conn:
+                with db_manager.external_engine.connect() as external_conn:  # type: ignore[union-attr]
                     for user in changed_users:
                         try:
                             # Safer approach: if local has external_id, prefer updating by external id.
@@ -1616,7 +1622,7 @@ class DataSyncService:
             def propagate_deletes():
                 from ..database.database import SessionLocal
 
-                with db_manager.external_engine.connect() as external_conn:
+                with db_manager.external_engine.connect() as external_conn:  # type: ignore[union-attr]
                     with SessionLocal() as local_session:
                         all_external = external_conn.execute(text("SELECT id, username FROM users")).fetchall()
                         external_usernames = {r.username for r in all_external}
@@ -1722,6 +1728,197 @@ class DataSyncService:
             "external_db_type": db_manager.database_type if db_manager.external_engine else None,
             "external_db_configured": bool(db_manager.external_url)
         }
+
+    # ---------------- 新增：配置文件同步 ----------------
+    def _ensure_external_config_table(self):
+        """在外部数据库创建配置文件存储表 (flowslide_config_files)。"""
+        if not db_manager.external_engine:
+            return
+        ddl_postgres = (
+            "CREATE TABLE IF NOT EXISTS flowslide_config_files ("
+            " name TEXT PRIMARY KEY,"
+            " checksum TEXT,"
+            " content BYTEA NOT NULL,"
+            " updated_at TIMESTAMP DEFAULT NOW()"
+            ")"
+        )
+        ddl_generic = (
+            "CREATE TABLE IF NOT EXISTS flowslide_config_files ("
+            " name VARCHAR(255) PRIMARY KEY,"
+            " checksum VARCHAR(128),"
+            " content LONGBLOB NOT NULL,"
+            " updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            ")"
+        )
+        try:
+            dialect = db_manager.external_engine.dialect.name
+        except Exception:
+            dialect = "generic"
+        ddl = ddl_postgres if dialect == "postgresql" else ddl_generic
+        try:
+            with db_manager.external_engine.begin() as conn:
+                conn.exec_driver_sql(ddl)
+        except Exception as e:
+            logger.warning(f"⚠️ Failed creating flowslide_config_files table: {e}")
+
+    def _collect_local_config_files(self) -> List[Path]:
+        """收集需要同步的配置文件列表.
+
+        策略：
+          1. 根目录 *.json 中与部署/AI/用户设置相关的轻量文件 (大小 < 256KB)
+          2. src/config/**/*.json 及 src/flowslide/config/**/*.json
+          3. 排除备份、临时、node_modules、.git、backups 目录
+        """
+        patterns = [
+            Path("."),
+            Path("src/config"),
+            Path("src/flowslide/config"),
+        ]
+        result: List[Path] = []
+        seen = set()
+        for base in patterns:
+            if not base.exists():
+                continue
+            for p in base.rglob("*.json"):
+                # 过滤无关或大型文件
+                if any(part in {"node_modules", ".git", "backups", "temp"} for part in p.parts):
+                    continue
+                try:
+                    if p.stat().st_size > 256 * 1024:  # 避免同步过大文件
+                        continue
+                except Exception:
+                    continue
+                name = p.as_posix()
+                if name not in seen:
+                    seen.add(name)
+                    result.append(p)
+        return result
+
+    def _calc_file_checksum(self, path: Path) -> str:
+        import hashlib
+        h = hashlib.sha256()
+        try:
+            with path.open("rb") as f:
+                while True:
+                    chunk = f.read(65536)
+                    if not chunk:
+                        break
+                    h.update(chunk)
+            return h.hexdigest()
+        except Exception:
+            return ""
+
+    async def _sync_configs_local_to_external(self):
+        """将本地配置文件(upsert)同步到外部数据库 flowslide_config_files 表。"""
+        if not db_manager.external_engine:
+            return
+        try:
+            self._ensure_external_config_table()
+            files = self._collect_local_config_files()
+            if not files:
+                logger.debug("ℹ️ No local config files collected for sync")
+                return
+
+            # 读取外部已有的 checksum
+            external_map = {}
+            try:
+                assert db_manager.external_engine is not None  # type: ignore[assert-type]
+                with db_manager.external_engine.connect() as conn:  # type: ignore[union-attr]
+                    rows = conn.execute(text("SELECT name, checksum, updated_at FROM flowslide_config_files")).fetchall()
+                    for r in rows:
+                        try:
+                            external_map[r.name] = {"checksum": r.checksum, "updated_at": r.updated_at}
+                        except Exception:
+                            d = dict(r)
+                            external_map[d.get("name")] = {"checksum": d.get("checksum"), "updated_at": d.get("updated_at")}
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to read external config table: {e}")
+
+            to_upsert = []
+            for f in files:
+                checksum = self._calc_file_checksum(f)
+                rel_name = f.as_posix()
+                existing = external_map.get(rel_name)
+                if existing and existing.get("checksum") == checksum:
+                    continue  # 无变更
+                try:
+                    content_bytes = f.read_bytes()
+                except Exception as e:
+                    logger.warning(f"⚠️ Skip config file {rel_name}, read error: {e}")
+                    continue
+                to_upsert.append((rel_name, checksum, content_bytes))
+
+            if not to_upsert:
+                logger.info("📁 Config sync: no changed config files to upsert")
+                return
+
+            logger.info(f"📁 Config sync: upserting {len(to_upsert)} config files to external DB")
+            with db_manager.external_engine.begin() as conn:
+                for name, checksum, content in to_upsert:
+                    try:
+                        conn.execute(
+                            text(
+                                """
+                                INSERT INTO flowslide_config_files (name, checksum, content, updated_at)
+                                VALUES (:name, :checksum, :content, CURRENT_TIMESTAMP)
+                                ON DUPLICATE KEY UPDATE checksum = :checksum, content = :content, updated_at = CURRENT_TIMESTAMP
+                                """
+                            ),
+                            {"name": name, "checksum": checksum, "content": content},
+                        )
+                    except Exception:
+                        # PostgreSQL 没有 ON DUPLICATE KEY；尝试使用 UPSERT 语法
+                        try:
+                            conn.execute(
+                                text(
+                                    """
+                                    INSERT INTO flowslide_config_files (name, checksum, content, updated_at)
+                                    VALUES (:name, :checksum, :content, NOW())
+                                    ON CONFLICT (name) DO UPDATE SET checksum = EXCLUDED.checksum, content = EXCLUDED.content, updated_at = NOW()
+                                    """
+                                ),
+                                {"name": name, "checksum": checksum, "content": content},
+                            )
+                        except Exception as e2:
+                            logger.warning(f"⚠️ Upsert config file {name} failed: {e2}")
+            logger.info("✅ Config files sync local->external completed")
+        except Exception as e:
+            logger.error(f"❌ Config sync local->external failed: {e}")
+
+    async def _sync_configs_external_to_local(self):
+        """从外部数据库获取配置文件并写回本地（覆盖）。"""
+        if not db_manager.external_engine:
+            return
+        try:
+            self._ensure_external_config_table()
+            assert db_manager.external_engine is not None  # type: ignore[assert-type]
+            with db_manager.external_engine.connect() as conn:  # type: ignore[union-attr]
+                rows = conn.execute(text("SELECT name, checksum, content FROM flowslide_config_files")).fetchall()
+                if not rows:
+                    logger.info("ℹ️ No config files found in external DB")
+                    return
+                restored = 0
+                for r in rows:
+                    try:
+                        name = r.name if hasattr(r, 'name') else r[0]
+                        content = r.content if hasattr(r, 'content') else r[2]
+                        target = Path(name)
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        existing_bytes = None
+                        try:
+                            if target.exists():
+                                existing_bytes = target.read_bytes()
+                        except Exception:
+                            existing_bytes = None
+                        if existing_bytes == content:
+                            continue
+                        target.write_bytes(content)
+                        restored += 1
+                    except Exception as ie:
+                        logger.warning(f"⚠️ Fail write config file from external {r}: {ie}")
+                logger.info(f"✅ Config files restored from external DB: {restored} updated")
+        except Exception as e:
+            logger.error(f"❌ Config sync external->local failed: {e}")
 
     def trigger_user_sync_background(self, direction: str = "local_to_external") -> None:
         """Trigger a user-only sync in a background thread to avoid blocking the caller.
