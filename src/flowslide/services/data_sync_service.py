@@ -2082,6 +2082,9 @@ class DataSyncService:
 
         优先从 ENV_SYNC_WHITELIST 读取(逗号分隔)，否则使用内置安全默认集合。
         """
+        # 若启用包含全部机密的开关（风险高），直接返回特殊标记
+        if os.getenv('ENV_SYNC_INCLUDE_SECRETS','0') == '1':
+            return ['*__ALL__*']
         raw = os.getenv("ENV_SYNC_WHITELIST")
         if raw:
             wl = [x.strip() for x in raw.split(',') if x.strip()]
@@ -2100,6 +2103,9 @@ class DataSyncService:
 
         同时保留注释与空行的可读性。
         """
+        # 允许通过 ENV_SYNC_REDACT=0 完全关闭脱敏（原样返回）
+        if os.getenv('ENV_SYNC_REDACT','1') == '0':
+            return content
         try:
             text = content.decode('utf-8', errors='ignore')
         except Exception:
@@ -2116,7 +2122,8 @@ class DataSyncService:
                 continue
             key, val = line.split('=', 1)
             key_strip = key.strip()
-            if key_strip in whitelist:
+            # *__ALL__* 模式：不过滤任何变量
+            if ('*__ALL__*' in whitelist) or key_strip in whitelist:
                 out_lines.append(f"{key_strip}={val}")
             else:
                 out_lines.append(f"{key_strip}=***redacted***")
@@ -2315,6 +2322,19 @@ class DataSyncService:
                         file_mtime = getattr(r, 'file_mtime', None) if hasattr(r, 'file_mtime') else (r[2] if len(r) > 2 else None)
                         content = r.content if hasattr(r, 'content') else r[3]
                         target = Path(name)
+                        # 特殊处理 .env ：如果内容含有脱敏占位且本地已有非脱敏值，默认不覆盖
+                        if name.endswith('.env'):
+                            allow_redacted_restore = os.getenv('ENV_ALLOW_REDACTED_ENV_RESTORE', '0') == '1'
+                            if b'***redacted***' in content and not allow_redacted_restore:
+                                try:
+                                    if target.exists():
+                                        existing_text = target.read_text(errors='ignore')
+                                        # 若已有真实（不含 ***redacted***）内容则跳过覆盖
+                                        if '***redacted***' not in existing_text:
+                                            logger.info("⏭️ Skip writing redacted .env from external (preserving local secrets). 设置 ENV_ALLOW_REDACTED_ENV_RESTORE=1 可强制覆盖。")
+                                            continue
+                                except Exception:
+                                    pass
                         target.parent.mkdir(parents=True, exist_ok=True)
                         existing_bytes = None
                         try:
