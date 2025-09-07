@@ -10,8 +10,7 @@ from datetime import datetime
 from sqlalchemy import text
 
 from ..auth.middleware import require_admin, require_auth
-# 旧 BackupManager (占位式) 已弃用：改用统一 backup_service；如仍有模板引用 /api/backups/* 需同步更新前端
-# from ..services.backup_manager import BackupManager, ensure_schema, get_conn  # deprecated
+# 旧 BackupManager (占位式) 已弃用并已移除；统一使用 backup_service
 # Backup service (zip-based) helpers for R2 and local zip backups
 from ..services.backup_service import (
     backup_service,
