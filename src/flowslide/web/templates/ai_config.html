@@ -1520,17 +1520,7 @@
                             </select>
                         </div>
 
-                        <!-- 新增：强制 .env 完整覆盖开关 -->
-                        <label class="toggle-label" style="margin-top:4px;">
-                            <div class="toggle-switch">
-                                <input type="checkbox" id="force-env-full-overwrite" checked onchange="toggleForceEnvOverwrite()">
-                                <span class="toggle-slider"></span>
-                            </div>
-                            <div>
-                                <div style="font-weight:600; color:#495057; margin-bottom:4px;">强制 .env 覆盖模式</div>
-                                <small style="color:#6c757d;">开启：恢复时直接覆盖 .env；关闭：若检测到已过滤(含***redacted***)则只合并白名单变量。当前服务器模式：<span id="server-env-mode" style="font-weight:600;">(加载中...)</span></small>
-                            </div>
-                        </label>
+                        <!-- 强制 .env 覆盖模式：已废弃，后端改为始终明文同步，UI 移除 -->
 
                         <!-- 移动过来的：本地备份文件列表与操作 -->
                         <div>
@@ -7341,53 +7331,7 @@ async function uploadAndRestoreLocalBackup(){
     }
 }
 
-// 强制 .env 覆盖模式开关持久化
-function toggleForceEnvOverwrite(){
-    const el = document.getElementById('force-env-full-overwrite');
-    if(!el) return;
-    localStorage.setItem('force_env_full_overwrite', el.checked ? '1':'0');
-    // 同步到服务器（需要管理员权限）
-    fetch('/api/backup/env-mode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force_full: el.checked })
-    }).then(r=>r.json().catch(()=>({}))).then(data=>{
-        if(data && data.success){
-            showNotification((el.checked ? '服务器已切换为完整覆盖模式' : '服务器已切换为白名单合并模式'), 'success');
-            refreshServerEnvMode();
-        }else{
-            showNotification('切换失败: ' + (data.detail || data.error || '需要管理员权限/登录'), 'error');
-        }
-    }).catch(e=>{
-        showNotification('切换失败: ' + e.message, 'error');
-    });
-}
-function initForceEnvOverwrite(){
-    const el = document.getElementById('force-env-full-overwrite');
-    if(!el) return;
-    const saved = localStorage.getItem('force_env_full_overwrite');
-    if(saved === '0') el.checked = false; else if(saved === '1') el.checked = true;
-}
-document.addEventListener('DOMContentLoaded', initForceEnvOverwrite);
-document.addEventListener('DOMContentLoaded', refreshServerEnvMode);
-
-async function refreshServerEnvMode(){
-    try{
-        const resp = await fetch('/api/backup/env-mode');
-        const data = await resp.json().catch(()=>({}));
-        const span = document.getElementById('server-env-mode');
-        if(span){
-            if(resp.ok && data.success){
-                span.textContent = data.mode === 'full_overwrite' ? '完整覆盖' : '白名单合并';
-            }else{
-                span.textContent = '获取失败';
-            }
-        }
-    }catch(e){
-        const span = document.getElementById('server-env-mode');
-        if(span) span.textContent = '获取失败';
-    }
-}
+// 强制 .env 覆盖模式相关逻辑已删除（后端总是直接覆盖 .env）
 
 async function restoreLocalBackup(){
     const select = document.getElementById('local-backup-list');

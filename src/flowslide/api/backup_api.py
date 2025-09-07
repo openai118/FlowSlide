@@ -358,21 +358,7 @@ def delete_local_backup(backup_name: str, user=Depends(require_auth)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get('/api/backup/env-mode')
-def get_env_mode(user=Depends(require_admin)):
-    try:
-        return {"success": True, **backup_service.get_env_mode()}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post('/api/backup/env-mode')
-def set_env_mode(req: EnvModeUpdate, user=Depends(require_admin)):
-    try:
-        info = backup_service.set_env_mode(req.force_full)
-        return {"success": True, **info}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+## /api/backup/env-mode 已废弃：.env 始终明文 & 覆盖，不再提供模式切换 API。
 
 
 # ---- New: store backup artifacts in external database (BLOB/bytea) ----
