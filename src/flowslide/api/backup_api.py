@@ -586,12 +586,15 @@ async def sync_latest_to_r2(backup_name: Optional[str] = None, user=Depends(requ
         # 以满足“无需本地已有备份也能一键同步到R2”的需求（与“同步到外部”保持一致）。
         if target_path is None:
             # 直接使用临时轻量档案（不写入backups目录）
-            ephemeral_zip = await backup_service.create_light_ephemeral_archive()  # type: ignore[misc]
-            target_path = ephemeral_zip
+            ephemeral_zip_tuple = await backup_service.create_light_ephemeral_archive()  # type: ignore[misc]
+            if isinstance(ephemeral_zip_tuple, tuple):
+                target_path = ephemeral_zip_tuple[0]
+            else:
+                target_path = ephemeral_zip_tuple  # 兼容旧返回
             created_temp_file = target_path
 
         # 针对light使用专用上传逻辑，确保只保留 latest / backup 两个对象
-        if target_path.name.startswith('flowslide_backup_light_'):
+        if target_path and target_path.name.startswith('flowslide_backup_light_'):
             info = await backup_service.upload_light_ephemeral(target_path)  # type: ignore[misc]
         else:
             info = await backup_service.sync_to_r2(target_path)  # type: ignore[misc]

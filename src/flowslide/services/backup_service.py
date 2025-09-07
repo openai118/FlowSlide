@@ -204,11 +204,9 @@ class BackupService:
             for p in base.rglob('*'):
                 if p.is_file():
                     zf.write(p, p.relative_to(base.parent))
-        # 返回包装对象：保留 TemporaryDirectory ctx 引用在 path 属性中以防提前清理
-        # 简单方式：附加属性供外部保持引用
-        zip_path._tmp_dir_ctx = tmp_dir_ctx  # type: ignore[attr-defined]
         logger.info(f"🪶 Created ephemeral light archive: {zip_path}")
-        return zip_path
+        # 返回 (zip_path, tmp_dir_ctx) 由调用方持有 tmp_dir_ctx 防止提前清理
+        return (zip_path, tmp_dir_ctx)
 
     async def upload_light_ephemeral(self, archive_path: Path) -> Dict[str, Any]:
         """上传 light 临时包到 R2，只保留 latest 与 backup 两个对象。"""
@@ -641,25 +639,14 @@ class BackupService:
         """备份配置文件"""
         config_files = [".env", "pyproject.toml", "uv.toml"]
 
-        redact = os.getenv('ENV_SYNC_REDACT','1') == '1'
-        include_all = os.getenv('ENV_SYNC_INCLUDE_SECRETS','0') == '1'
         for config_file in config_files:
             p = Path(config_file)
             if not p.exists():
                 continue
             try:
                 if p.name == '.env':
-                    text = p.read_text(encoding='utf-8', errors='ignore')
-                    if not redact or include_all:
-                        # 不脱敏，直接写入
-                        (backup_path / p.name).write_text(text, encoding='utf-8')
-                    else:
-                        try:
-                            filtered = self._filter_env_content(text)
-                            (backup_path / p.name).write_text(filtered, encoding='utf-8')
-                        except Exception as _fe:
-                            logger.warning(f".env 过滤失败，使用原始文件: {_fe}")
-                            shutil.copy2(p, backup_path / p.name)
+                    # 直接明文复制 .env
+                    shutil.copy2(p, backup_path / p.name)
                 else:
                     shutil.copy2(p, backup_path / p.name)
             except Exception as ce:
@@ -693,42 +680,9 @@ class BackupService:
             logger.info("📁 src/config included in config backup")
 
     # ================== 环境变量白名单 & 过滤工具 ==================
-    def _get_env_whitelist(self) -> list:
-        raw = os.getenv('ENV_SYNC_WHITELIST')
-        if raw:
-            wl = [x.strip() for x in raw.split(',') if x.strip()]
-            if wl:
-                return wl
-        # 若显式包含所有变量（高风险）
-        if os.getenv('ENV_SYNC_INCLUDE_SECRETS','0') == '1':
-            return ['*__ALL__*']
-        return [
-            "APP_NAME","APP_BASE_URL","MODE","DEPLOYMENT_MODE","OPENAI_MODEL","OPENAI_BASE_URL",
-            "OPENAI_API_TYPE","ENABLE_DATA_SYNC","SYNC_INTERVAL","SYNC_MODE","SYNC_DIRECTIONS",
-            "SYNC_AUTHORITATIVE","BACKUP_RETENTION_DAYS","R2_BUCKET_NAME","ENABLE_MONITORING",
-            "LOG_LEVEL","TZ","LANG","UI_DEFAULT_THEME"
-        ]
-
+    # 保留空函数以防外部调用引用，直接返回原文本
     def _filter_env_content(self, text: str) -> str:
-        whitelist = set(self._get_env_whitelist())
-        if '*__ALL__*' in whitelist:
-            return text  # 不做任何过滤
-        out_lines = []
-        for line in text.splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith('#'):
-                out_lines.append(line)
-                continue
-            if '=' not in line:
-                out_lines.append(line)
-                continue
-            key, val = line.split('=',1)
-            k = key.strip()
-            if k in whitelist:
-                out_lines.append(f"{k}={val}")
-            else:
-                out_lines.append(f"{k}=***redacted***")
-        return '\n'.join(out_lines)
+        return text
 
     async def _backup_uploads(self, backup_path: Path):
         """备份上传文件"""
