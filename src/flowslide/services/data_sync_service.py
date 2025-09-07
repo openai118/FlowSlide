@@ -2203,34 +2203,55 @@ class DataSyncService:
                 return
 
             logger.info(f"📁 Config sync: upserting {len(to_upsert)} config files to external DB")
-            with db_manager.external_engine.begin() as conn:
+
+            engine = db_manager.external_engine
+            dialect = engine.dialect.name.lower() if engine else ""
+            # 预构建方言特定语句
+            pg_stmt = text("""
+                INSERT INTO flowslide_config_files (name, checksum, file_mtime, content, updated_at)
+                VALUES (:name, :checksum, :file_mtime, :content, NOW())
+                ON CONFLICT (name) DO UPDATE SET checksum = EXCLUDED.checksum, file_mtime = EXCLUDED.file_mtime, content = EXCLUDED.content, updated_at = NOW()
+            """)
+            mysql_stmt = text("""
+                INSERT INTO flowslide_config_files (name, checksum, file_mtime, content, updated_at)
+                VALUES (:name, :checksum, :file_mtime, :content, CURRENT_TIMESTAMP)
+                ON DUPLICATE KEY UPDATE checksum = VALUES(checksum), file_mtime = VALUES(file_mtime), content = VALUES(content), updated_at = CURRENT_TIMESTAMP
+            """)
+
+            use_stmt = pg_stmt if 'postgres' in dialect else mysql_stmt if dialect in ('mysql','mariadb') else None
+
+            with engine.connect() as conn:  # type: ignore[union-attr]
+                trans = conn.begin()
                 for name, checksum, content, file_mtime in to_upsert:
+                    params = {"name": name, "checksum": checksum, "content": content, "file_mtime": file_mtime}
                     try:
-                        conn.execute(
-                            text(
-                                """
-                                INSERT INTO flowslide_config_files (name, checksum, file_mtime, content, updated_at)
-                                VALUES (:name, :checksum, :file_mtime, :content, CURRENT_TIMESTAMP)
-                                ON DUPLICATE KEY UPDATE checksum = :checksum, file_mtime = :file_mtime, content = :content, updated_at = CURRENT_TIMESTAMP
-                                """
-                            ),
-                            {"name": name, "checksum": checksum, "content": content, "file_mtime": file_mtime},
-                        )
-                    except Exception:
-                        # PostgreSQL 没有 ON DUPLICATE KEY；尝试使用 UPSERT 语法
+                        if use_stmt is not None:
+                            conn.execute(use_stmt, params)
+                        else:
+                            # 尝试 PostgreSQL 语法 -> MySQL 语法 兜底
+                            try:
+                                conn.execute(pg_stmt, params)
+                            except Exception:
+                                conn.execute(mysql_stmt, params)
+                    except Exception as e_up:
+                        logger.warning(f"⚠️ Upsert config file {name} failed (will continue): {e_up}")
+                        # 当前事务已失效则回滚并开启新事务，保证后续文件继续
                         try:
-                            conn.execute(
-                                text(
-                                    """
-                                    INSERT INTO flowslide_config_files (name, checksum, file_mtime, content, updated_at)
-                                    VALUES (:name, :checksum, :file_mtime, :content, NOW())
-                                    ON CONFLICT (name) DO UPDATE SET checksum = EXCLUDED.checksum, file_mtime = EXCLUDED.file_mtime, content = EXCLUDED.content, updated_at = NOW()
-                                    """
-                                ),
-                                {"name": name, "checksum": checksum, "content": content, "file_mtime": file_mtime},
-                            )
-                        except Exception as e2:
-                            logger.warning(f"⚠️ Upsert config file {name} failed: {e2}")
+                            trans.rollback()
+                        except Exception:
+                            pass
+                        try:
+                            trans = conn.begin()
+                        except Exception:
+                            pass
+                        continue
+                try:
+                    trans.commit()
+                except Exception:
+                    try:
+                        trans.rollback()
+                    except Exception:
+                        pass
             logger.info("✅ Config files sync local->external completed")
         except Exception as e:
             logger.error(f"❌ Config sync local->external failed: {e}")
