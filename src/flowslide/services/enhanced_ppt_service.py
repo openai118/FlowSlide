@@ -5484,6 +5484,57 @@ class EnhancedPPTService(PPTService):
     ) -> str:
         """Generate HTML with retry mechanism for incomplete responses"""
 
+        # --- 内部辅助函数：记录原始AI响应便于排查 ---
+        def _record_ai_raw_response(attempt_index: int, raw: str):
+            try:
+                project_id = slide_data.get("project_id") or slide_data.get("projectId") or "unknown"
+                base_dir = Path(__file__).parent.parent.parent.parent / "temp" / "ai_responses_cache" / "html_gen"
+                base_dir.mkdir(parents=True, exist_ok=True)
+                # 按项目与日期分目录，避免文件过多
+                day_dir = base_dir / project_id / time.strftime("%Y%m%d")
+                day_dir.mkdir(parents=True, exist_ok=True)
+                fname = f"slide{page_number}_attempt{attempt_index+1}.txt"
+                fpath = day_dir / fname
+                # 仅当文件不存在或内容不同再写入
+                if not fpath.exists() or fpath.read_text(encoding="utf-8", errors="ignore") != raw:
+                    fpath.write_text(raw, encoding="utf-8")
+            except Exception as _e:  # 不影响主流程
+                logger.debug(f"记录AI原始响应失败: {_e}")
+
+        # --- 内部辅助函数：将纯文本包装为基础HTML（AI可能输出了概要而非HTML） ---
+        def _wrap_plain_text_as_html(text: str) -> str:
+            cleaned = text.strip()
+            if not cleaned:
+                return ""
+            # 简单将以 - * 或数字开头的行识别为列表
+            lines = [l.strip() for l in cleaned.splitlines() if l.strip()]
+            bullet_like = sum(1 for l in lines if re.match(r"^(-|\*|\d+[.)])\s+", l))
+            if bullet_like >= max(2, int(len(lines) * 0.4)):
+                items_html = []
+                for l in lines:
+                    m = re.match(r"^(-|\*|\d+[.)])\s+(.*)$", l)
+                    items_html.append(f"<li>{(m.group(2) if m else l)}</li>")
+                body_inner = f"<ul>\n{chr(10).join(items_html)}\n</ul>"
+            else:
+                # 合并为段落
+                paras = []
+                buf = []
+                for l in lines:
+                    if not l:
+                        if buf:
+                            paras.append(" ".join(buf))
+                            buf = []
+                    else:
+                        buf.append(l)
+                if buf:
+                    paras.append(" ".join(buf))
+                body_inner = "".join(f"<p>{p}</p>" for p in paras)
+            title = slide_data.get("title") or f"第{page_number}页"
+            return (
+                "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"UTF-8\">"
+                f"\n<title>{title}</title>\n</head>\n<body>\n{body_inner}\n</body>\n</html>"
+            )
+
         for attempt in range(max_retries):
             try:
                 logger.info(
@@ -5506,20 +5557,48 @@ class EnhancedPPTService(PPTService):
                 # Use the existing ai_config from imports
 
                 # Generate HTML
+                # 动态温度 & 适度增加 token 预算保证完整输出
+                base_temp = getattr(ai_config, "temperature", 0.7)
+                # 每次重试降低温度 0.15，最低 0.1
+                dyn_temp = max(0.1, round(base_temp - 0.15 * attempt, 2))
+                max_tokens_dynamic = getattr(ai_config, "max_tokens", 2000)
+                if attempt >= 1:
+                    # 第二次及以后尝试稍微提升上限，避免前一次被截断（上限不超过 1.5x）
+                    max_tokens_dynamic = int(min(max_tokens_dynamic * 1.5, max_tokens_dynamic + 1500))
                 response = await self.ai_provider.text_completion(
                     prompt=retry_context,
                     system_prompt=system_prompt,
-                    max_tokens=ai_config.max_tokens,  # Increase token limit for retries
-                    temperature=max(0.1, ai_config.temperature),  # Reduce temperature for retries
+                    max_tokens=max_tokens_dynamic,
+                    temperature=dyn_temp,
                 )
+
+                raw_resp = response.content or ""
+                _record_ai_raw_response(attempt, raw_resp)
+                if len(raw_resp.strip()) < 40:
+                    logger.warning(
+                        f"Raw AI response extremely short ({len(raw_resp.strip())} chars) on attempt {attempt+1}"
+                    )
 
                 # Clean and extract HTML
                 try:
-                    html_content = self._clean_html_response(response.content)
+                    html_content = self._clean_html_response(raw_resp)
+                    # 如果清洗后为空但原始有内容：尝试纯文本包装
+                    if (not html_content or len(html_content.strip()) < 20) and raw_resp.strip():
+                        logger.info(
+                            "Attempting to wrap plain text response into minimal HTML structure as fallback layer"
+                        )
+                        wrapped = _wrap_plain_text_as_html(raw_resp)
+                        if wrapped:
+                            html_content = wrapped
                     if not html_content or len(html_content.strip()) < 50:
                         logger.warning(
                             f"AI returned empty or too short HTML content for slide {page_number}"
                         )
+                        # 在非最后一次重试之前进行指数退避 & 继续
+                        if attempt < max_retries - 1:
+                            backoff = 1 + attempt  # 简单线性/近似退避
+                            logger.info(f"Waiting {backoff}s before retry due to short content...")
+                            await asyncio.sleep(backoff)
                         continue
                 except Exception as e:
                     logger.error(f"Error cleaning HTML response for slide {page_number}: {e}")
@@ -5574,8 +5653,10 @@ class EnhancedPPTService(PPTService):
                         # If parser fix didn't change anything, retry generation
                         if attempt < max_retries - 1:
                             logger.info(
-                                f"🔄 HTML has errors after parser fix, retrying fresh generation for slide {page_number}..."
+                                f"🔄 HTML has errors after parser fix, retrying fresh generation for slide {page_number}... (temperature now {dyn_temp})"
                             )
+                            # 适度等待，减少相同错误概率
+                            await asyncio.sleep(1 + attempt)
                             continue
                         else:
                             # Last attempt failed, use fallback
