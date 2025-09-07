@@ -641,22 +641,29 @@ class BackupService:
         """备份配置文件"""
         config_files = [".env", "pyproject.toml", "uv.toml"]
 
+        redact = os.getenv('ENV_SYNC_REDACT','1') == '1'
+        include_all = os.getenv('ENV_SYNC_INCLUDE_SECRETS','0') == '1'
         for config_file in config_files:
             p = Path(config_file)
-            if p.exists():
-                try:
-                    # .env 需白名单过滤
-                    if p.name == '.env':
+            if not p.exists():
+                continue
+            try:
+                if p.name == '.env':
+                    text = p.read_text(encoding='utf-8', errors='ignore')
+                    if not redact or include_all:
+                        # 不脱敏，直接写入
+                        (backup_path / p.name).write_text(text, encoding='utf-8')
+                    else:
                         try:
-                            filtered = self._filter_env_content(p.read_text(encoding='utf-8', errors='ignore'))
+                            filtered = self._filter_env_content(text)
                             (backup_path / p.name).write_text(filtered, encoding='utf-8')
                         except Exception as _fe:
                             logger.warning(f".env 过滤失败，使用原始文件: {_fe}")
                             shutil.copy2(p, backup_path / p.name)
-                    else:
-                        shutil.copy2(p, backup_path / p.name)
-                except Exception as ce:
-                    logger.warning(f"跳过配置文件 {config_file}: {ce}")
+                else:
+                    shutil.copy2(p, backup_path / p.name)
+            except Exception as ce:
+                logger.warning(f"跳过配置文件 {config_file}: {ce}")
 
         # 若 .env 为空文件，额外生成一个运行时环境快照，避免用户误以为丢失
         try:
@@ -692,6 +699,9 @@ class BackupService:
             wl = [x.strip() for x in raw.split(',') if x.strip()]
             if wl:
                 return wl
+        # 若显式包含所有变量（高风险）
+        if os.getenv('ENV_SYNC_INCLUDE_SECRETS','0') == '1':
+            return ['*__ALL__*']
         return [
             "APP_NAME","APP_BASE_URL","MODE","DEPLOYMENT_MODE","OPENAI_MODEL","OPENAI_BASE_URL",
             "OPENAI_API_TYPE","ENABLE_DATA_SYNC","SYNC_INTERVAL","SYNC_MODE","SYNC_DIRECTIONS",
@@ -701,6 +711,8 @@ class BackupService:
 
     def _filter_env_content(self, text: str) -> str:
         whitelist = set(self._get_env_whitelist())
+        if '*__ALL__*' in whitelist:
+            return text  # 不做任何过滤
         out_lines = []
         for line in text.splitlines():
             stripped = line.strip()
@@ -1529,6 +1541,31 @@ async def list_r2_files(prefix: Optional[str] = None) -> list:
     """
     # use global backup_service instance
     if not backup_service._is_r2_configured():
+        return []
+    try:
+        prefix = prefix or 'backups/'
+        import boto3
+        s3 = boto3.client(
+            's3',
+            endpoint_url=os.getenv('R2_ENDPOINT'),
+            aws_access_key_id=os.getenv('R2_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('R2_SECRET_ACCESS_KEY'),
+        )
+        bucket = os.getenv('R2_BUCKET_NAME')
+        if not bucket:
+            return []
+        paginator = s3.get_paginator('list_objects_v2')
+        result = []
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for obj in page.get('Contents', []) or []:
+                result.append({
+                    'key': obj.get('Key'),
+                    'size': obj.get('Size'),
+                    'last_modified': obj.get('LastModified').isoformat() if obj.get('LastModified') else None
+                })
+        return result
+    except Exception as e:
+        logger.warning(f"列出 R2 文件失败: {e}")
         return []
 
 async def fetch_latest_r2_users_snapshot() -> Optional[list]:
