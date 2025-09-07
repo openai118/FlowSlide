@@ -1271,18 +1271,279 @@ class DataSyncService:
             logger.error(f"❌ Presentations sync external to local failed: {e}")
 
     async def _sync_templates_local_to_external(self):
-        """同步本地模板到外部数据库"""
+        """同步本地模板到外部数据库 (PPTTemplate + GlobalMasterTemplate)"""
+        if not db_manager.external_engine:
+            return
         try:
-            # 实现模板同步逻辑
-            logger.debug("🔄 Templates sync local to external - placeholder")
+            logger.info("🔄 Syncing local templates to external database...")
+            cutoff_time = self.last_sync_time or (datetime.now() - timedelta(hours=24))
+
+            def do_sync():
+                from ..database.database import SessionLocal
+                with SessionLocal() as local_session:
+                    # 项目级模板
+                    changed_templates = local_session.execute(
+                        text("SELECT * FROM ppt_templates WHERE created_at > :cutoff OR updated_at > :cutoff"),
+                        {"cutoff": cutoff_time.timestamp()},
+                    ).fetchall()
+
+                    # 全局模板
+                    changed_global = local_session.execute(
+                        text("SELECT * FROM global_master_templates WHERE created_at > :cutoff OR updated_at > :cutoff"),
+                        {"cutoff": cutoff_time.timestamp()},
+                    ).fetchall()
+
+                    if not changed_templates and not changed_global:
+                        logger.info("📭 No local template changes to sync")
+                        return
+
+                    with db_manager.external_engine.connect() as external_conn:  # type: ignore[union-attr]
+                        # 处理 ppt_templates
+                        for tpl in changed_templates:
+                            existing = external_conn.execute(
+                                text("SELECT id, updated_at, created_at FROM ppt_templates WHERE id = :id"),
+                                {"id": tpl.id},
+                            ).fetchone()
+                            local_ts = max(tpl.created_at, tpl.updated_at or 0)
+                            if existing:
+                                external_ts = max(existing.updated_at or 0, existing.created_at or 0)
+                                if local_ts > external_ts:
+                                    external_conn.execute(
+                                        text(
+                                            """
+                                            UPDATE ppt_templates SET project_id=:project_id, template_type=:template_type, template_name=:template_name, description=:description, html_template=:html_template, applicable_scenarios=:applicable_scenarios, style_config=:style_config, usage_count=:usage_count, updated_at=:updated_at WHERE id=:id
+                                            """
+                                        ),
+                                        {
+                                            "project_id": tpl.project_id,
+                                            "template_type": tpl.template_type,
+                                            "template_name": tpl.template_name,
+                                            "description": tpl.description,
+                                            "html_template": tpl.html_template,
+                                            "applicable_scenarios": tpl.applicable_scenarios,
+                                            "style_config": tpl.style_config,
+                                            "usage_count": tpl.usage_count,
+                                            "updated_at": tpl.updated_at or tpl.created_at,
+                                            "id": tpl.id,
+                                        },
+                                    )
+                            else:
+                                external_conn.execute(
+                                    text(
+                                        """
+                                        INSERT INTO ppt_templates (id, project_id, template_type, template_name, description, html_template, applicable_scenarios, style_config, usage_count, created_at, updated_at)
+                                        VALUES (:id, :project_id, :template_type, :template_name, :description, :html_template, :applicable_scenarios, :style_config, :usage_count, :created_at, :updated_at)
+                                        """
+                                    ),
+                                    {
+                                        "id": tpl.id,
+                                        "project_id": tpl.project_id,
+                                        "template_type": tpl.template_type,
+                                        "template_name": tpl.template_name,
+                                        "description": tpl.description,
+                                        "html_template": tpl.html_template,
+                                        "applicable_scenarios": tpl.applicable_scenarios,
+                                        "style_config": tpl.style_config,
+                                        "usage_count": tpl.usage_count,
+                                        "created_at": tpl.created_at,
+                                        "updated_at": tpl.updated_at or tpl.created_at,
+                                    },
+                                )
+
+                        # 处理 global_master_templates
+                        for g in changed_global:
+                            existing = external_conn.execute(
+                                text("SELECT id, updated_at, created_at FROM global_master_templates WHERE id = :id"),
+                                {"id": g.id},
+                            ).fetchone()
+                            local_ts = max(g.created_at, g.updated_at or 0)
+                            if existing:
+                                external_ts = max(existing.updated_at or 0, existing.created_at or 0)
+                                if local_ts > external_ts:
+                                    external_conn.execute(
+                                        text(
+                                            """
+                                            UPDATE global_master_templates SET template_name=:template_name, description=:description, html_template=:html_template, preview_image=:preview_image, style_config=:style_config, tags=:tags, is_default=:is_default, is_active=:is_active, usage_count=:usage_count, created_by=:created_by, updated_at=:updated_at WHERE id=:id
+                                            """
+                                        ),
+                                        {
+                                            "template_name": g.template_name,
+                                            "description": g.description,
+                                            "html_template": g.html_template,
+                                            "preview_image": g.preview_image,
+                                            "style_config": g.style_config,
+                                            "tags": g.tags,
+                                            "is_default": g.is_default,
+                                            "is_active": g.is_active,
+                                            "usage_count": g.usage_count,
+                                            "created_by": g.created_by,
+                                            "updated_at": g.updated_at or g.created_at,
+                                            "id": g.id,
+                                        },
+                                    )
+                            else:
+                                external_conn.execute(
+                                    text(
+                                        """
+                                        INSERT INTO global_master_templates (id, template_name, description, html_template, preview_image, style_config, tags, is_default, is_active, usage_count, created_by, created_at, updated_at)
+                                        VALUES (:id, :template_name, :description, :html_template, :preview_image, :style_config, :tags, :is_default, :is_active, :usage_count, :created_by, :created_at, :updated_at)
+                                        """
+                                    ),
+                                    {
+                                        "id": g.id,
+                                        "template_name": g.template_name,
+                                        "description": g.description,
+                                        "html_template": g.html_template,
+                                        "preview_image": g.preview_image,
+                                        "style_config": g.style_config,
+                                        "tags": g.tags,
+                                        "is_default": g.is_default,
+                                        "is_active": g.is_active,
+                                        "usage_count": g.usage_count,
+                                        "created_by": g.created_by,
+                                        "created_at": g.created_at,
+                                        "updated_at": g.updated_at or g.created_at,
+                                    },
+                                )
+
+            import asyncio
+            await asyncio.to_thread(do_sync)
+            logger.info("✅ Templates sync local->external completed")
         except Exception as e:
             logger.error(f"❌ Templates sync local to external failed: {e}")
 
     async def _sync_templates_external_to_local(self):
-        """同步外部模板到本地数据库"""
+        """同步外部模板到本地 (双向合并逻辑与项目/用户类似)"""
+        if not db_manager.external_engine:
+            return
         try:
-            # 实现模板同步逻辑
-            logger.debug("🔄 Templates sync external to local - placeholder")
+            logger.info("🔄 Syncing external templates to local database...")
+            cutoff_time = self.last_sync_time or (datetime.now() - timedelta(hours=24))
+
+            def do_sync():
+                from ..database.database import SessionLocal
+                with SessionLocal() as local_session:
+                    with db_manager.external_engine.connect() as external_conn:  # type: ignore[union-attr]
+                        # ppt_templates
+                        ext_templates = external_conn.execute(
+                            text("SELECT * FROM ppt_templates WHERE created_at > :cutoff OR updated_at > :cutoff"),
+                            {"cutoff": cutoff_time.timestamp()},
+                        ).fetchall()
+                        for tpl in ext_templates:
+                            existing = local_session.execute(
+                                text("SELECT id, created_at, updated_at FROM ppt_templates WHERE id = :id"),
+                                {"id": tpl.id},
+                            ).fetchone()
+                            external_ts = max(tpl.updated_at or 0, tpl.created_at or 0)
+                            if existing:
+                                local_ts = max(existing.updated_at or 0, existing.created_at or 0)
+                                if external_ts > local_ts:
+                                    local_session.execute(
+                                        text(
+                                            """
+                                            UPDATE ppt_templates SET project_id=:project_id, template_type=:template_type, template_name=:template_name, description=:description, html_template=:html_template, applicable_scenarios=:applicable_scenarios, style_config=:style_config, usage_count=:usage_count, updated_at=:updated_at WHERE id=:id
+                                            """
+                                        ),
+                                        {
+                                            "project_id": tpl.project_id,
+                                            "template_type": tpl.template_type,
+                                            "template_name": tpl.template_name,
+                                            "description": tpl.description,
+                                            "html_template": tpl.html_template,
+                                            "applicable_scenarios": tpl.applicable_scenarios,
+                                            "style_config": tpl.style_config,
+                                            "usage_count": tpl.usage_count,
+                                            "updated_at": tpl.updated_at or tpl.created_at,
+                                            "id": tpl.id,
+                                        },
+                                    )
+                            else:
+                                local_session.execute(
+                                    text(
+                                        """
+                                        INSERT INTO ppt_templates (id, project_id, template_type, template_name, description, html_template, applicable_scenarios, style_config, usage_count, created_at, updated_at)
+                                        VALUES (:id, :project_id, :template_type, :template_name, :description, :html_template, :applicable_scenarios, :style_config, :usage_count, :created_at, :updated_at)
+                                        """
+                                    ),
+                                    {
+                                        "id": tpl.id,
+                                        "project_id": tpl.project_id,
+                                        "template_type": tpl.template_type,
+                                        "template_name": tpl.template_name,
+                                        "description": tpl.description,
+                                        "html_template": tpl.html_template,
+                                        "applicable_scenarios": tpl.applicable_scenarios,
+                                        "style_config": tpl.style_config,
+                                        "usage_count": tpl.usage_count,
+                                        "created_at": tpl.created_at,
+                                        "updated_at": tpl.updated_at or tpl.created_at,
+                                    },
+                                )
+
+                        # global master templates
+                        ext_global = external_conn.execute(
+                            text("SELECT * FROM global_master_templates WHERE created_at > :cutoff OR updated_at > :cutoff"),
+                            {"cutoff": cutoff_time.timestamp()},
+                        ).fetchall()
+                        for g in ext_global:
+                            existing = local_session.execute(
+                                text("SELECT id, created_at, updated_at FROM global_master_templates WHERE id = :id"),
+                                {"id": g.id},
+                            ).fetchone()
+                            external_ts = max(g.updated_at or 0, g.created_at or 0)
+                            if existing:
+                                local_ts = max(existing.updated_at or 0, existing.created_at or 0)
+                                if external_ts > local_ts:
+                                    local_session.execute(
+                                        text(
+                                            """
+                                            UPDATE global_master_templates SET template_name=:template_name, description=:description, html_template=:html_template, preview_image=:preview_image, style_config=:style_config, tags=:tags, is_default=:is_default, is_active=:is_active, usage_count=:usage_count, created_by=:created_by, updated_at=:updated_at WHERE id=:id
+                                            """
+                                        ),
+                                        {
+                                            "template_name": g.template_name,
+                                            "description": g.description,
+                                            "html_template": g.html_template,
+                                            "preview_image": g.preview_image,
+                                            "style_config": g.style_config,
+                                            "tags": g.tags,
+                                            "is_default": g.is_default,
+                                            "is_active": g.is_active,
+                                            "usage_count": g.usage_count,
+                                            "created_by": g.created_by,
+                                            "updated_at": g.updated_at or g.created_at,
+                                            "id": g.id,
+                                        },
+                                    )
+                            else:
+                                local_session.execute(
+                                    text(
+                                        """
+                                        INSERT INTO global_master_templates (id, template_name, description, html_template, preview_image, style_config, tags, is_default, is_active, usage_count, created_by, created_at, updated_at)
+                                        VALUES (:id, :template_name, :description, :html_template, :preview_image, :style_config, :tags, :is_default, :is_active, :usage_count, :created_by, :created_at, :updated_at)
+                                        """
+                                    ),
+                                    {
+                                        "id": g.id,
+                                        "template_name": g.template_name,
+                                        "description": g.description,
+                                        "html_template": g.html_template,
+                                        "preview_image": g.preview_image,
+                                        "style_config": g.style_config,
+                                        "tags": g.tags,
+                                        "is_default": g.is_default,
+                                        "is_active": g.is_active,
+                                        "usage_count": g.usage_count,
+                                        "created_by": g.created_by,
+                                        "created_at": g.created_at,
+                                        "updated_at": g.updated_at or g.created_at,
+                                    },
+                                )
+                        local_session.commit()
+
+            import asyncio
+            await asyncio.to_thread(do_sync)
+            logger.info("✅ Templates sync external->local completed")
         except Exception as e:
             logger.error(f"❌ Templates sync external to local failed: {e}")
 
@@ -1738,6 +1999,7 @@ class DataSyncService:
             "CREATE TABLE IF NOT EXISTS flowslide_config_files ("
             " name TEXT PRIMARY KEY,"
             " checksum TEXT,"
+            " file_mtime DOUBLE PRECISION,"
             " content BYTEA NOT NULL,"
             " updated_at TIMESTAMP DEFAULT NOW()"
             ")"
@@ -1746,6 +2008,7 @@ class DataSyncService:
             "CREATE TABLE IF NOT EXISTS flowslide_config_files ("
             " name VARCHAR(255) PRIMARY KEY,"
             " checksum VARCHAR(128),"
+            " file_mtime DOUBLE,"
             " content LONGBLOB NOT NULL,"
             " updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
             ")"
@@ -1824,13 +2087,21 @@ class DataSyncService:
             try:
                 assert db_manager.external_engine is not None  # type: ignore[assert-type]
                 with db_manager.external_engine.connect() as conn:  # type: ignore[union-attr]
-                    rows = conn.execute(text("SELECT name, checksum, updated_at FROM flowslide_config_files")).fetchall()
+                    # 尝试增加 file_mtime 列（如果旧版本表无此列）
+                    try:
+                        conn.exec_driver_sql("ALTER TABLE flowslide_config_files ADD COLUMN file_mtime DOUBLE PRECISION")
+                    except Exception:
+                        try:
+                            conn.exec_driver_sql("ALTER TABLE flowslide_config_files ADD COLUMN file_mtime DOUBLE")
+                        except Exception:
+                            pass
+                    rows = conn.execute(text("SELECT name, checksum, file_mtime, updated_at FROM flowslide_config_files")).fetchall()
                     for r in rows:
                         try:
-                            external_map[r.name] = {"checksum": r.checksum, "updated_at": r.updated_at}
+                            external_map[r.name] = {"checksum": r.checksum, "updated_at": r.updated_at, "file_mtime": getattr(r, 'file_mtime', None)}
                         except Exception:
                             d = dict(r)
-                            external_map[d.get("name")] = {"checksum": d.get("checksum"), "updated_at": d.get("updated_at")}
+                            external_map[d.get("name")] = {"checksum": d.get("checksum"), "updated_at": d.get("updated_at"), "file_mtime": d.get("file_mtime")}
             except Exception as e:
                 logger.warning(f"⚠️ Failed to read external config table: {e}")
 
@@ -1839,14 +2110,22 @@ class DataSyncService:
                 checksum = self._calc_file_checksum(f)
                 rel_name = f.as_posix()
                 existing = external_map.get(rel_name)
-                if existing and existing.get("checksum") == checksum:
-                    continue  # 无变更
+                try:
+                    local_mtime = f.stat().st_mtime
+                except Exception:
+                    local_mtime = None
+                # 若外部存在 且 (checksum 相同 或 外部 file_mtime >= 本地 mtime) 则跳过
+                if existing:
+                    ext_checksum = existing.get("checksum")
+                    ext_mtime = existing.get("file_mtime")
+                    if ext_checksum == checksum or (ext_mtime and local_mtime and ext_mtime >= local_mtime):
+                        continue
                 try:
                     content_bytes = f.read_bytes()
                 except Exception as e:
                     logger.warning(f"⚠️ Skip config file {rel_name}, read error: {e}")
                     continue
-                to_upsert.append((rel_name, checksum, content_bytes))
+                to_upsert.append((rel_name, checksum, content_bytes, local_mtime))
 
             if not to_upsert:
                 logger.info("📁 Config sync: no changed config files to upsert")
@@ -1854,17 +2133,17 @@ class DataSyncService:
 
             logger.info(f"📁 Config sync: upserting {len(to_upsert)} config files to external DB")
             with db_manager.external_engine.begin() as conn:
-                for name, checksum, content in to_upsert:
+                for name, checksum, content, file_mtime in to_upsert:
                     try:
                         conn.execute(
                             text(
                                 """
-                                INSERT INTO flowslide_config_files (name, checksum, content, updated_at)
-                                VALUES (:name, :checksum, :content, CURRENT_TIMESTAMP)
-                                ON DUPLICATE KEY UPDATE checksum = :checksum, content = :content, updated_at = CURRENT_TIMESTAMP
+                                INSERT INTO flowslide_config_files (name, checksum, file_mtime, content, updated_at)
+                                VALUES (:name, :checksum, :file_mtime, :content, CURRENT_TIMESTAMP)
+                                ON DUPLICATE KEY UPDATE checksum = :checksum, file_mtime = :file_mtime, content = :content, updated_at = CURRENT_TIMESTAMP
                                 """
                             ),
-                            {"name": name, "checksum": checksum, "content": content},
+                            {"name": name, "checksum": checksum, "content": content, "file_mtime": file_mtime},
                         )
                     except Exception:
                         # PostgreSQL 没有 ON DUPLICATE KEY；尝试使用 UPSERT 语法
@@ -1872,12 +2151,12 @@ class DataSyncService:
                             conn.execute(
                                 text(
                                     """
-                                    INSERT INTO flowslide_config_files (name, checksum, content, updated_at)
-                                    VALUES (:name, :checksum, :content, NOW())
-                                    ON CONFLICT (name) DO UPDATE SET checksum = EXCLUDED.checksum, content = EXCLUDED.content, updated_at = NOW()
+                                    INSERT INTO flowslide_config_files (name, checksum, file_mtime, content, updated_at)
+                                    VALUES (:name, :checksum, :file_mtime, :content, NOW())
+                                    ON CONFLICT (name) DO UPDATE SET checksum = EXCLUDED.checksum, file_mtime = EXCLUDED.file_mtime, content = EXCLUDED.content, updated_at = NOW()
                                     """
                                 ),
-                                {"name": name, "checksum": checksum, "content": content},
+                                {"name": name, "checksum": checksum, "content": content, "file_mtime": file_mtime},
                             )
                         except Exception as e2:
                             logger.warning(f"⚠️ Upsert config file {name} failed: {e2}")
@@ -1893,7 +2172,7 @@ class DataSyncService:
             self._ensure_external_config_table()
             assert db_manager.external_engine is not None  # type: ignore[assert-type]
             with db_manager.external_engine.connect() as conn:  # type: ignore[union-attr]
-                rows = conn.execute(text("SELECT name, checksum, content FROM flowslide_config_files")).fetchall()
+                rows = conn.execute(text("SELECT name, checksum, file_mtime, content FROM flowslide_config_files")).fetchall()
                 if not rows:
                     logger.info("ℹ️ No config files found in external DB")
                     return
@@ -1901,18 +2180,33 @@ class DataSyncService:
                 for r in rows:
                     try:
                         name = r.name if hasattr(r, 'name') else r[0]
-                        content = r.content if hasattr(r, 'content') else r[2]
+                        file_mtime = getattr(r, 'file_mtime', None) if hasattr(r, 'file_mtime') else (r[2] if len(r) > 2 else None)
+                        content = r.content if hasattr(r, 'content') else r[3]
                         target = Path(name)
                         target.parent.mkdir(parents=True, exist_ok=True)
                         existing_bytes = None
                         try:
                             if target.exists():
                                 existing_bytes = target.read_bytes()
+                                # 若外部文件时间戳不比本地新，且校验和一致则跳过
+                                if file_mtime and target.stat().st_mtime >= float(file_mtime):
+                                    # checksum 比较（快速避免重写）
+                                    import hashlib
+                                    if existing_bytes:
+                                        h = hashlib.sha256(existing_bytes).hexdigest()
+                                        if h == getattr(r, 'checksum', None):
+                                            continue
                         except Exception:
                             existing_bytes = None
                         if existing_bytes == content:
                             continue
                         target.write_bytes(content)
+                        # 尝试恢复原始修改时间（不是关键，如失败可忽略）
+                        try:
+                            if file_mtime:
+                                os.utime(target, (file_mtime, file_mtime))
+                        except Exception:
+                            pass
                         restored += 1
                     except Exception as ie:
                         logger.warning(f"⚠️ Fail write config file from external {r}: {ie}")
