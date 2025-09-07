@@ -61,6 +61,29 @@ def reload_services():
         logger.warning(f"PDF to PPTX converter not available during reload: {e}")
         pass  # PDF converter may not be available
 
+    # Force reload image service by clearing its global instance
+    try:
+        from .image.image_service import _global_image_service
+        import logging
+        logger = logging.getLogger(__name__)
+
+        if _global_image_service is not None:
+            logger.info("Clearing global image service instance for reload")
+            # Clear the global instance to force recreation
+            from .image import image_service
+            image_service._global_image_service = None
+
+            # Also clear the class-level singleton instance
+            from .image.image_service import ImageService
+            ImageService._instance = None
+            ImageService._class_initialized = False
+
+            logger.info("Image service instance and singleton cleared, will be recreated on next access")
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to clear image service instance: {e}")
+
 
 # Backward compatibility - create module-level variables that get updated
 def _update_module_vars():
@@ -68,14 +91,19 @@ def _update_module_vars():
     import sys
 
     current_module = sys.modules[__name__]
-    current_module.ppt_service = get_ppt_service()
-    current_module.project_manager = get_project_manager()
+    try:
+        setattr(current_module, 'ppt_service', get_ppt_service())
+        setattr(current_module, 'project_manager', get_project_manager())
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to update module variables: {e}")
 
 
 # Initialize module variables
 _update_module_vars()
 
-# Override reload_services to also update module variables
+# Store original reload_services function
 _original_reload_services = reload_services
 
 
@@ -99,6 +127,4 @@ __all__ = [
     "get_ppt_service",
     "get_project_manager",
     "reload_services",
-    "ppt_service",
-    "project_manager",
 ]

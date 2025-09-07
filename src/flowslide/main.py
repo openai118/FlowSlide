@@ -35,6 +35,20 @@ from .web import router as web_router
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# 检查是否是从重启中启动
+restart_marker = os.path.join(os.getcwd(), "temp", ".restart_marker")
+if os.path.exists(restart_marker):
+    try:
+        with open(restart_marker, "r") as f:
+            restart_time = f.read().strip()
+        os.remove(restart_marker)
+        logger.info(f"🔄 检测到应用重启 (重启时间: {restart_time})")
+        logger.info("🚀 开始完全重新初始化应用...")
+    except Exception as e:
+        logger.warning(f"读取重启标记失败: {e}")
+else:
+    logger.info("🚀 启动 FlowSlide 应用程序...")
+
 
 # Protocol for metrics collector to satisfy type checkers
 class MetricsProtocol(Protocol):
@@ -117,12 +131,16 @@ async def add_security_headers(request, call_next):
 async def startup_event():
     """Initialize database on startup"""
     try:
+        logger.info("🚀 Starting application initialization...")
+
         from .database.database import initialize_database, update_session_makers
 
+        logger.info("📊 Initializing database manager...")
         # 初始化数据库管理器
         db_mgr = initialize_database()
         logger.info(f"Database manager initialized: {db_mgr.database_type}")
 
+        logger.info("🔄 Updating session makers...")
         # 更新session makers
         update_session_makers()
 
@@ -135,6 +153,7 @@ async def startup_event():
             if parsed.scheme == "sqlite":
                 db_file_path = parsed.path.lstrip("/")
                 os.makedirs(os.path.dirname(db_file_path), exist_ok=True)
+                logger.info(f"✅ Data directory ready: {os.path.dirname(db_file_path)}")
 
         # 检查是否是首次运行
         db_file_path = "./data/flowslide.db" if db_mgr.database_type == "sqlite" else None

@@ -81,63 +81,74 @@ class DatabaseManager:
         if not self.external_url:
             raise ValueError("External database URL not configured")
 
-        # 解析数据库URL以检测是否是Supabase
-        from urllib.parse import urlparse
-        parsed = urlparse(self.external_url)
+        try:
+            # 解析数据库URL以检测是否是Supabase
+            from urllib.parse import urlparse
+            parsed = urlparse(self.external_url)
 
-        # 检查是否是Supabase（通过URL特征识别）
-        is_supabase = ('supabase' in parsed.hostname if parsed.hostname else False) or ('pooler.supabase.com' in self.external_url)
+            # 检查是否是Supabase（通过URL特征识别）
+            is_supabase = ('supabase' in parsed.hostname if parsed.hostname else False) or ('pooler.supabase.com' in self.external_url)
 
-        if is_supabase:
-            # Supabase使用pgbouncer，需要特殊配置
-            statement_cache_size = int(os.getenv("PG_STATEMENT_CACHE_SIZE", "0"))
-            self.primary_engine = create_engine(
-                self.external_url,
-                pool_size=3,  # 较小的连接池大小
-                max_overflow=2,  # 允许少量溢出
-                pool_pre_ping=False,  # 禁用连接池ping以避免prepared statements
-                pool_recycle=300,  # 更频繁的连接回收
-                pool_timeout=60,  # 增加超时时间
-                echo=False
-            )
-            self.primary_async_engine = create_async_engine(
-                self.external_async_url,
-                pool_size=3,
-                max_overflow=2,
-                pool_pre_ping=False,
-                pool_recycle=300,
-                pool_timeout=60,
-                echo=False,
-                connect_args={"statement_cache_size": statement_cache_size}  # 禁用prepared statements以兼容pgbouncer
-            )
-            logger.info("🎯 Detected Supabase - using pgbouncer-compatible configuration")
-        else:
-            # 普通PostgreSQL配置
-            statement_cache_size = int(os.getenv("PG_STATEMENT_CACHE_SIZE", "0"))
-            self.primary_engine = create_engine(
-                self.external_url,
-                pool_size=3,
-                max_overflow=2,
-                pool_pre_ping=False,
-                pool_recycle=3600,
-                pool_timeout=60,
-                echo=False,
-            )
-            self.primary_async_engine = create_async_engine(
-                self.external_async_url,
-                pool_size=3,
-                max_overflow=2,
-                pool_pre_ping=False,
-                pool_recycle=3600,
-                pool_timeout=60,
-                echo=False,
-                connect_args={"statement_cache_size": statement_cache_size}  # 兼容pgbouncer
-            )
+            if is_supabase:
+                # Supabase使用pgbouncer，需要特殊配置
+                statement_cache_size = int(os.getenv("PG_STATEMENT_CACHE_SIZE", "0"))
+                self.primary_engine = create_engine(
+                    self.external_url,
+                    pool_size=3,  # 较小的连接池大小
+                    max_overflow=2,  # 允许少量溢出
+                    pool_pre_ping=False,  # 禁用连接池ping以避免prepared statements
+                    pool_recycle=300,  # 更频繁的连接回收
+                    pool_timeout=60,  # 增加超时时间
+                    echo=False
+                )
+                self.primary_async_engine = create_async_engine(
+                    self.external_async_url,
+                    pool_size=3,
+                    max_overflow=2,
+                    pool_pre_ping=False,
+                    pool_recycle=300,
+                    pool_timeout=60,
+                    echo=False,
+                    connect_args={"statement_cache_size": statement_cache_size}  # 禁用prepared statements以兼容pgbouncer
+                )
+                logger.info("🎯 Detected Supabase - using pgbouncer-compatible configuration")
+            else:
+                # 普通PostgreSQL配置
+                statement_cache_size = int(os.getenv("PG_STATEMENT_CACHE_SIZE", "0"))
+                self.primary_engine = create_engine(
+                    self.external_url,
+                    pool_size=3,
+                    max_overflow=2,
+                    pool_pre_ping=False,
+                    pool_recycle=3600,
+                    pool_timeout=60,
+                    echo=False,
+                )
+                self.primary_async_engine = create_async_engine(
+                    self.external_async_url,
+                    pool_size=3,
+                    max_overflow=2,
+                    pool_pre_ping=False,
+                    pool_recycle=3600,
+                    pool_timeout=60,
+                    echo=False,
+                    connect_args={"statement_cache_size": statement_cache_size}  # 兼容pgbouncer
+                )
 
-        self.engine = self.primary_engine  # 设置向后兼容的别名
-        self.external_engine = self.primary_engine  # 设置外部引擎引用
-        self.database_type = "postgresql" if "postgresql" in self.external_url else "external"
-        logger.info(f"✅ External database ready: {self.database_type}")
+            # 测试数据库连接
+            logger.info("🔍 Testing database connection...")
+            with self.primary_engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            logger.info("✅ Database connection test successful")
+
+            self.engine = self.primary_engine  # 设置向后兼容的别名
+            self.external_engine = self.primary_engine  # 设置外部引擎引用
+            self.database_type = "postgresql" if "postgresql" in self.external_url else "external"
+            logger.info(f"✅ External database ready: {self.database_type}")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to create external database engine: {e}")
+            raise
 
     def _create_backup_engine(self):
         """创建备份引擎（用于数据同步）"""
@@ -449,10 +460,15 @@ async def get_auth_async_db():
                     yield session
             else:
                 raise RuntimeError("Async database session not available")
+
+
+def update_session_makers():
+    """Update session makers after database initialization"""
+    global SessionLocal, AsyncSessionLocal
+
+    if db_manager.primary_engine and db_manager.primary_async_engine:
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=db_manager.primary_engine)
+        AsyncSessionLocal = async_sessionmaker(db_manager.primary_async_engine, class_=AsyncSession, expire_on_commit=False)
+        logger.info("✅ Database session makers updated")
     else:
-        # Default to local
-        if AsyncSessionLocal:
-            async with AsyncSessionLocal() as session:
-                yield session
-        else:
-            raise RuntimeError("Async database session not available")
+        logger.warning("⚠️ Database engines not available, session makers not updated")

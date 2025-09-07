@@ -43,7 +43,7 @@ def main():
 
     # Configuration
     config = {
-        "app": "flowslide.main:app",
+        "app": "src.flowslide.main:app",
         "host": host,
         "port": port,
         "reload": reload,

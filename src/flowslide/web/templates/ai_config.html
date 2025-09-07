@@ -741,6 +741,12 @@
             <button onclick="saveAppConfig()" class="btn btn-success" style="margin-right: 10px;">
                 💾 保存应用配置
             </button>
+            <button onclick="restartApplication()" class="btn btn-warning" style="margin-right: 10px;">
+                🔄 重启应用服务
+            </button>
+            <div id="restart-status" style="margin-top: 10px; display: none;">
+                <span id="restart-message" style="color: #666;"></span>
+            </div>
         </div>
     </div>
 </div>
@@ -4611,6 +4617,63 @@ async function saveAppConfig() {
         }
     } catch (error) {
         showNotification('保存失败: ' + error.message, 'error');
+    }
+}
+
+// 重启应用程序服务
+async function restartApplication() {
+    const restartBtn = document.querySelector('button[onclick="restartApplication()"]');
+    const restartStatus = document.getElementById('restart-status');
+    const restartMessage = document.getElementById('restart-message');
+
+    if (!restartBtn || !restartStatus || !restartMessage) {
+        showNotification('重启功能初始化失败', 'error');
+        return;
+    }
+
+    // 显示重启状态
+    restartStatus.style.display = 'block';
+    restartMessage.textContent = '正在重启应用程序服务...';
+    restartMessage.style.color = '#f39c12';
+
+    // 禁用重启按钮
+    restartBtn.disabled = true;
+    restartBtn.textContent = '🔄 重启中...';
+
+    try {
+        const response = await fetch('/api/system/restart', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                restartMessage.textContent = result.message;
+                restartMessage.style.color = '#27ae60';
+
+                // 等待几秒后自动刷新页面
+                setTimeout(() => {
+                    window.location.reload();
+                }, 3000);
+
+                showNotification('应用程序重启已启动，页面将在3秒后自动刷新', 'success');
+            } else {
+                throw new Error(result.message || '重启失败');
+            }
+        } else {
+            throw new Error('重启请求失败');
+        }
+    } catch (error) {
+        restartMessage.textContent = '重启失败: ' + error.message;
+        restartMessage.style.color = '#e74c3c';
+        showNotification('重启失败: ' + error.message, 'error');
+    } finally {
+        // 重新启用重启按钮
+        restartBtn.disabled = false;
+        restartBtn.textContent = '🔄 重启应用服务';
     }
 }
 

@@ -6,9 +6,10 @@
 import os
 import psutil
 import logging
+import asyncio
 from datetime import datetime
 from typing import Dict, Any
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 
 from ..database import db_manager
 from ..services.backup_service import backup_service
@@ -529,3 +530,65 @@ async def clear_auto_detection_cache():
             "success": False,
             "message": f"清除自动检测缓存失败: {str(e)}"
         }
+
+
+@router.post("/restart")
+async def restart_application(background_tasks: BackgroundTasks):
+    """重启应用程序服务"""
+    try:
+        logger.info("🔄 正在重启应用程序服务...")
+
+        # 记录重启请求
+        import time
+        restart_time = datetime.now().isoformat()
+
+        # 在后台执行重启操作，避免阻塞响应
+        async def perform_restart():
+            try:
+                # 等待一小段时间，让API响应返回给客户端
+                await asyncio.sleep(2)
+
+                # 重新加载服务实例
+                from ..services.service_instances import reload_services
+                reload_services()
+
+                # 重新加载环境变量
+                from dotenv import load_dotenv
+                load_dotenv(override=True)
+
+                logger.info("✅ 应用程序服务重启完成")
+
+            except Exception as e:
+                logger.error(f"❌ 应用程序重启失败: {e}")
+
+        # 添加后台任务
+        background_tasks.add_task(perform_restart)
+
+        return {
+            "success": True,
+            "message": "应用程序重启已启动，请等待几秒钟后刷新页面确认重启结果",
+            "restart_time": restart_time,
+            "status": "restarting"
+        }
+
+    except Exception as e:
+        logger.error(f"❌ 重启请求处理失败: {e}")
+        raise HTTPException(status_code=500, detail=f"重启请求处理失败: {str(e)}")
+
+
+@router.get("/restart-status")
+async def get_restart_status():
+    """获取重启状态"""
+    try:
+        # 这里可以添加更复杂的重启状态检查逻辑
+        # 目前简单返回成功状态
+        return {
+            "success": True,
+            "status": "completed",
+            "message": "服务运行正常",
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"❌ 获取重启状态失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取重启状态失败: {str(e)}")
