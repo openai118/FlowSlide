@@ -346,21 +346,12 @@ async def init_db():
 
             db = SessionLocal()
             try:
-                # Determine active deployment mode: prefer ACTIVE_DEPLOYMENT_MODE if set and not 'none'
+                # 统一通过 mode_manager 获取当前模式（支持 DEPLOYMENT_PINNED_MODE + 自动检测）
                 from ..core.deployment_mode_manager import mode_manager
-                active_env = os.getenv("ACTIVE_DEPLOYMENT_MODE")
-                if active_env and active_env.strip().lower() != 'none':
+                try:
+                    current_mode = mode_manager.current_mode or mode_manager.detect_current_mode()
+                except Exception:
                     current_mode = None
-                    try:
-                        current_mode = mode_manager.current_mode
-                    except Exception:
-                        current_mode = None
-                else:
-                    # Query mode manager (this will perform auto-detection if needed)
-                    try:
-                        current_mode = mode_manager.current_mode or mode_manager.detect_current_mode()
-                    except Exception:
-                        current_mode = None
 
                 # If current active mode is local-only (or explicitly set to local), create local admin
                 mode_name = current_mode.value if current_mode else 'local_only'

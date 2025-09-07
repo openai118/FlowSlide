@@ -62,11 +62,13 @@ class BackupService:
         """创建备份
 
         Args:
-            backup_type: 备份类型 (full, db_only, config_only)
+            backup_type: 备份类型 (full, db_only, config_only, media_only, templates_only, reports_only, scripts_only, light)
 
         Returns:
             备份文件路径
         """
+        # 扩展支持轻量数据同步备份：仅包含 users / projects / ppt_templates / global_master_templates 以及配置文件 JSON 快照
+        # 该轻量包不复制数据库文件和uploads，便于快速在另一实例进行部分合并恢复
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_name = f"flowslide_backup_{backup_type}_{timestamp}"
         backup_path = self.backup_dir / backup_name
@@ -94,8 +96,12 @@ class BackupService:
             if backup_type in ["full", "scripts_only"]:
                 await self._backup_scripts(backup_path)
 
-            # 压缩备份
-            archive_path = await self._compress_backup(backup_path)
+            # 特殊：light 走定制JSON打包逻辑（忽略上面可能创建的空目录内容）
+            if backup_type == "light":
+                archive_path = await self._create_light_backup_archive(backup_path)
+            else:
+                # 压缩备份
+                archive_path = await self._compress_backup(backup_path)
 
             # 上传到R2（如果配置了且未禁用）
             if upload_to_r2 and self._is_r2_configured():
@@ -116,6 +122,265 @@ class BackupService:
             if self.webhook_url:
                 await self._send_notification(backup_name, "failed", str(e))
             raise
+
+    async def create_light_ephemeral_archive(self) -> Path:
+        """创建不落地(backups目录)的轻量备份压缩包, 仅返回临时 zip 路径。
+
+        用于“同步到R2”按钮：生成后直接上传并删除，不计入本地备份列表。
+        """
+        from tempfile import TemporaryDirectory
+        import json, sqlite3, zipfile
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        archive_name = f"flowslide_backup_light_{ts}.zip"
+        tmp_dir_ctx = TemporaryDirectory()
+        base = Path(tmp_dir_ctx.name) / "light_build"
+        data_dir = base / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+
+        db_file = Path("./data/flowslide.db")
+        if db_file.exists():
+            try:
+                conn = sqlite3.connect(str(db_file))
+                conn.row_factory = sqlite3.Row
+                cur = conn.cursor()
+                def dump(q, name):
+                    try:
+                        cur.execute(q)
+                        rows = [dict(r) for r in cur.fetchall()]
+                        (data_dir / name).write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding='utf-8')
+                    except Exception as ie:
+                        logger.warning(f"light ephemeral dump {name} failed: {ie}")
+                dump("SELECT id, username, email, is_active, is_admin, created_at, updated_at, last_login, password_hash FROM users", "users.json")
+                dump("SELECT id, project_id, title, scenario, topic, requirements, status, owner_id, outline, slides_html, slides_data, confirmed_requirements, project_metadata, version, created_at, updated_at FROM projects", "projects.json")
+                dump("SELECT id, project_id, template_type, template_name, description, html_template, applicable_scenarios, style_config, usage_count, created_at, updated_at FROM ppt_templates", "ppt_templates.json")
+                dump("SELECT id, template_name, description, html_template, preview_image, style_config, tags, is_default, is_active, usage_count, created_by, created_at, updated_at FROM global_master_templates", "global_master_templates.json")
+            except Exception as e:
+                logger.warning(f"⚠️ light ephemeral read db failed: {e}")
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        else:
+            logger.warning("⚠️ flowslide.db 不存在，light 临时包不含数据表")
+
+        # 配置文件简要收集
+        config_payload = {"root_files": {}, "src_config": {}}
+        for name in [".env", "pyproject.toml", "uv.toml"]:
+            p = Path(name)
+            if p.exists():
+                try:
+                    txt = p.read_text(encoding='utf-8', errors='ignore')
+                    if name == '.env':
+                        try:
+                            txt = self._filter_env_content(txt)
+                        except Exception as _fe:
+                            logger.warning(f"轻量临时包 .env 过滤失败: {_fe}")
+                    config_payload["root_files"][name] = txt
+                except Exception:
+                    pass
+        cfg_dir = Path("./src/config")
+        if cfg_dir.exists():
+            for fp in cfg_dir.rglob('*'):
+                if fp.is_file() and fp.suffix.lower() in ('.json', '.yaml', '.yml', '.toml'):
+                    rel = str(fp.relative_to(cfg_dir))
+                    try:
+                        config_payload["src_config"][rel] = fp.read_text(encoding='utf-8', errors='ignore')
+                    except Exception:
+                        pass
+        (data_dir / 'config_files.json').write_text(json.dumps(config_payload, ensure_ascii=False, indent=2), encoding='utf-8')
+
+        manifest = {
+            "type": "light",
+            "schema_version": 1,
+            "generated_at": datetime.now().isoformat(),
+            "description": "Lightweight selective dataset (users/projects/templates/config)",
+            "tables": ["users", "projects", "ppt_templates", "global_master_templates"],
+        }
+        (base / 'light_manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
+
+        zip_path = Path(tmp_dir_ctx.name) / archive_name
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for p in base.rglob('*'):
+                if p.is_file():
+                    zf.write(p, p.relative_to(base.parent))
+        # 返回包装对象：保留 TemporaryDirectory ctx 引用在 path 属性中以防提前清理
+        # 简单方式：附加属性供外部保持引用
+        zip_path._tmp_dir_ctx = tmp_dir_ctx  # type: ignore[attr-defined]
+        logger.info(f"🪶 Created ephemeral light archive: {zip_path}")
+        return zip_path
+
+    async def upload_light_ephemeral(self, archive_path: Path) -> Dict[str, Any]:
+        """上传 light 临时包到 R2，只保留 latest 与 backup 两个对象。"""
+        if not self._is_r2_configured():
+            raise Exception("R2未配置")
+        from botocore.config import Config
+        cfg = Config(region_name='auto', retries={'max_attempts':3,'mode':'standard'})
+        s3 = boto3.client(
+            's3',
+            aws_access_key_id=self.r2_config['access_key'],
+            aws_secret_access_key=self.r2_config['secret_key'],
+            endpoint_url=self.r2_config['endpoint'],
+            config=cfg
+        )
+        bucket = self.r2_config['bucket']
+        prefix = 'backups/light/'
+        latest_key = prefix + 'flowslide_light_latest.zip'
+        backup_key = prefix + 'flowslide_light_backup.zip'
+
+        async def _exists(k: str) -> bool:
+            try:
+                await asyncio.to_thread(s3.head_object, Bucket=bucket, Key=k)
+                return True
+            except Exception:
+                return False
+
+        # 删除旧 backup
+        try:
+            await asyncio.to_thread(s3.delete_object, Bucket=bucket, Key=backup_key)
+        except Exception:
+            pass
+
+        # latest -> backup
+        if await _exists(latest_key):
+            try:
+                await asyncio.to_thread(
+                    s3.copy_object,
+                    Bucket=bucket,
+                    CopySource={'Bucket': bucket, 'Key': latest_key},
+                    Key=backup_key
+                )
+                await asyncio.to_thread(s3.delete_object, Bucket=bucket, Key=latest_key)
+            except Exception as e:
+                logger.warning(f"复制 latest->backup 失败: {e}")
+
+        # 上传新 latest
+        await asyncio.to_thread(s3.upload_file, str(archive_path), bucket, latest_key)
+
+        # 清理其它同前缀对象
+        try:
+            resp = await asyncio.to_thread(s3.list_objects_v2, Bucket=bucket, Prefix=prefix)
+            allowed = {latest_key, backup_key}
+            for obj in resp.get('Contents', []) if resp else []:
+                k = obj.get('Key')
+                if k and k not in allowed:
+                    try:
+                        await asyncio.to_thread(s3.delete_object, Bucket=bucket, Key=k)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        info = {
+            'filename': 'flowslide_light_latest.zip',
+            'size': archive_path.stat().st_size if archive_path.exists() else None,
+            'timestamp': datetime.now().isoformat(),
+            'r2_key_latest': latest_key,
+            'r2_key_backup': backup_key,
+            'success': True
+        }
+        logger.info("✅ Light archive uploaded with rotation (latest + backup kept)")
+        return info
+
+    async def _create_light_backup_archive(self, backup_path: Path) -> Path:
+        """创建轻量级备份压缩包 (仅结构化业务数据 JSON)。
+
+        内容结构：
+        - light_manifest.json : 元数据与版本
+        - data/users.json
+        - data/projects.json
+        - data/ppt_templates.json
+        - data/global_master_templates.json
+        - data/config_files.json  (如果外部同步表存在并有内容 / 或本地 src/config & 根部配置文件)
+        
+        注意：不包含 uploads / research_reports / 脚本 / 整个数据库文件，以便用于快速“合并式”恢复或迁移。
+        """
+        import json, sqlite3, zipfile
+        data_dir = backup_path / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+
+        # 读取本地 SQLite 数据库 (如果存在)。若未来需要支持直接查询外部DB，可扩展为根据配置选择来源。
+        db_file = Path("./data/flowslide.db")
+        if not db_file.exists():
+            logger.warning("⚠️ 本地 flowslide.db 不存在，light 备份将只包含配置文件")
+        else:
+            try:
+                conn = sqlite3.connect(str(db_file))
+                conn.row_factory = sqlite3.Row
+                cur = conn.cursor()
+                def dump_table(query: str, out_name: str):
+                    cur.execute(query)
+                    rows = [dict(r) for r in cur.fetchall()]
+                    with open(data_dir / out_name, 'w', encoding='utf-8') as f:
+                        json.dump(rows, f, ensure_ascii=False, indent=2)
+                    logger.info(f"🗂️ light backup wrote {out_name} ({len(rows)} rows)")
+
+                # users (最小字段集合即可，保持列名一致以便未来合并，排除密码hash? -> 保留hash 才能无缝登陆)
+                dump_table("SELECT id, username, email, is_active, is_admin, created_at, updated_at, last_login, password_hash FROM users", "users.json")
+                # projects (核心内容: project_id 及关键字段，slides_html/slides_data 保留)
+                dump_table("SELECT id, project_id, title, scenario, topic, requirements, status, owner_id, outline, slides_html, slides_data, confirmed_requirements, project_metadata, version, created_at, updated_at FROM projects", "projects.json")
+                # ppt_templates
+                dump_table("SELECT id, project_id, template_type, template_name, description, html_template, applicable_scenarios, style_config, usage_count, created_at, updated_at FROM ppt_templates", "ppt_templates.json")
+                # global_master_templates
+                dump_table("SELECT id, template_name, description, html_template, preview_image, style_config, tags, is_default, is_active, usage_count, created_by, created_at, updated_at FROM global_master_templates", "global_master_templates.json")
+            except Exception as e:
+                logger.warning(f"⚠️ 读取 SQLite 生成 light 数据失败: {e}")
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+        # 配置文件收集 (本地文件)。简化处理：打包 src/config 下的 json/yaml 以及根目录 *.toml / .env
+        config_payload = {
+            "root_files": {},
+            "src_config": {},
+        }
+        try:
+            # 根目录
+            for name in [".env", "pyproject.toml", "uv.toml"]:
+                p = Path(name)
+                if p.exists():
+                    try:
+                        config_payload["root_files"][name] = p.read_text(encoding='utf-8', errors='ignore')
+                    except Exception:
+                        pass
+            # src/config
+            cfg_dir = Path("./src/config")
+            if cfg_dir.exists():
+                for fp in cfg_dir.rglob('*'):
+                    if fp.is_file() and fp.suffix.lower() in ('.json', '.yaml', '.yml', '.toml'):
+                        rel = str(fp.relative_to(cfg_dir))
+                        try:
+                            config_payload["src_config"][rel] = fp.read_text(encoding='utf-8', errors='ignore')
+                        except Exception:
+                            pass
+        except Exception as e:
+            logger.warning(f"⚠️ 收集配置文件失败: {e}")
+
+        with open(data_dir / 'config_files.json', 'w', encoding='utf-8') as f:
+            json.dump(config_payload, f, ensure_ascii=False, indent=2)
+
+        manifest = {
+            "type": "light",
+            "schema_version": 1,
+            "generated_at": datetime.now().isoformat(),
+            "description": "Lightweight selective dataset (users/projects/templates/config)",
+            "tables": ["users", "projects", "ppt_templates", "global_master_templates"],
+        }
+        with open(backup_path / 'light_manifest.json', 'w', encoding='utf-8') as mf:
+            json.dump(manifest, mf, ensure_ascii=False, indent=2)
+
+        # 生成 zip: 只打包 light_manifest.json 与 data 目录
+        archive_path = backup_path.with_suffix('.zip')
+        import zipfile
+        with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for path in backup_path.rglob('*'):
+                if path.is_file():
+                    zf.write(path, path.relative_to(backup_path.parent))
+        shutil.rmtree(backup_path)
+        logger.info(f"🗜️ Light backup compressed: {archive_path}")
+        return archive_path
 
     async def create_external_sql_backup(self) -> str:
         """仅导出外部数据库的 SQL（不上传到 R2）。
@@ -377,8 +642,39 @@ class BackupService:
         config_files = [".env", "pyproject.toml", "uv.toml"]
 
         for config_file in config_files:
-            if Path(config_file).exists():
-                shutil.copy2(config_file, backup_path / config_file)
+            p = Path(config_file)
+            if p.exists():
+                try:
+                    # .env 需白名单过滤
+                    if p.name == '.env':
+                        try:
+                            filtered = self._filter_env_content(p.read_text(encoding='utf-8', errors='ignore'))
+                            (backup_path / p.name).write_text(filtered, encoding='utf-8')
+                        except Exception as _fe:
+                            logger.warning(f".env 过滤失败，使用原始文件: {_fe}")
+                            shutil.copy2(p, backup_path / p.name)
+                    else:
+                        shutil.copy2(p, backup_path / p.name)
+                except Exception as ce:
+                    logger.warning(f"跳过配置文件 {config_file}: {ce}")
+
+        # 若 .env 为空文件，额外生成一个运行时环境快照，避免用户误以为丢失
+        try:
+            env_file = backup_path / '.env'
+            if (not env_file.exists()) or env_file.stat().st_size == 0:
+                snapshot_path = backup_path / 'env_runtime_snapshot.txt'
+                import os as _os
+                lines = []
+                for k,v in sorted(_os.environ.items()):
+                    if any(s in k for s in ("KEY","SECRET","TOKEN","PASSWORD")):
+                        # 只保留 key 名称，不暴露敏感值
+                        lines.append(f"{k}=***redacted***")
+                    else:
+                        lines.append(f"{k}={v}")
+                snapshot_path.write_text("\n".join(lines), encoding='utf-8')
+                logger.info("🧾 Generated env_runtime_snapshot.txt (sanitized)")
+        except Exception as se:
+            logger.warning(f"生成环境快照失败: {se}")
 
         logger.info("⚙️ Config backup completed")
 
@@ -388,6 +684,39 @@ class BackupService:
             dest = backup_path / "src_config"
             shutil.copytree(cfg_dir, dest, dirs_exist_ok=True)
             logger.info("📁 src/config included in config backup")
+
+    # ================== 环境变量白名单 & 过滤工具 ==================
+    def _get_env_whitelist(self) -> list:
+        raw = os.getenv('ENV_SYNC_WHITELIST')
+        if raw:
+            wl = [x.strip() for x in raw.split(',') if x.strip()]
+            if wl:
+                return wl
+        return [
+            "APP_NAME","APP_BASE_URL","MODE","DEPLOYMENT_MODE","OPENAI_MODEL","OPENAI_BASE_URL",
+            "OPENAI_API_TYPE","ENABLE_DATA_SYNC","SYNC_INTERVAL","SYNC_MODE","SYNC_DIRECTIONS",
+            "SYNC_AUTHORITATIVE","BACKUP_RETENTION_DAYS","R2_BUCKET_NAME","ENABLE_MONITORING",
+            "LOG_LEVEL","TZ","LANG","UI_DEFAULT_THEME"
+        ]
+
+    def _filter_env_content(self, text: str) -> str:
+        whitelist = set(self._get_env_whitelist())
+        out_lines = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                out_lines.append(line)
+                continue
+            if '=' not in line:
+                out_lines.append(line)
+                continue
+            key, val = line.split('=',1)
+            k = key.strip()
+            if k in whitelist:
+                out_lines.append(f"{k}={val}")
+            else:
+                out_lines.append(f"{k}=***redacted***")
+        return '\n'.join(out_lines)
 
     async def _backup_uploads(self, backup_path: Path):
         """备份上传文件"""
@@ -612,35 +941,51 @@ class BackupService:
             restore_temp_dir = self.backup_dir / f"restore_temp_{int(time.time())}"
             restore_temp_dir.mkdir(exist_ok=True)
 
-            def extract_and_restore():
+            def extract_and_restore(backup_name_inner: str = backup_name):
                 import zipfile
                 import shutil
                 from pathlib import Path
 
                 try:
                     # 解压备份文件
-                    logger.info(f"📦 Extracting backup: {backup_name}")
+                    logger.info(f"📦 Extracting backup: {backup_name_inner}")
                     with zipfile.ZipFile(str(backup_path), 'r') as zip_ref:
                         zip_ref.extractall(str(restore_temp_dir))
 
-                    # 查找数据库文件（递归查找）
-                    db_files = list(restore_temp_dir.rglob("*.db"))
-                    if not db_files:
-                        raise Exception("备份文件中没有找到数据库文件")
+                    # 检测是否为轻量备份（存在 light_manifest.json）
+                    light_manifest = list(restore_temp_dir.rglob("light_manifest.json"))
+                    is_light = bool(light_manifest)
+                    if is_light:
+                        logger.info("🪶 Detected light backup manifest; executing merge restore logic (不会整体替换数据库文件)")
+                    
+                    db_files = list(restore_temp_dir.rglob("*.db")) if not is_light else []
+                    if not is_light:
+                        if not db_files:
+                            raise Exception("备份文件中没有找到数据库文件")
+                        db_file = db_files[0]
+                        logger.info(f"🗄️ Found database file: {db_file.name} at {db_file}")
+                    else:
+                        db_file = None
 
-                    db_file = db_files[0]
-                    logger.info(f"🗄️ Found database file: {db_file.name} at {db_file}")
-
-                    # 备份当前数据库
                     current_db_path = Path("./data/flowslide.db")
-                    if current_db_path.exists():
-                        backup_current = current_db_path.with_suffix('.db.backup')
-                        shutil.copy2(str(current_db_path), str(backup_current))
-                        logger.info(f"💾 Backed up current database to: {backup_current}")
-
-                    # 恢复数据库文件
-                    shutil.copy2(str(db_file), str(current_db_path))
-                    logger.info(f"✅ Database restored from: {db_file.name}")
+                    if not is_light:
+                        # 备份当前数据库
+                        if current_db_path.exists():
+                            backup_current = current_db_path.with_suffix('.db.backup')
+                            shutil.copy2(str(current_db_path), str(backup_current))
+                            logger.info(f"💾 Backed up current database to: {backup_current}")
+                        # 恢复数据库文件
+                        if db_file is not None:
+                            shutil.copy2(str(db_file), str(current_db_path))
+                            try:
+                                db_display = getattr(db_file, 'name', str(db_file))
+                            except Exception:
+                                db_display = str(db_file)
+                            logger.info(f"✅ Database restored from: {db_display}")
+                    else:
+                        # 轻量合并恢复
+                        self._merge_light_backup_into_sqlite(restore_temp_dir, current_db_path)
+                        logger.info("✅ Light backup merged into existing database")
 
                     # 恢复上传文件（如果存在）
                     uploads_dirs = list(restore_temp_dir.rglob("uploads"))
@@ -660,6 +1005,59 @@ class BackupService:
                             target_config = Path(".") / config_file.name
                             shutil.copy2(str(config_file), str(target_config))
                             logger.info(f"⚙️ Config file restored: {config_file.name}")
+
+                    # 新增: 恢复 .env （若备份中存在）
+                    try:
+                        env_candidates = list(restore_temp_dir.rglob('.env'))
+                        if env_candidates:
+                            env_src = env_candidates[0]
+                            env_target = Path('.env')
+                            if env_target.exists():
+                                # 先做备份
+                                backup_name = f".env.before_restore_{int(time.time())}"
+                                shutil.copy2(str(env_target), backup_name)
+                                logger.info(f"🛡️ Existing .env backed up as {backup_name}")
+                            # 若备份中的 .env 含有 redacted 说明是白名单过滤版本 -> 合并策略
+                            try:
+                                new_text = env_src.read_text(encoding='utf-8', errors='ignore')
+                            except Exception:
+                                new_text = ''
+                            force_full = os.getenv('FORCE_ENV_FULL_OVERWRITE', 'true').lower() == 'true'
+                            if not force_full:
+                                logger.info("🔧 FORCE_ENV_FULL_OVERWRITE=false: 启用安全合并模式 (.env)")
+                            if ('***redacted***' in new_text and env_target.exists() and not force_full):
+                                try:
+                                    existing_text = env_target.read_text(encoding='utf-8', errors='ignore') if env_target.exists() else ''
+                                except Exception:
+                                    existing_text = ''
+                                # 解析为 map
+                                def parse(text:str):
+                                    m = {}
+                                    for line in text.splitlines():
+                                        if line.strip() and not line.strip().startswith('#') and '=' in line:
+                                            k,v = line.split('=',1)
+                                            m[k.strip()] = v
+                                    return m
+                                existing_map = parse(existing_text)
+                                incoming_map = parse(new_text)
+                                wl = set(self._get_env_whitelist()) if hasattr(self, '_get_env_whitelist') else set()
+                                merged = existing_map.copy()
+                                for k,v in incoming_map.items():
+                                    if k in wl:
+                                        if v != '***redacted***':
+                                            merged[k] = v
+                                        # 如果是 redacted 保留原值（若不存在则不写入）
+                                # 序列化，保持原有顺序（先白名单排序，后其余）
+                                ordered_keys = [k for k in wl if k in merged] + [k for k in merged.keys() if k not in wl]
+                                lines = [f"{k}={merged[k]}" for k in ordered_keys]
+                                env_target.write_text('\n'.join(lines), encoding='utf-8')
+                                logger.info("🔐 .env restored with merge (preserved local sensitive keys)")
+                            else:
+                                # 直接覆盖（完整未过滤版本）
+                                shutil.copy2(str(env_src), str(env_target))
+                                logger.info("🔐 .env restored from backup archive (direct copy)")
+                    except Exception as env_e:
+                        logger.warning(f"⚠️ .env restore skipped: {env_e}")
 
                     logger.info("✅ Backup restored successfully")
                     return True
@@ -686,6 +1084,196 @@ class BackupService:
         except Exception as e:
             logger.error(f"❌ Restore failed: {e}")
             return False
+
+    # ================== 动态 .env 覆盖模式管理 ==================
+    def get_env_mode(self) -> Dict[str, Any]:
+        """返回当前 .env 恢复模式信息。"""
+        force = os.getenv('FORCE_ENV_FULL_OVERWRITE', 'true').lower() == 'true'
+        mode = 'full_overwrite' if force else 'merge_whitelist'
+        wl = []
+        try:
+            wl = self._get_env_whitelist()  # type: ignore[attr-defined]
+        except Exception:
+            wl = []
+        return {
+            'force_full': force,
+            'mode': mode,
+            'whitelist_count': len(wl),
+            'whitelist': wl,
+        }
+
+    def set_env_mode(self, force_full: bool) -> Dict[str, Any]:
+        """设置并持久化 .env 恢复模式。
+
+        持久化策略：更新当前进程环境变量 + 修改/追加 .env 中的 FORCE_ENV_FULL_OVERWRITE= 值。
+        """
+        os.environ['FORCE_ENV_FULL_OVERWRITE'] = 'true' if force_full else 'false'
+        env_path = Path('.env')
+        try:
+            if env_path.exists():
+                try:
+                    lines = env_path.read_text(encoding='utf-8', errors='ignore').splitlines()
+                except Exception:
+                    lines = []
+                found = False
+                for i,l in enumerate(lines):
+                    if l.strip().startswith('FORCE_ENV_FULL_OVERWRITE='):
+                        lines[i] = f"FORCE_ENV_FULL_OVERWRITE={'true' if force_full else 'false'}"
+                        found = True
+                        break
+                if not found:
+                    lines.append(f"FORCE_ENV_FULL_OVERWRITE={'true' if force_full else 'false'}")
+                env_path.write_text('\n'.join(lines)+('\n' if lines else ''), encoding='utf-8')
+            else:
+                env_path.write_text(f"FORCE_ENV_FULL_OVERWRITE={'true' if force_full else 'false'}\n", encoding='utf-8')
+        except Exception as e:
+            logger.warning(f"更新 .env 文件中的 FORCE_ENV_FULL_OVERWRITE 失败: {e}")
+        return self.get_env_mode()
+
+    def _merge_light_backup_into_sqlite(self, extracted_root: Path, sqlite_path: Path) -> None:
+        """将轻量备份(JSON数据)合并写入现有SQLite数据库。
+
+        策略：对于 users / projects / ppt_templates / global_master_templates
+        - 若本地不存在 id -> 插入
+        - 若存在 id -> 比较 updated_at 字段（无则使用 created_at），较新的覆盖指定字段
+        - 不删除本地已有但备份缺失的记录（保持幂等增量）
+
+        配置文件：写入到临时目录 / 不直接覆盖 .env (安全考虑)；pyproject.toml 等如果不存在则生成。
+        """
+        import json, sqlite3
+        data_dir = extracted_root / 'data'
+        if not data_dir.exists():
+            logger.warning("light backup data dir missing; skip merge")
+            return
+        if not sqlite_path.exists():
+            logger.warning("SQLite database not found; cannot merge light backup")
+            return
+        conn = sqlite3.connect(str(sqlite_path))
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        def load_json(name: str):
+            p = data_dir / name
+            if not p.exists():
+                return []
+            try:
+                return json.loads(p.read_text(encoding='utf-8'))
+            except Exception as e:
+                logger.warning(f"Failed loading {name}: {e}")
+                return []
+
+        try:
+            users = load_json('users.json')
+            projects = load_json('projects.json')
+            ppt_templates = load_json('ppt_templates.json')
+            global_templates = load_json('global_master_templates.json')
+            # 读取配置文件聚合（包含 .env 内容）
+            config_payload = None
+            cfg_path = data_dir / 'config_files.json'
+            if cfg_path.exists():
+                try:
+                    import json as _json
+                    config_payload = _json.loads(cfg_path.read_text(encoding='utf-8'))
+                except Exception as _e_cfg:
+                    logger.warning(f"读取 config_files.json 失败: {_e_cfg}")
+
+            def upsert(table: str, row: dict, key_field: str = 'id', timestamp_fields=("updated_at","created_at")):
+                # 获取本地记录
+                key = row.get(key_field)
+                if key is None:
+                    return
+                cur.execute(f"SELECT * FROM {table} WHERE {key_field}=?", (key,))
+                existing = cur.fetchone()
+                def ts(r):
+                    for f in timestamp_fields:
+                        v = r.get(f) if isinstance(r, dict) else (r[f] if r and f in r.keys() else None)
+                        if v is not None:
+                            return float(v)
+                    return 0.0
+                if not existing:
+                    # 插入
+                    cols = list(row.keys())
+                    placeholders = ','.join(['?']*len(cols))
+                    cur.execute(f"INSERT INTO {table} ({','.join(cols)}) VALUES ({placeholders})", tuple(row[c] for c in cols))
+                else:
+                    local_ts = ts({k: existing[k] for k in existing.keys()})
+                    remote_ts = ts(row)
+                    if remote_ts > local_ts:
+                        # 覆盖更新（不改变缺失字段）
+                        cols = [c for c in row.keys() if c != key_field]
+                        set_clause = ','.join([f"{c}=?" for c in cols])
+                        cur.execute(f"UPDATE {table} SET {set_clause} WHERE {key_field}=?", tuple(row[c] for c in cols)+(key,))
+
+            for u in users:
+                upsert('users', u)
+            for p in projects:
+                upsert('projects', p)
+            for t in ppt_templates:
+                upsert('ppt_templates', t)
+            for gt in global_templates:
+                upsert('global_master_templates', gt)
+
+            conn.commit()
+            logger.info("Light backup data merged into SQLite (users/projects/templates)")
+            # 合并恢复 .env（如果轻量包里包含 root_files -> .env）
+            try:
+                if config_payload and isinstance(config_payload, dict):
+                    root_files = config_payload.get('root_files') or {}
+                    env_content = root_files.get('.env')
+                    if env_content is not None:
+                        target = Path('.env')
+                        if target.exists():
+                            bak = f".env.before_light_merge_{int(time.time())}"
+                            try:
+                                target.write_text(target.read_text(encoding='utf-8'), encoding='utf-8')  # touch to ensure readable
+                            except Exception:
+                                pass
+                            shutil.copy2(str(target), bak)
+                            logger.info(f"🛡️ Existing .env backed up as {bak}")
+                        try:
+                            # 仅合并白名单变量，非白名单保持本地值（若远程为 ***redacted*** 直接忽略）
+                            wl = set(self._get_env_whitelist()) if hasattr(self, '_get_env_whitelist') else set()
+                            existing_map = {}
+                            if target.exists():
+                                for line in target.read_text(encoding='utf-8', errors='ignore').splitlines():
+                                    if line.strip() and not line.strip().startswith('#') and '=' in line:
+                                        k,v = line.split('=',1)
+                                        existing_map[k.strip()] = v
+                            merged = []
+                            for line in env_content.splitlines():
+                                if line.strip().startswith('#') or '=' not in line:
+                                    merged.append(line)
+                                    continue
+                                k,v = line.split('=',1)
+                                ks = k.strip()
+                                if ks in wl:
+                                    if v == '***redacted***':
+                                        # 保持现有，若没有则跳过
+                                        if ks in existing_map:
+                                            merged.append(f"{ks}={existing_map[ks]}")
+                                    else:
+                                        merged.append(f"{ks}={v}")
+                                else:
+                                    # 非白名单保持原有
+                                    if ks in existing_map:
+                                        merged.append(f"{ks}={existing_map[ks]}")
+                            # 添加剩余未写入的本地非白名单变量
+                            for k,v in existing_map.items():
+                                if not any(l.startswith(f"{k}=") for l in merged):
+                                    merged.append(f"{k}={v}")
+                            target.write_text('\n'.join(merged), encoding='utf-8')
+                            logger.info("🔐 .env restored with whitelist merge (light)")
+                        except Exception as w_e:
+                            logger.warning(f"⚠️ 写入 .env (whitelist merge) 失败: {w_e}")
+            except Exception as e_env_merge:
+                logger.warning(f"⚠️ 轻量恢复 .env 处理异常: {e_env_merge}")
+        except Exception as e:
+            logger.error(f"Merge light backup failed: {e}")
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     async def restore_from_r2(self) -> Dict[str, Any]:
         """从R2恢复最新的备份，如果R2不可用则使用本地备份"""
@@ -783,8 +1371,17 @@ class BackupService:
             logger.error(f"❌ {error_msg}")
             raise Exception(error_msg)
 
-        # 找到最新的备份文件
-        latest_backup = max(response['Contents'], key=lambda x: x['LastModified'])
+        # 仅考虑 zip 文件
+        objects = [o for o in response['Contents'] if o.get('Key','').endswith('.zip')]
+        if not objects:
+            raise Exception("R2中没有可用的 .zip 备份文件")
+
+        # 优先使用 light 轻量备份（文件名包含 _light_）
+        light_objs = [o for o in objects if '_light_' in o.get('Key','')]
+        selected_pool = light_objs if light_objs else objects
+        if light_objs:
+            logger.info(f"🪶 检测到 {len(light_objs)} 个 light 备份，优先选择其中最新的进行恢复")
+        latest_backup = max(selected_pool, key=lambda x: x['LastModified'])
         backup_key = latest_backup['Key']
         backup_size = latest_backup['Size']
         backup_date = latest_backup['LastModified']

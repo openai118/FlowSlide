@@ -2055,7 +2055,68 @@ class DataSyncService:
                 if name not in seen:
                     seen.add(name)
                     result.append(p)
+        # 追加: 根目录 .env 也纳入同步（与用户需求一致：.env 同步与恢复）
+        try:
+            env_path = Path('.env')
+            if env_path.exists() and env_path.is_file():
+                size_ok = True
+                try:
+                    if env_path.stat().st_size > 128 * 1024:  # 限制 128KB
+                        size_ok = False
+                except Exception:
+                    pass
+                if size_ok and env_path.as_posix() not in seen:
+                    result.append(env_path)
+                    seen.add(env_path.as_posix())
+        except Exception:
+            pass
         return result
+
+    # === 环境变量白名单 & 过滤逻辑 ===
+    def _get_env_whitelist(self) -> List[str]:
+        """获取允许同步/备份的 .env 变量白名单。
+
+        优先从 ENV_SYNC_WHITELIST 读取(逗号分隔)，否则使用内置安全默认集合。
+        """
+        raw = os.getenv("ENV_SYNC_WHITELIST")
+        if raw:
+            wl = [x.strip() for x in raw.split(',') if x.strip()]
+            if wl:
+                return wl
+        # 默认白名单：仅包含通用非敏感 / 运行所需基础配置；不含明显密钥/密码字段
+        return [
+            "APP_NAME","APP_BASE_URL","MODE","DEPLOYMENT_MODE","OPENAI_MODEL","OPENAI_BASE_URL",
+            "OPENAI_API_TYPE","ENABLE_DATA_SYNC","SYNC_INTERVAL","SYNC_MODE","SYNC_DIRECTIONS",
+            "SYNC_AUTHORITATIVE","BACKUP_RETENTION_DAYS","R2_BUCKET_NAME","ENABLE_MONITORING",
+            "LOG_LEVEL","TZ","LANG","UI_DEFAULT_THEME"
+        ]
+
+    def _filter_env_content(self, content: bytes) -> bytes:
+        """按白名单过滤 .env 内容，非白名单 key 以 ***redacted*** 占位。
+
+        同时保留注释与空行的可读性。
+        """
+        try:
+            text = content.decode('utf-8', errors='ignore')
+        except Exception:
+            return content
+        whitelist = set(self._get_env_whitelist())
+        out_lines: List[str] = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                out_lines.append(line)
+                continue
+            if '=' not in line:
+                out_lines.append(line)
+                continue
+            key, val = line.split('=', 1)
+            key_strip = key.strip()
+            if key_strip in whitelist:
+                out_lines.append(f"{key_strip}={val}")
+            else:
+                out_lines.append(f"{key_strip}=***redacted***")
+        return ("\n".join(out_lines)).encode('utf-8')
 
     def _calc_file_checksum(self, path: Path) -> str:
         import hashlib
@@ -2125,6 +2186,16 @@ class DataSyncService:
                 except Exception as e:
                     logger.warning(f"⚠️ Skip config file {rel_name}, read error: {e}")
                     continue
+                # 针对 .env 进行白名单过滤，防止敏感变量泄漏
+                if rel_name.endswith('.env'):
+                    try:
+                        filtered = self._filter_env_content(content_bytes)
+                        content_bytes = filtered
+                        # 更新 checksum 以匹配过滤后的内容，避免外部端重复同步
+                        import hashlib as _hl
+                        checksum = _hl.sha256(content_bytes).hexdigest()
+                    except Exception as _env_f:
+                        logger.warning(f"⚠️ .env 过滤失败，使用原始内容参与同步(已记录): {_env_f}")
                 to_upsert.append((rel_name, checksum, content_bytes, local_mtime))
 
             if not to_upsert:

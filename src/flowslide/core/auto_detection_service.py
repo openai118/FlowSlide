@@ -175,13 +175,9 @@ class AutoDetectionService:
                 "bucket": os.getenv("R2_BUCKET_NAME")
             }
 
-            # 检查配置完整性
-            missing_configs = []
-            for key, value in r2_config.items():
-                if not value:
-                    missing_configs.append(key)
-
-            if missing_configs:
+            # 严格完整性：全部四项都非空才继续
+            if not all(r2_config.values()):
+                missing_configs = [k for k,v in r2_config.items() if not v]
                 result = ServiceCheckResult(
                     status=ServiceStatus.CONFIG_MISSING,
                     message=f"R2配置不完整，缺少: {', '.join(missing_configs)}"

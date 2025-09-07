@@ -55,30 +55,122 @@ class ModeSwitchConfigUpdate(BaseModel):
     notification_email: Optional[str] = None
 
 
+class PinRequest(BaseModel):
+    """固定模式设置/清除请求 (pinned_mode 为 null 表示恢复自动检测)"""
+    pinned_mode: Optional[str] = None
+
+
 @router.get("/mode")
 async def get_current_mode():
-    """获取当前部署模式"""
+    """获取当前部署模式（扩展 pinned 信息）"""
+    import os
     try:
         current_mode = get_current_deployment_mode()
         mode_info = mode_manager.get_current_mode_info()
-
+        pinned_mode = os.getenv("DEPLOYMENT_PINNED_MODE") or None
         return {
             "current_mode": current_mode.value,
             "detected_mode": mode_info["current_mode"],
             "switch_in_progress": mode_info["switch_in_progress"],
             "last_check": mode_info["last_mode_check"],
-            "switch_context": mode_info["switch_context"]
+            "switch_context": mode_info["switch_context"],
+            "pinned_mode": pinned_mode,
+            "is_pinned": pinned_mode is not None
         }
     except Exception as e:
         logger.error(f"获取当前模式失败: {e}")
-        # 返回默认值而不是抛出异常
         return {
             "current_mode": DeploymentMode.LOCAL_ONLY.value,
             "detected_mode": DeploymentMode.LOCAL_ONLY.value,
             "switch_in_progress": False,
             "last_check": None,
-            "switch_context": None
+            "switch_context": None,
+            "pinned_mode": None,
+            "is_pinned": False
         }
+
+@router.post("/pin")
+async def set_or_clear_pinned_mode(req: PinRequest):
+    """设置或清除固定部署模式 (写入/移除 .env 中 DEPLOYMENT_PINNED_MODE)"""
+    import os
+    pinned = req.pinned_mode.strip().lower() if req.pinned_mode else None
+
+    def _write_env(key: str, value: Optional[str]):
+        env_path = os.path.join(os.getcwd(), '.env')
+        lines = []
+        if os.path.exists(env_path):
+            with open(env_path, 'r', encoding='utf-8') as f:
+                lines = f.read().splitlines()
+        updated = []
+        found = False
+        for ln in lines:
+            if ln.strip().startswith(f'{key}='):
+                found = True
+                if value is not None:
+                    updated.append(f'{key}={value}')
+                # value is None -> 删除该行
+            else:
+                updated.append(ln)
+        if not found and value is not None:
+            updated.append(f'{key}={value}')
+        content = '\n'.join(updated) + ('\n' if updated else '')
+        with open(env_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+
+    if pinned:
+        # 校验模式值
+        try:
+            target = DeploymentMode(pinned)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"无效模式: {pinned}")
+
+        # 校验依赖资源
+        needs_r2 = pinned in ("local_r2", "local_external_r2")
+        needs_ext = pinned in ("local_external", "local_external_r2")
+        r2_ok = True
+        ext_ok = True
+        if needs_r2:
+            r2_ok = all([(os.getenv('R2_ACCESS_KEY_ID') or '').strip(),
+                         (os.getenv('R2_SECRET_ACCESS_KEY') or '').strip(),
+                         (os.getenv('R2_ENDPOINT') or '').strip(),
+                         (os.getenv('R2_BUCKET_NAME') or '').strip()])
+        if needs_ext:
+            db_url = (os.getenv('DATABASE_URL') or '').strip()
+            ext_ok = db_url.startswith('postgresql://') or db_url.startswith('mysql://')
+        if not (r2_ok and ext_ok):
+            raise HTTPException(status_code=400, detail=f"资源未就绪: R2={r2_ok}, ExternalDB={ext_ok}")
+
+        # 切换模式（若不同）并写入 pinned
+        if get_current_deployment_mode().value != pinned:
+            try:
+                await mode_manager.switch_mode(target, reason="pin via API")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"切换模式失败: {e}")
+        # 再写入 env 以确保 pinned
+        try:
+            _write_env('DEPLOYMENT_PINNED_MODE', pinned)
+        except Exception as we:
+            logger.warning(f"写入 pinned 变量失败: {we}")
+    else:
+        # 清除 pinned
+        try:
+            _write_env('DEPLOYMENT_PINNED_MODE', None)
+            # 重新检测
+            try:
+                new_mode = mode_manager.detect_current_mode()
+                mode_manager.current_mode = new_mode
+            except Exception as de:
+                logger.warning(f"重新检测部署模式失败: {de}")
+        except Exception as ce:
+            raise HTTPException(status_code=500, detail=f"清除 pinned 失败: {ce}")
+
+    # 返回最新状态
+    current_mode = get_current_deployment_mode().value
+    return {"success": True, "pinned_mode": pinned, "current_mode": current_mode, "is_pinned": pinned is not None}
 
 
 @router.get("/modes")
