@@ -438,7 +438,55 @@ async def init_db():
                         else:
                             logger.info("ℹ️ External DB has users - local already contains users, skipping initial upsert")
                     elif _r2_has_backups_with_users():
-                        logger.info("ℹ️ R2 appears configured - will rely on R2/external backups for initial users and skip local admin creation if possible")
+                        logger.info("ℹ️ R2 appears configured - attempting lightweight users bootstrap from latest backup (light priority)...")
+                        try:
+                            from ..services.backup_service import fetch_latest_r2_users_snapshot
+                            users_snapshot = None
+                            # 仅当本地 users 表为空再尝试
+                            local_user_count = db.execute(text("SELECT COUNT(*) FROM users")).fetchone()[0]
+                            if local_user_count == 0:
+                                import asyncio as _asyncio
+                                try:
+                                    loop = _asyncio.get_event_loop()
+                                    if loop.is_running():
+                                        import concurrent.futures as _cf
+                                        with _cf.ThreadPoolExecutor() as _ex:
+                                            fut = _ex.submit(_asyncio.run, fetch_latest_r2_users_snapshot())
+                                            users_snapshot = fut.result(timeout=45)
+                                    else:
+                                        users_snapshot = loop.run_until_complete(fetch_latest_r2_users_snapshot())
+                                except RuntimeError:
+                                    users_snapshot = _asyncio.run(fetch_latest_r2_users_snapshot())
+                            if users_snapshot:
+                                inserted = 0
+                                for u in users_snapshot:
+                                    uname = u.get('username')
+                                    pwd = u.get('password_hash')
+                                    if not uname or not pwd:
+                                        continue
+                                    exists = db.execute(text("SELECT 1 FROM users WHERE username=:u LIMIT 1"),{"u":uname}).fetchone()
+                                    if exists:
+                                        continue
+                                    db.execute(text("INSERT INTO users (id, username, password_hash, email, is_admin, is_active, created_at, updated_at, last_login) VALUES (:id,:username,:ph,:email,:admin,:act,:c,:u2,:ll)"),{
+                                        'id': u.get('id'), 'username': uname, 'ph': pwd, 'email': u.get('email'), 'admin': bool(u.get('is_admin')), 'act': bool(u.get('is_active',True)), 'c': u.get('created_at'), 'u2': u.get('updated_at'), 'll': u.get('last_login')
+                                    })
+                                    inserted += 1
+                                try:
+                                    db.commit()
+                                except Exception:
+                                    try: db.rollback()
+                                    except Exception: pass
+                                if inserted>0:
+                                    logger.info(f"✅ Bootstrapped {inserted} users from latest R2 backup")
+                                else:
+                                    logger.info("ℹ️ R2 backup contained no new users; will create default admin")
+                                    init_default_admin(db)
+                            else:
+                                logger.info("ℹ️ No R2 users snapshot available; creating default admin")
+                                init_default_admin(db)
+                        except Exception as _r2_boot_e:
+                            logger.warning(f"R2 bootstrap failed: {_r2_boot_e}; creating default admin")
+                            init_default_admin(db)
                     else:
                         init_default_admin(db)
                         logger.info("✅ Default admin user initialized (no external/R2 users found)")

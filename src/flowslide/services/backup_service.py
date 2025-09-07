@@ -1531,6 +1531,65 @@ async def list_r2_files(prefix: Optional[str] = None) -> list:
     if not backup_service._is_r2_configured():
         return []
 
+async def fetch_latest_r2_users_snapshot() -> Optional[list]:
+    """下载 R2 中最新的（优先 light）备份并返回 users.json 列表。
+
+    返回：
+        users 列表(dict) 或 None （未找到 / 失败）
+    仅用于启动自动恢复用户。不会执行全量恢复，简单解析 users.json。
+    """
+    if not backup_service._is_r2_configured():
+        return None
+    try:
+        files = await list_r2_files('backups/')
+        if not files:
+            return None
+        # 过滤出 zip
+        zips = [f for f in files if f.get('key','').endswith('.zip')]
+        if not zips:
+            return None
+        # light 优先：按是否包含 'light' 标记优先排序，再按时间
+        def rank(f):
+            key = f.get('key','').lower()
+            is_light = 'light' in key
+            ts = f.get('last_modified') or ''
+            return (0 if is_light else 1, 0 - len(ts), ts)
+        # 先按 last_modified 已是降序，这里直接遍历挑第一个 light，否则第一个
+        candidate = None
+        for f in zips:
+            if 'light' in f.get('key','').lower():
+                candidate = f; break
+        if candidate is None:
+            candidate = zips[0]
+        from botocore.config import Config
+        config = Config(region_name='auto')
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=backup_service.r2_config['access_key'],
+            aws_secret_access_key=backup_service.r2_config['secret_key'],
+            endpoint_url=backup_service.r2_config['endpoint'],
+            config=config
+        )
+        import tempfile, zipfile, json
+        with tempfile.TemporaryDirectory() as td:
+            local_zip = os.path.join(td, 'backup.zip')
+            await asyncio.to_thread(s3_client.download_file, backup_service.r2_config['bucket'], candidate['key'], local_zip)
+            with zipfile.ZipFile(local_zip,'r') as zf:
+                # users.json 可能在 data/ 目录
+                for name in zf.namelist():
+                    if name.endswith('data/users.json') or name.endswith('/users.json') or name == 'users.json':
+                        try:
+                            with zf.open(name) as f:
+                                data = f.read().decode('utf-8')
+                                return json.loads(data)
+                        except Exception as ue:
+                            logger.warning(f"解析 users.json 失败: {ue}")
+                            return None
+        return None
+    except Exception as e:
+        logger.warning(f"fetch_latest_r2_users_snapshot failed: {e}")
+        return None
+
     try:
         from botocore.config import Config
         config = Config(region_name='auto')
