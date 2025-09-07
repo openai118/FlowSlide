@@ -3,6 +3,8 @@ Authentication routes for FlowSlide
 """
 
 import logging
+import asyncio
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -13,6 +15,8 @@ from ..core.simple_config import app_config
 from ..database.database import get_db
 from ..database.models import User
 from .auth_service import AuthService, get_auth_service
+from ..core.deployment_mode_manager import get_current_deployment_mode
+from ..services.backup_service import BackupService
 from .middleware import (
     get_current_admin_user,
     get_current_user_optional,
@@ -31,8 +35,9 @@ templates = Jinja2Templates(directory=template_dir)
 
 
 @router.get("/auth/login", response_class=HTMLResponse)
+
 async def login_page(
-    request: Request, error: str = None, success: str = None, username: str = None
+    request: Request, error: Optional[str] = None, success: Optional[str] = None, username: Optional[str] = None
 ):
     """Login page"""
     # Check if user is already logged in
@@ -55,7 +60,7 @@ async def login_page(
 
 
 @router.get("/auth/register", response_class=HTMLResponse)
-async def register_page(request: Request, error: str = None, success: str = None):
+async def register_page(request: Request, error: Optional[str] = None, success: Optional[str] = None):
     """Register page"""
     user = get_current_user_optional(request)
     if user:
@@ -328,9 +333,38 @@ async def change_password(
 
         # Update password
         if auth_service.update_user_password(db, user, new_password):
+            triggered_external = False
+            triggered_r2 = False
+            try:
+                mode_val = get_current_deployment_mode().value
+                if 'external' in mode_val:
+                    from ..services.data_sync_service import sync_service
+                    try:
+                        sync_service.trigger_user_sync_background(direction="local_to_external_force")
+                        triggered_external = True
+                    except Exception:
+                        pass
+                if 'r2' in mode_val:
+                    async def _r2_task():
+                        try:
+                            svc = BackupService()
+                            zip_path, tmp_ctx = await svc.create_light_ephemeral_archive()
+                            try:
+                                await svc.upload_light_ephemeral(zip_path)
+                            finally:
+                                try:
+                                    tmp_ctx.cleanup()
+                                except Exception:
+                                    pass
+                        except Exception as ie:
+                            logger.warning(f"密码修改后R2用户light同步失败: {ie}")
+                    asyncio.create_task(_r2_task())
+                    triggered_r2 = True
+            except Exception:
+                pass
             return templates.TemplateResponse(
                 "profile.html",
-                {"request": request, "user": user.to_dict(), "success": "密码修改成功"},
+                {"request": request, "user": user.to_dict(), "success": "密码修改成功", "ext_sync": triggered_external, "r2_sync": triggered_r2},
             )
         else:
             return templates.TemplateResponse(
@@ -371,6 +405,55 @@ async def api_login(
     session_id = auth_service.create_session(db, user)
 
     return {"success": True, "session_id": session_id, "user": user.to_dict()}
+
+
+@router.post("/api/auth/change-password")
+async def api_change_password(
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    confirm_password: str = Form(...),
+    user: User = Depends(get_current_user_required),
+    db: Session = Depends(get_db),
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    if not user.check_password(current_password):
+        raise HTTPException(status_code=400, detail="当前密码错误")
+    if new_password != confirm_password:
+        raise HTTPException(status_code=400, detail="新密码和确认密码不匹配")
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="密码长度至少6位")
+    if not auth_service.update_user_password(db, user, new_password):
+        raise HTTPException(status_code=500, detail="密码修改失败，请重试")
+    triggered_external = False
+    triggered_r2 = False
+    try:
+        mode_val = get_current_deployment_mode().value
+        if 'external' in mode_val:
+            from ..services.data_sync_service import sync_service
+            try:
+                sync_service.trigger_user_sync_background(direction="local_to_external_force")
+                triggered_external = True
+            except Exception:
+                pass
+        if 'r2' in mode_val:
+            async def _r2_task():
+                try:
+                    svc = BackupService()
+                    zip_path, tmp_ctx = await svc.create_light_ephemeral_archive()
+                    try:
+                        await svc.upload_light_ephemeral(zip_path)
+                    finally:
+                        try:
+                            tmp_ctx.cleanup()
+                        except Exception:
+                            pass
+                except Exception as ie:
+                    logger.warning(f"密码修改后R2用户light同步失败(API): {ie}")
+            asyncio.create_task(_r2_task())
+            triggered_r2 = True
+    except Exception:
+        pass
+    return {"success": True, "external_triggered": triggered_external, "r2_triggered": triggered_r2}
 
 
 @router.post("/api/auth/logout")
@@ -448,8 +531,50 @@ async def api_update_profile(
     auth_service: AuthService = Depends(get_auth_service),
 ):
     try:
+        old_username = user.username
+        old_email = user.email
         auth_service.update_user_info(db, user, username=username, email=email)
-        return {"success": True, "user": user.to_dict()}
+        changed_username = (old_username != user.username)
+        changed_email = (old_email != user.email)
+        r2_triggered = False
+        external_triggered = False
+        # 根据部署模式触发同步（仅在实际有字段变更时触发）
+        try:
+            mode_val = get_current_deployment_mode().value
+            if (changed_username or changed_email):
+                if 'external' in mode_val:
+                    from ..services.data_sync_service import sync_service  # 延迟导入
+                    try:
+                        sync_service.trigger_user_sync_background(direction="local_to_external_force")
+                        external_triggered = True
+                    except Exception:
+                        pass
+                if 'r2' in mode_val:
+                    async def _r2_task():
+                        try:
+                            svc = BackupService()
+                            zip_path, tmp_ctx = await svc.create_light_ephemeral_archive()
+                            try:
+                                await svc.upload_light_ephemeral(zip_path)
+                            finally:
+                                try:
+                                    tmp_ctx.cleanup()
+                                except Exception:
+                                    pass
+                        except Exception as ie:
+                            logger.warning(f"资料更新后R2用户light同步失败: {ie}")
+                    asyncio.create_task(_r2_task())
+                    r2_triggered = True
+        except Exception:
+            pass
+        return {
+            "success": True,
+            "user": user.to_dict(),
+            "changed": {"username": changed_username, "email": changed_email},
+            "r2_triggered": r2_triggered,
+            "external_triggered": external_triggered,
+            "mode": get_current_deployment_mode().value if hasattr(get_current_deployment_mode(), 'value') else str(get_current_deployment_mode()),
+        }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -457,6 +582,6 @@ async def api_update_profile(
 @router.get("/api/auth/check")
 async def api_check_auth(request: Request, db: Session = Depends(get_db)):
     """Check authentication status"""
-    user = get_current_user_optional(request, db)
+    user = get_current_user_optional(request)
 
     return {"authenticated": user is not None, "user": user.to_dict() if user else None}

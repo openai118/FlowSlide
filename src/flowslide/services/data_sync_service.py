@@ -2077,57 +2077,9 @@ class DataSyncService:
         return result
 
     # === 环境变量白名单 & 过滤逻辑 ===
-    def _get_env_whitelist(self) -> List[str]:
-        """获取允许同步/备份的 .env 变量白名单。
-
-        优先从 ENV_SYNC_WHITELIST 读取(逗号分隔)，否则使用内置安全默认集合。
-        """
-        # 若启用包含全部机密的开关（风险高），直接返回特殊标记
-        if os.getenv('ENV_SYNC_INCLUDE_SECRETS','0') == '1':
-            return ['*__ALL__*']
-        raw = os.getenv("ENV_SYNC_WHITELIST")
-        if raw:
-            wl = [x.strip() for x in raw.split(',') if x.strip()]
-            if wl:
-                return wl
-        # 默认白名单：仅包含通用非敏感 / 运行所需基础配置；不含明显密钥/密码字段
-        return [
-            "APP_NAME","APP_BASE_URL","MODE","DEPLOYMENT_MODE","OPENAI_MODEL","OPENAI_BASE_URL",
-            "OPENAI_API_TYPE","ENABLE_DATA_SYNC","SYNC_INTERVAL","SYNC_MODE","SYNC_DIRECTIONS",
-            "SYNC_AUTHORITATIVE","BACKUP_RETENTION_DAYS","R2_BUCKET_NAME","ENABLE_MONITORING",
-            "LOG_LEVEL","TZ","LANG","UI_DEFAULT_THEME"
-        ]
-
-    def _filter_env_content(self, content: bytes) -> bytes:
-        """按白名单过滤 .env 内容，非白名单 key 以 ***redacted*** 占位。
-
-        同时保留注释与空行的可读性。
-        """
-        # 允许通过 ENV_SYNC_REDACT=0 完全关闭脱敏（原样返回）
-        if os.getenv('ENV_SYNC_REDACT','1') == '0':
-            return content
-        try:
-            text = content.decode('utf-8', errors='ignore')
-        except Exception:
-            return content
-        whitelist = set(self._get_env_whitelist())
-        out_lines: List[str] = []
-        for line in text.splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith('#'):
-                out_lines.append(line)
-                continue
-            if '=' not in line:
-                out_lines.append(line)
-                continue
-            key, val = line.split('=', 1)
-            key_strip = key.strip()
-            # *__ALL__* 模式：不过滤任何变量
-            if ('*__ALL__*' in whitelist) or key_strip in whitelist:
-                out_lines.append(f"{key_strip}={val}")
-            else:
-                out_lines.append(f"{key_strip}=***redacted***")
-        return ("\n".join(out_lines)).encode('utf-8')
+    # 直接返回原始内容（取消任何 .env 脱敏/白名单逻辑）
+    def _filter_env_content(self, content: bytes) -> bytes:  # 保留函数签名供调用处兼容
+        return content
 
     def _calc_file_checksum(self, path: Path) -> str:
         import hashlib
@@ -2221,16 +2173,7 @@ class DataSyncService:
                 except Exception as e:
                     logger.warning(f"⚠️ Skip config file {rel_name}, read error: {e}")
                     continue
-                # 针对 .env 进行白名单过滤，防止敏感变量泄漏
-                if rel_name.endswith('.env'):
-                    try:
-                        filtered = self._filter_env_content(content_bytes)
-                        content_bytes = filtered
-                        # 更新 checksum 以匹配过滤后的内容，避免外部端重复同步
-                        import hashlib as _hl
-                        checksum = _hl.sha256(content_bytes).hexdigest()
-                    except Exception as _env_f:
-                        logger.warning(f"⚠️ .env 过滤失败，使用原始内容参与同步(已记录): {_env_f}")
+                # .env 不再做脱敏过滤，直接同步
                 to_upsert.append((rel_name, checksum, content_bytes, local_mtime))
 
             if not to_upsert:
@@ -2322,19 +2265,7 @@ class DataSyncService:
                         file_mtime = getattr(r, 'file_mtime', None) if hasattr(r, 'file_mtime') else (r[2] if len(r) > 2 else None)
                         content = r.content if hasattr(r, 'content') else r[3]
                         target = Path(name)
-                        # 特殊处理 .env ：如果内容含有脱敏占位且本地已有非脱敏值，默认不覆盖
-                        if name.endswith('.env'):
-                            allow_redacted_restore = os.getenv('ENV_ALLOW_REDACTED_ENV_RESTORE', '0') == '1'
-                            if b'***redacted***' in content and not allow_redacted_restore:
-                                try:
-                                    if target.exists():
-                                        existing_text = target.read_text(errors='ignore')
-                                        # 若已有真实（不含 ***redacted***）内容则跳过覆盖
-                                        if '***redacted***' not in existing_text:
-                                            logger.info("⏭️ Skip writing redacted .env from external (preserving local secrets). 设置 ENV_ALLOW_REDACTED_ENV_RESTORE=1 可强制覆盖。")
-                                            continue
-                                except Exception:
-                                    pass
+                        # .env 直接覆盖（用户明确要求完全明文同步）
                         target.parent.mkdir(parents=True, exist_ok=True)
                         existing_bytes = None
                         try:

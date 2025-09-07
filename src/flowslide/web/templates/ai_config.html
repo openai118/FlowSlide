@@ -7322,7 +7322,6 @@ async function uploadAndRestoreLocalBackup(){
         const data = await resp.json().catch(()=>({}));
         if(resp.ok && data.success){
             showNotification('上传并恢复成功','success');
-            refreshServerEnvMode();
         }else{
             showNotification('上传或恢复失败: ' + (data.detail || data.error || '未知错误'),'error');
         }
@@ -7332,6 +7331,7 @@ async function uploadAndRestoreLocalBackup(){
 }
 
 // 强制 .env 覆盖模式相关逻辑已删除（后端总是直接覆盖 .env）
+
 
 async function restoreLocalBackup(){
     const select = document.getElementById('local-backup-list');
@@ -7351,7 +7351,6 @@ async function restoreLocalBackup(){
         const data = await resp.json().catch(()=>({}));
         if(resp.ok && data.success){
             showNotification('本地备份恢复成功', 'success');
-            refreshServerEnvMode();
         }else{
             showNotification('恢复失败: ' + (data.detail || data.error || '未知错误'), 'error');
         }
@@ -7439,8 +7438,8 @@ async function loadR2FileList() {
         const prefix = 'backups/categories/' + selType + '/';
         url += `?prefix=${encodeURIComponent(prefix)}`;
     } else {
-        // 默认仅列出 categories 下的所有类型，避免与数据库备份混淆
-        url += '?prefix=' + encodeURIComponent('backups/categories/');
+        // 默认列出全部 backups/ 前缀（包含 categories/ 与 light/ 等），确保同步到R2按钮上传的 light 也可见
+        url += '?prefix=' + encodeURIComponent('backups/');
     }
     const resp = await fetch(url);
         const select = document.getElementById('r2-file-list');

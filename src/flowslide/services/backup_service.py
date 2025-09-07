@@ -58,6 +58,32 @@ class BackupService:
             "bucket": os.getenv("R2_BUCKET_NAME"),
         })
 
+    def _generate_env_snapshot(self) -> str:
+        """构造关键环境变量快照，用于 .env 为空时自动填充。"""
+        core_keys = [
+            "SECRET_KEY", "DATABASE_URL",
+            "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_ENDPOINT", "R2_BUCKET_NAME",
+            "OPENAI_API_KEY", "OPENAI_BASE_URL",
+            "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT",
+            "ANTHROPIC_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY",
+            "LLM_PROVIDER", "IMAGE_PROVIDER",
+        ]
+        lines = []
+        seen = set()
+        for k in core_keys:
+            v = os.getenv(k)
+            if v:
+                lines.append(f"{k}={v}")
+                seen.add(k)
+        # 追加匹配模式
+        for k, v in sorted(os.environ.items()):
+            if k in seen:
+                continue
+            if any(k.endswith(suf) for suf in ("_API_KEY", "_BASE_URL", "_ENDPOINT")):
+                if v:
+                    lines.append(f"{k}={v}")
+        return "\n".join(lines) + ("\n" if lines else "")
+
     async def create_backup(self, backup_type: str = "full", upload_to_r2: bool = True) -> str:
         """创建备份
 
@@ -123,7 +149,7 @@ class BackupService:
                 await self._send_notification(backup_name, "failed", str(e))
             raise
 
-    async def create_light_ephemeral_archive(self) -> Path:
+    async def create_light_ephemeral_archive(self) -> tuple[Path, Any]:
         """创建不落地(backups目录)的轻量备份压缩包, 仅返回临时 zip 路径。
 
         用于“同步到R2”按钮：生成后直接上传并删除，不计入本地备份列表。
@@ -164,30 +190,21 @@ class BackupService:
         else:
             logger.warning("⚠️ flowslide.db 不存在，light 临时包不含数据表")
 
-        # 配置文件简要收集
-        config_payload = {"root_files": {}, "src_config": {}}
-        for name in [".env", "pyproject.toml", "uv.toml"]:
-            p = Path(name)
-            if p.exists():
-                try:
-                    txt = p.read_text(encoding='utf-8', errors='ignore')
-                    if name == '.env':
-                        try:
-                            txt = self._filter_env_content(txt)
-                        except Exception as _fe:
-                            logger.warning(f"轻量临时包 .env 过滤失败: {_fe}")
-                    config_payload["root_files"][name] = txt
-                except Exception:
-                    pass
-        cfg_dir = Path("./src/config")
-        if cfg_dir.exists():
-            for fp in cfg_dir.rglob('*'):
-                if fp.is_file() and fp.suffix.lower() in ('.json', '.yaml', '.yml', '.toml'):
-                    rel = str(fp.relative_to(cfg_dir))
-                    try:
-                        config_payload["src_config"][rel] = fp.read_text(encoding='utf-8', errors='ignore')
-                    except Exception:
-                        pass
+        # 配置文件简要收集（仅 .env，若为空自动生成运行时快照）
+        config_payload = {"root_files": {}}
+        env_text = ""
+        p_env = Path('.env')
+        if p_env.exists():
+            try:
+                env_text = p_env.read_text(encoding='utf-8', errors='ignore')
+            except Exception:
+                env_text = ""
+        if not env_text.strip():
+            generated = self._generate_env_snapshot()
+            if generated.strip():
+                logger.info("🧪 本地 .env 为空/缺失，轻量临时包内注入运行时快照")
+                env_text = generated
+        config_payload["root_files"][".env"] = env_text
         (data_dir / 'config_files.json').write_text(json.dumps(config_payload, ensure_ascii=False, indent=2), encoding='utf-8')
 
         manifest = {
@@ -991,39 +1008,56 @@ class BackupService:
                             force_full = os.getenv('FORCE_ENV_FULL_OVERWRITE', 'true').lower() == 'true'
                             if not force_full:
                                 logger.info("🔧 FORCE_ENV_FULL_OVERWRITE=false: 启用安全合并模式 (.env)")
-                            if ('***redacted***' in new_text and env_target.exists() and not force_full):
-                                try:
-                                    existing_text = env_target.read_text(encoding='utf-8', errors='ignore') if env_target.exists() else ''
-                                except Exception:
-                                    existing_text = ''
-                                # 解析为 map
-                                def parse(text:str):
-                                    m = {}
-                                    for line in text.splitlines():
-                                        if line.strip() and not line.strip().startswith('#') and '=' in line:
-                                            k,v = line.split('=',1)
-                                            m[k.strip()] = v
-                                    return m
-                                existing_map = parse(existing_text)
-                                incoming_map = parse(new_text)
-                                wl = set(self._get_env_whitelist()) if hasattr(self, '_get_env_whitelist') else set()
-                                merged = existing_map.copy()
-                                for k,v in incoming_map.items():
-                                    if k in wl:
-                                        if v != '***redacted***':
-                                            merged[k] = v
-                                        # 如果是 redacted 保留原值（若不存在则不写入）
-                                # 序列化，保持原有顺序（先白名单排序，后其余）
-                                ordered_keys = [k for k in wl if k in merged] + [k for k in merged.keys() if k not in wl]
-                                lines = [f"{k}={merged[k]}" for k in ordered_keys]
-                                env_target.write_text('\n'.join(lines), encoding='utf-8')
-                                logger.info("🔐 .env restored with merge (preserved local sensitive keys)")
-                            else:
-                                # 直接覆盖（完整未过滤版本）
-                                shutil.copy2(str(env_src), str(env_target))
-                                logger.info("🔐 .env restored from backup archive (direct copy)")
+                            # 直接覆盖（完整未过滤版本）
+                            shutil.copy2(str(env_src), str(env_target))
+                            logger.info("🔐 .env restored from backup archive (direct copy)")
                     except Exception as env_e:
                         logger.warning(f"⚠️ .env restore skipped: {env_e}")
+
+                    # 恢复其他根目录配置文件 (pyproject.toml, uv.toml)
+                    try:
+                        for fname in ("pyproject.toml", "uv.toml"):
+                            cands = list(restore_temp_dir.rglob(fname))
+                            if cands:
+                                src_cfg = cands[0]
+                                tgt = Path(fname)
+                                if tgt.exists():
+                                    bak = f"{fname}.before_restore_{int(time.time())}"
+                                    shutil.copy2(str(tgt), bak)
+                                    logger.info(f"🛡️ Backup existing {fname} -> {bak}")
+                                shutil.copy2(str(src_cfg), str(tgt))
+                                logger.info(f"⚙️ {fname} restored")
+                    except Exception as root_cfg_e:
+                        logger.warning(f"恢复根目录配置文件失败: {root_cfg_e}")
+
+                    # 恢复 src/config 下配置（合并覆盖）
+                    try:
+                        src_cfg_dirs = [p for p in restore_temp_dir.rglob('src_config') if p.is_dir()]
+                        if src_cfg_dirs:
+                            src_cfg_dir = src_cfg_dirs[0]
+                            target_dir = Path('./src/config')
+                            target_dir.mkdir(parents=True, exist_ok=True)
+                            for fp in src_cfg_dir.rglob('*'):
+                                if fp.is_file():
+                                    rel = fp.relative_to(src_cfg_dir)
+                                    out_path = target_dir / rel
+                                    out_path.parent.mkdir(parents=True, exist_ok=True)
+                                    try:
+                                        if out_path.exists():
+                                            bak = out_path.with_suffix(out_path.suffix + f".before_restore_{int(time.time())}")
+                                            shutil.copy2(str(out_path), str(bak))
+                                        shutil.copy2(str(fp), str(out_path))
+                                    except Exception as copy_e:
+                                        logger.warning(f"复制 src/config 文件失败 {fp}: {copy_e}")
+                            logger.info("📁 src/config directory merged from backup")
+                    except Exception as scfg_e:
+                        logger.warning(f"src/config 恢复失败: {scfg_e}")
+
+                    # 恢复后刷新运行时环境变量
+                    try:
+                        self._reload_env()
+                    except Exception:
+                        pass
 
                     logger.info("✅ Backup restored successfully")
                     return True
@@ -1053,48 +1087,20 @@ class BackupService:
 
     # ================== 动态 .env 覆盖模式管理 ==================
     def get_env_mode(self) -> Dict[str, Any]:
-        """返回当前 .env 恢复模式信息。"""
-        force = os.getenv('FORCE_ENV_FULL_OVERWRITE', 'true').lower() == 'true'
-        mode = 'full_overwrite' if force else 'merge_whitelist'
-        wl = []
-        try:
-            wl = self._get_env_whitelist()  # type: ignore[attr-defined]
-        except Exception:
-            wl = []
+        # 已废弃动态模式，直接返回固定信息
         return {
-            'force_full': force,
-            'mode': mode,
-            'whitelist_count': len(wl),
-            'whitelist': wl,
+            'force_full': True,
+            'mode': 'full_overwrite',
+            'whitelist_count': 0,
+            'whitelist': [],
         }
-
-    def set_env_mode(self, force_full: bool) -> Dict[str, Any]:
-        """设置并持久化 .env 恢复模式。
-
-        持久化策略：更新当前进程环境变量 + 修改/追加 .env 中的 FORCE_ENV_FULL_OVERWRITE= 值。
-        """
-        os.environ['FORCE_ENV_FULL_OVERWRITE'] = 'true' if force_full else 'false'
-        env_path = Path('.env')
-        try:
-            if env_path.exists():
-                try:
-                    lines = env_path.read_text(encoding='utf-8', errors='ignore').splitlines()
-                except Exception:
-                    lines = []
-                found = False
-                for i,l in enumerate(lines):
-                    if l.strip().startswith('FORCE_ENV_FULL_OVERWRITE='):
-                        lines[i] = f"FORCE_ENV_FULL_OVERWRITE={'true' if force_full else 'false'}"
-                        found = True
-                        break
-                if not found:
-                    lines.append(f"FORCE_ENV_FULL_OVERWRITE={'true' if force_full else 'false'}")
-                env_path.write_text('\n'.join(lines)+('\n' if lines else ''), encoding='utf-8')
-            else:
-                env_path.write_text(f"FORCE_ENV_FULL_OVERWRITE={'true' if force_full else 'false'}\n", encoding='utf-8')
-        except Exception as e:
-            logger.warning(f"更新 .env 文件中的 FORCE_ENV_FULL_OVERWRITE 失败: {e}")
-        return self.get_env_mode()
+        """兼容旧接口：返回固定的 full_overwrite 模式信息（已取消合并/白名单）。"""
+        return {
+            'force_full': True,
+            'mode': 'full_overwrite',
+            'whitelist_count': 0,
+            'whitelist': [],
+        }
 
     def _merge_light_backup_into_sqlite(self, extracted_root: Path, sqlite_path: Path) -> None:
         """将轻量备份(JSON数据)合并写入现有SQLite数据库。
@@ -1107,9 +1113,30 @@ class BackupService:
         配置文件：写入到临时目录 / 不直接覆盖 .env (安全考虑)；pyproject.toml 等如果不存在则生成。
         """
         import json, sqlite3
-        data_dir = extracted_root / 'data'
+        # 兼容不同打包结构：
+        # 1) flowslide_backup_light_<ts>/data/*
+        # 2) light_build/data/* (ephemeral)
+        # 通过查找 light_manifest.json 定位根目录，再定位其 data 子目录
+        manifest_paths = list(extracted_root.rglob('light_manifest.json'))
+        base_dir = None
+        if manifest_paths:
+            base_dir = manifest_paths[0].parent
+        # 回退：直接尝试 extracted_root 下的第一个包含 data 的子目录
+        if base_dir is None:
+            for p in extracted_root.iterdir():
+                if p.is_dir() and (p / 'data').exists():
+                    base_dir = p
+                    break
+        if base_dir is None:
+            # 最后再尝试 root/data
+            if (extracted_root / 'data').exists():
+                base_dir = extracted_root
+        if base_dir is None:
+            logger.warning("light backup base dir not found; skip merge")
+            return
+        data_dir = base_dir / 'data'
         if not data_dir.exists():
-            logger.warning("light backup data dir missing; skip merge")
+            logger.warning("light backup data dir missing (base located but no data/); skip merge")
             return
         if not sqlite_path.exists():
             logger.warning("SQLite database not found; cannot merge light backup")
@@ -1198,39 +1225,45 @@ class BackupService:
                             logger.info(f"🛡️ Existing .env backed up as {bak}")
                         try:
                             # 仅合并白名单变量，非白名单保持本地值（若远程为 ***redacted*** 直接忽略）
-                            wl = set(self._get_env_whitelist()) if hasattr(self, '_get_env_whitelist') else set()
-                            existing_map = {}
-                            if target.exists():
-                                for line in target.read_text(encoding='utf-8', errors='ignore').splitlines():
-                                    if line.strip() and not line.strip().startswith('#') and '=' in line:
-                                        k,v = line.split('=',1)
-                                        existing_map[k.strip()] = v
-                            merged = []
-                            for line in env_content.splitlines():
-                                if line.strip().startswith('#') or '=' not in line:
-                                    merged.append(line)
-                                    continue
-                                k,v = line.split('=',1)
-                                ks = k.strip()
-                                if ks in wl:
-                                    if v == '***redacted***':
-                                        # 保持现有，若没有则跳过
-                                        if ks in existing_map:
-                                            merged.append(f"{ks}={existing_map[ks]}")
-                                    else:
-                                        merged.append(f"{ks}={v}")
-                                else:
-                                    # 非白名单保持原有
-                                    if ks in existing_map:
-                                        merged.append(f"{ks}={existing_map[ks]}")
-                            # 添加剩余未写入的本地非白名单变量
-                            for k,v in existing_map.items():
-                                if not any(l.startswith(f"{k}=") for l in merged):
-                                    merged.append(f"{k}={v}")
-                            target.write_text('\n'.join(merged), encoding='utf-8')
-                            logger.info("🔐 .env restored with whitelist merge (light)")
+                            # 直接覆盖
+                            target.write_text(env_content, encoding='utf-8')
+                            logger.info("🔐 .env restored from light backup (full overwrite)")
                         except Exception as w_e:
-                            logger.warning(f"⚠️ 写入 .env (whitelist merge) 失败: {w_e}")
+                            logger.warning(f"⚠️ 写入 .env 失败: {w_e}")
+                    # 其它 root_files（pyproject.toml, uv.toml 等）
+                    for fname, content in root_files.items():
+                        if fname == '.env':
+                            continue
+                        try:
+                            tgt = Path(fname)
+                            if tgt.exists():
+                                bak = f"{fname}.before_light_merge_{int(time.time())}"
+                                shutil.copy2(str(tgt), bak)
+                            tgt.write_text(content, encoding='utf-8')
+                            logger.info(f"⚙️ {fname} restored from light backup")
+                        except Exception as rf_e:
+                            logger.warning(f"恢复 {fname} 失败: {rf_e}")
+                    # src_config 树写入
+                    src_cfg = config_payload.get('src_config') or {}
+                    if isinstance(src_cfg, dict) and src_cfg:
+                        base_dir_cfg = Path('./src/config')
+                        base_dir_cfg.mkdir(parents=True, exist_ok=True)
+                        for rel_path, content in src_cfg.items():
+                            try:
+                                out_path = base_dir_cfg / rel_path
+                                out_path.parent.mkdir(parents=True, exist_ok=True)
+                                if out_path.exists():
+                                    bak = out_path.with_suffix(out_path.suffix + f".before_light_merge_{int(time.time())}")
+                                    shutil.copy2(str(out_path), str(bak))
+                                out_path.write_text(content, encoding='utf-8', errors='ignore')
+                            except Exception as sc_e:
+                                logger.warning(f"写入 src/config/{rel_path} 失败: {sc_e}")
+                        logger.info("📁 src/config restored from light backup (merge overwrite)")
+                    # 恢复后刷新 env
+                    try:
+                        self._reload_env()
+                    except Exception:
+                        pass
             except Exception as e_env_merge:
                 logger.warning(f"⚠️ 轻量恢复 .env 处理异常: {e_env_merge}")
         except Exception as e:
@@ -1254,11 +1287,22 @@ class BackupService:
                 logger.info("🔄 尝试使用本地备份恢复...")
 
                 # 回退到本地备份
-                return await self._restore_from_local_backup()
+                # 取消回退逻辑：直接向外抛出，让上层决定是否走本地恢复
+                raise
 
         except Exception as e:
             logger.error(f"❌ 所有恢复方法都失败: {e}")
             raise
+
+    # ================== 运行时环境刷新 ==================
+    def _reload_env(self):
+        """重新加载 .env 进当前进程，方便恢复后立即生效。"""
+        try:
+            from dotenv import load_dotenv  # type: ignore
+            load_dotenv(override=True)
+            logger.info("🔄 Environment variables reloaded (.env)")
+        except Exception as e:
+            logger.warning(f"Env reload failed: {e}")
 
     async def _restore_from_r2_cloud(self) -> Dict[str, Any]:
         """从R2云存储恢复"""
@@ -1422,47 +1466,7 @@ class BackupService:
                 logger.info(f"✅ R2恢复完成: {local_backup_path.name}")
                 return restore_info
             else:
-                error_msg = "备份恢复过程返回失败状态"
-                logger.error(f"❌ {error_msg}")
-                raise Exception(error_msg)
-
-        except Exception as e:
-            error_msg = f"恢复备份时发生错误: {str(e)}"
-            logger.error(f"❌ {error_msg}")
-            raise Exception(error_msg)
-
-    async def _restore_from_local_backup(self) -> Dict[str, Any]:
-        """从本地备份恢复"""
-        try:
-            logger.info("🔄 使用本地备份进行恢复...")
-
-            # 查找可用的本地备份
-            if not self.backup_dir.exists():
-                raise Exception("备份目录不存在")
-
-            backup_files = list(self.backup_dir.glob("*.zip"))
-            if not backup_files:
-                raise Exception("没有找到本地备份文件")
-
-            # 使用最新的备份
-            latest_backup = max(backup_files, key=lambda x: x.stat().st_mtime)
-            logger.info(f"📁 使用本地备份: {latest_backup.name}")
-
-            # 恢复备份
-            success = await self.restore_backup(latest_backup.name)
-
-            if success:
-                restore_info = {
-                    "filename": latest_backup.name,
-                    "size": latest_backup.stat().st_size,
-                    "timestamp": datetime.now().isoformat(),
-                    "source": "local",
-                    "success": True
-                }
-                logger.info(f"✅ 本地备份恢复完成: {latest_backup.name}")
-                return restore_info
-            else:
-                raise Exception("本地备份恢复失败")
+                raise Exception("R2 备份恢复逻辑返回失败状态")
 
         except Exception as e:
             logger.error(f"❌ 本地备份恢复失败: {e}")

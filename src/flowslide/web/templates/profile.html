@@ -95,7 +95,7 @@
     <div class="card">
     <h3 class="accent-red" style="margin-bottom: 20px;">🔒 修改密码</h3>
         
-        <form method="post" action="/auth/change-password">
+    <form id="passwordForm" onsubmit="return changePassword(event)">
             <div class="form-group">
                 <label for="current_password">当前密码:</label>
                 <input type="password" id="current_password" name="current_password" required 
@@ -186,6 +186,11 @@
 
 {% block extra_js %}
 <script>
+// 记录初始值用于无改动判断
+const __origProfileValues = {
+    username: (document.getElementById('username')||{}).value || '',
+    email: (document.getElementById('email')||{}).value || ''
+};
 // 密码确认验证
 document.getElementById('confirm_password').addEventListener('input', function() {
     const newPassword = document.getElementById('new_password').value;
@@ -217,18 +222,77 @@ document.getElementById('new_password').addEventListener('input', function() {
 })();
 
 // 更新基本信息
+// 简单提示组件
+function showTempMessage(msg, ok=true){
+    let box = document.getElementById('profileMsgBox');
+    if(!box){
+        box = document.createElement('div');
+        box.id = 'profileMsgBox';
+        box.style.position='fixed';
+        box.style.top='20px';
+        box.style.left='50%';
+        box.style.transform='translateX(-50%)';
+        box.style.zIndex='9999';
+        document.body.appendChild(box);
+    }
+    box.innerHTML = `<div style="padding:10px 18px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.25);background:${ok?'#1b873f':'#b42318'};color:#fff;font-size:14px;">${msg}</div>`;
+    setTimeout(()=>{box.innerHTML='';}, 3000);
+}
+
 async function updateBasicInfo(e){
     e.preventDefault();
     const form = document.getElementById('basicInfoForm');
     const fd = new FormData(form);
+    // 无改动预检查：去除首尾空格比较
+    const curUsername = (fd.get('username')||'').trim();
+    const curEmail = (fd.get('email')||'').trim();
+    if(curUsername === __origProfileValues.username && curEmail === (__origProfileValues.email||'')){
+        // 静默返回，不请求后端
+        return false;
+    }
     try {
         const res = await fetch('/api/auth/profile/update', { method: 'POST', body: fd });
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.detail || '保存失败');
-        // 简单刷新以获取最新 user 数据
-        location.reload();
+        // 即时更新 DOM（无需刷新）
+        if(data.user){
+            // 只更新显示型节点（表单本身已经是新值）
+        }
+    let syncHints=[];
+    const mode = data.mode || '';
+    if(data.external_triggered && mode.includes('external')) syncHints.push('外部数据库用户同步已触发');
+    if(data.r2_triggered && mode.includes('r2')) syncHints.push('R2轻量同步已触发');
+        const changedParts = [];
+        if(data.changed?.username) changedParts.push('用户名');
+        if(data.changed?.email) changedParts.push('邮箱');
+        let baseMsg;
+        if(changedParts.length === 0){
+            // 无改动：静默，无提示 & 不显示同步信息
+            return false;
+        } else {
+            baseMsg = `保存成功（${changedParts.join('、')}已更新` + (syncHints.length? '，' + syncHints.join('，') : '') + '）';
+        }
+        showTempMessage(baseMsg, true);
     } catch(err){
-        alert('保存失败：' + err.message);
+        showTempMessage('保存失败：' + err.message, false);
+    }
+    return false;
+}
+
+async function changePassword(e){
+    e.preventDefault();
+    const fd = new FormData(document.getElementById('passwordForm'));
+    try {
+        const res = await fetch('/api/auth/change-password', { method:'POST', body: fd });
+        const data = await res.json();
+        if(!res.ok || !data.success) throw new Error(data.detail || '修改失败');
+        let syncHints=[];
+        if(data.external_triggered) syncHints.push('外部同步已触发');
+        if(data.r2_triggered) syncHints.push('R2轻量同步已触发');
+        showTempMessage('密码修改成功' + (syncHints.length?'（'+syncHints.join('，')+'）':''), true);
+        ['current_password','new_password','confirm_password'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+    } catch(err){
+        showTempMessage('密码修改失败：' + err.message, false);
     }
     return false;
 }
