@@ -140,52 +140,54 @@ class DataSyncService:
                 await self._full_sync_external_to_local()
 
     async def _sync_local_to_external(self):
-        """从本地同步到外部数据库"""
+        """从本地同步到外部数据库（仅限 local_external / local_external_r2 模式）"""
+        from ..core.mode_manager import mode_manager, DeploymentMode
+        try:
+            current_mode = mode_manager.current_mode or mode_manager.detect_current_mode()
+        except Exception:
+            current_mode = None
+        if current_mode not in (DeploymentMode.LOCAL_EXTERNAL, DeploymentMode.LOCAL_EXTERNAL_R2):
+            logger.info(f"⏭️ 当前模式 {current_mode} 不允许与 external 同步，跳过 _sync_local_to_external")
+            return
         if not db_manager.external_engine:
             return
-
         try:
             logger.info("🔄 Syncing local changes to external database...")
-
             # Note: User sync disabled as per requirements
             # await self._sync_users_local_to_external()
-
             # 同步演示文稿表
             await self._sync_presentations_local_to_external()
-
             # 同步模板表
             await self._sync_templates_local_to_external()
-
             # 同步配置文件
             await self._sync_configs_local_to_external()
-
             logger.info("✅ Local to external sync completed")
-
         except Exception as e:
             logger.error(f"❌ Local to external sync failed: {e}")
 
     async def _sync_external_to_local(self):
-        """从外部数据库同步到本地"""
+        """从外部数据库同步到本地（仅限 local_external / local_external_r2 模式）"""
+        from ..core.mode_manager import mode_manager, DeploymentMode
+        try:
+            current_mode = mode_manager.current_mode or mode_manager.detect_current_mode()
+        except Exception:
+            current_mode = None
+        if current_mode not in (DeploymentMode.LOCAL_EXTERNAL, DeploymentMode.LOCAL_EXTERNAL_R2):
+            logger.info(f"⏭️ 当前模式 {current_mode} 不允许与 external 同步，跳过 _sync_external_to_local")
+            return
         if not db_manager.external_engine:
             return
-
         try:
             logger.info("🔄 Syncing external changes to local database...")
-
             # Note: User sync disabled as per requirements
             # await self._sync_users_external_to_local()
-
             # 同步演示文稿表
             await self._sync_presentations_external_to_local()
-
             # 同步模板表
             await self._sync_templates_external_to_local()
-
             # 同步配置文件
             await self._sync_configs_external_to_local()
-
             logger.info("✅ External to local sync completed")
-
         except Exception as e:
             logger.error(f"❌ External to local sync failed: {e}")
 
