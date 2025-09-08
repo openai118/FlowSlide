@@ -68,7 +68,8 @@ class DatabaseManager:
             connect_args={"check_same_thread": False},
             echo=False,
         )
-        self.primary_async_engine = create_async_engine(
+        # Use safe async engine creator to ensure asyncpg statement cache is disabled when needed
+        self.primary_async_engine = create_async_engine_safe(
             self.local_async_url,
             echo=False
         )
@@ -105,7 +106,7 @@ class DatabaseManager:
             )
 
             async_connect_args = {"statement_cache_size": 0}
-            self.primary_async_engine = create_async_engine(
+            self.primary_async_engine = create_async_engine_safe(
                 self.external_async_url,
                 pool_size=3,
                 max_overflow=2,
@@ -146,7 +147,6 @@ class DatabaseManager:
             # Do NOT pass statement_cache_size into the sync create_engine (psycopg2)
             # 强制所有 asyncpg 场景禁用 prepared statement 缓存，避免 pgbouncer 问题
             async_connect_args = {"statement_cache_size": 0}
-
             # Create sync engine without passing DB-API specific connect_args that psycopg2 doesn't accept
             self.external_engine = create_engine(
                 self.external_url,
@@ -158,7 +158,7 @@ class DatabaseManager:
             )
 
             # Async engine may accept driver-specific connect_args (e.g., asyncpg)
-            self.external_async_engine = create_async_engine(
+            self.external_async_engine = create_async_engine_safe(
                 self.external_async_url,
                 pool_size=5,
                 max_overflow=10,
@@ -272,7 +272,28 @@ temp_engine = create_engine(
     connect_args={"check_same_thread": False},
     echo=False,
 )
-temp_async_engine = create_async_engine("sqlite+aiosqlite:///./data/flowslide.db", echo=False)
+def create_async_engine_safe(url: str, **kwargs):
+    """
+    Wrapper around SQLAlchemy's create_async_engine to ensure that when using asyncpg
+    we pass connect_args={'statement_cache_size': 0} to avoid pgbouncer prepared statement issues.
+    It merges user-provided connect_args with the enforced setting.
+    """
+    # Only enforce for asyncpg URLs
+    try:
+        lower = (url or "").lower()
+    except Exception:
+        lower = ""
+
+    if "asyncpg" in lower:
+        enforced = {"statement_cache_size": 0}
+        user_ca = kwargs.get("connect_args") or {}
+        # Merge without overwriting user-specified keys except statement_cache_size
+        merged = {**user_ca, **enforced}
+        kwargs["connect_args"] = merged
+
+    return create_async_engine(url, **kwargs)
+
+temp_async_engine = create_async_engine_safe("sqlite+aiosqlite:///./data/flowslide.db", echo=False)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=temp_engine)
 AsyncSessionLocal = async_sessionmaker(temp_async_engine, class_=AsyncSession, expire_on_commit=False)

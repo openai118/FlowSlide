@@ -11,7 +11,8 @@ import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession
+from flowslide.database.database import create_async_engine_safe
 from sqlalchemy.orm import sessionmaker
 from flowslide.auth.auth_service import AuthService
 from flowslide.database.database import get_async_db, get_db
@@ -47,7 +48,7 @@ def test_engine(temp_db_file):
 def test_async_engine(temp_db_file):
     """Create a test async database engine"""
     database_url = f"sqlite+aiosqlite:///{temp_db_file}"
-    async_engine = create_async_engine(database_url, echo=False)
+    async_engine = create_async_engine_safe(database_url, echo=False)
     yield async_engine
     # Note: async engine cleanup is handled by pytest-asyncio
 @pytest.fixture

@@ -12,7 +12,7 @@ from enum import Enum
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 from sqlalchemy import text, create_engine
-from sqlalchemy.ext.asyncio import create_async_engine
+from ..database.database import create_async_engine_safe
 
 from ..core.sync_strategy_config import DeploymentMode
 
@@ -113,7 +113,7 @@ class AutoDetectionService:
             # by setting statement_cache_size=0 (or read from PG_STATEMENT_CACHE_SIZE env).
             # 强制所有 asyncpg 场景禁用 prepared statement 缓存，避免 pgbouncer 问题
             async_connect_args = {"statement_cache_size": 0}
-            async_engine = create_async_engine(database_url, echo=False, connect_args=async_connect_args)
+            async_engine = create_async_engine_safe(database_url, echo=False, connect_args=async_connect_args)
 
             try:
                 async with async_engine.connect() as conn:
