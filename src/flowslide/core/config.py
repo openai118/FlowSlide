@@ -28,16 +28,25 @@ class AIConfig(BaseSettings):
     openai_api_key: Optional[str] = None
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-3.5-turbo"
+    # OpenAI timeout and retry defaults (seconds / attempts)
+    openai_request_timeout: int = 30
+    openai_max_retries: int = 3
 
     # Anthropic Configuration
     anthropic_api_key: Optional[str] = None
     anthropic_base_url: str = "https://api.anthropic.com"
     anthropic_model: str = "claude-3-haiku-20240307"
+    # Anthropic timeout and retry defaults (seconds / attempts)
+    anthropic_request_timeout: int = 30
+    anthropic_max_retries: int = 3
 
     # Google AI Configuration
     google_api_key: Optional[str] = None
     google_base_url: str = "https://generativelanguage.googleapis.com"
     google_model: str = "gemini-1.5-flash"
+    # Google timeout and retry defaults (seconds / attempts)
+    google_request_timeout: int = 60
+    google_max_retries: int = 3
 
     # Azure OpenAI Configuration
     azure_openai_api_key: Optional[str] = None
@@ -109,6 +118,8 @@ class AIConfig(BaseSettings):
                 "temperature": self.temperature,
                 "top_p": self.top_p,
                 "max_tokens": self.max_tokens,
+                "request_timeout": self.openai_request_timeout,
+                "max_retries": self.openai_max_retries,
             }
         if provider == "anthropic":
             return {
@@ -118,6 +129,8 @@ class AIConfig(BaseSettings):
                 "temperature": self.temperature,
                 "top_p": self.top_p,
                 "max_tokens": self.max_tokens,
+                "request_timeout": self.anthropic_request_timeout,
+                "max_retries": self.anthropic_max_retries,
             }
         if provider in ("google", "gemini"):
             return {
@@ -127,6 +140,8 @@ class AIConfig(BaseSettings):
                 "temperature": self.temperature,
                 "top_p": self.top_p,
                 "max_tokens": self.max_tokens,
+                "request_timeout": self.google_request_timeout,
+                "max_retries": self.google_max_retries,
             }
         if provider == "azure_openai":
             return {

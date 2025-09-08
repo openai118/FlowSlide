@@ -3,6 +3,8 @@ AI provider implementations
 """
 
 import logging
+import asyncio
+import random
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from ..core.config import ai_config
@@ -63,45 +65,57 @@ class OpenAIProvider(AIProvider):
         # Convert messages to OpenAI format
         openai_messages = [{"role": msg.role.value, "content": msg.content} for msg in messages]
 
-        try:
-            response = await self.client.chat.completions.create(
-                model=config.get("model", self.model),
-                messages=openai_messages,
-                # max_tokens=config.get("max_tokens", 2000),
-                temperature=config.get("temperature", 0.7),
-                top_p=config.get("top_p", 1.0),
-            )
+        # Apply configurable timeout and retry logic to mitigate transient network/API issues.
+        request_timeout = config.get("request_timeout", 30)
+        max_retries = int(config.get("max_retries", 3))
 
-            choice = response.choices[0]
+        last_exc: Optional[BaseException] = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                coro = self.client.chat.completions.create(
+                    model=config.get("model", self.model),
+                    messages=openai_messages,
+                    # max_tokens=config.get("max_tokens", 2000),
+                    temperature=config.get("temperature", 0.7),
+                    top_p=config.get("top_p", 1.0),
+                )
 
-            return AIResponse(
-                content=choice.message.content,
-                model=response.model,
-                usage={
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens,
-                },
-                finish_reason=choice.finish_reason,
-                metadata={"provider": "openai"},
-            )
+                response = await asyncio.wait_for(coro, timeout=request_timeout)
 
-        except Exception as e:
-            # 提供更详细的错误信息
-            error_msg = str(e)
-            if "Expecting value" in error_msg:
-                logger.error("OpenAI API JSON parsing error while parsing response")
-                logger.error(error_msg)
-            elif "timeout" in error_msg.lower():
-                logger.error("OpenAI API timeout error")
-                logger.error(error_msg)
-            elif "rate limit" in error_msg.lower():
-                logger.error("OpenAI API rate limit error")
-                logger.error(error_msg)
-            else:
-                logger.error("OpenAI API error")
-                logger.error(error_msg)
-            raise
+                choice = response.choices[0]
+
+                return AIResponse(
+                    content=choice.message.content,
+                    model=response.model,
+                    usage={
+                        "prompt_tokens": getattr(response.usage, "prompt_tokens", 0),
+                        "completion_tokens": getattr(response.usage, "completion_tokens", 0),
+                        "total_tokens": getattr(response.usage, "total_tokens", 0),
+                    },
+                    finish_reason=choice.finish_reason,
+                    metadata={"provider": "openai"},
+                )
+
+            except asyncio.TimeoutError as te:
+                last_exc = te
+                logger.error("OpenAI request timed out (attempt %d/%d) after %s seconds", attempt, max_retries, request_timeout)
+                # If final attempt, raise the timeout so caller can handle it
+                if attempt >= max_retries:
+                    raise
+                # Exponential backoff with jitter
+                await asyncio.sleep(min(2 ** attempt + random.random(), 10))
+                continue
+            except Exception as e:
+                last_exc = e
+                # For other errors, log and retry unless it's the last attempt
+                logger.error("OpenAI API error on attempt %d/%d: %s", attempt, max_retries, e)
+                if attempt >= max_retries:
+                    raise
+                await asyncio.sleep(min(2 ** attempt + random.random(), 10))
+
+        # If we exit loop without returning, raise the last seen exception
+        if last_exc:
+            raise last_exc
 
     async def text_completion(self, prompt: str, **kwargs) -> AIResponse:
         """Generate text completion using OpenAI chat format"""
@@ -147,18 +161,30 @@ class OpenAIProvider(AIProvider):
         openai_messages = [{"role": msg.role.value, "content": msg.content} for msg in messages]
 
         try:
-            stream = await self.client.chat.completions.create(
-                model=config.get("model", self.model),
-                messages=openai_messages,
-                # max_tokens=config.get("max_tokens", 2000),
-                temperature=config.get("temperature", 0.7),
-                top_p=config.get("top_p", 1.0),
-                stream=True,
-            )
+            # Stream with a guarded create call. Streaming producers may still block,
+            # so we set a generous request timeout and avoid aggressive retries here.
+            request_timeout = config.get("request_timeout", 60)
+            try:
+                coro = self.client.chat.completions.create(
+                    model=config.get("model", self.model),
+                    messages=openai_messages,
+                    # max_tokens=config.get("max_tokens", 2000),
+                    temperature=config.get("temperature", 0.7),
+                    top_p=config.get("top_p", 1.0),
+                    stream=True,
+                )
 
-            async for chunk in stream:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+                stream = await asyncio.wait_for(coro, timeout=request_timeout)
+
+                async for chunk in stream:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        yield chunk.choices[0].delta.content
+            except asyncio.TimeoutError:
+                logger.error("OpenAI streaming request timed out after %s seconds", request_timeout)
+                raise
+            except Exception as e:
+                logger.error(f"OpenAI streaming error: {e}")
+                raise
 
         except Exception as e:
             logger.error(f"OpenAI streaming error: {e}")
@@ -229,32 +255,61 @@ class AnthropicProvider(AIProvider):
             else:
                 claude_messages.append({"role": msg.role.value, "content": msg.content})
 
-        try:
-            response = await self.client.messages.create(
-                model=config.get("model", self.model),
-                # max_tokens=config.get("max_tokens", 2000),
-                temperature=config.get("temperature", 0.7),
-                system=system_message,
-                messages=claude_messages,
-            )
+        # Apply configurable timeout and retry logic similar to OpenAI provider
+        request_timeout = config.get("request_timeout", 30)
+        max_retries = int(config.get("max_retries", 3))
 
-            content = response.content[0].text if response.content else ""
+        last_exc: Optional[BaseException] = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                coro = self.client.messages.create(
+                    model=config.get("model", self.model),
+                    # max_tokens=config.get("max_tokens", 2000),
+                    temperature=config.get("temperature", 0.7),
+                    system=system_message,
+                    messages=claude_messages,
+                )
 
-            return AIResponse(
-                content=content,
-                model=response.model,
-                usage={
-                    "prompt_tokens": response.usage.input_tokens,
-                    "completion_tokens": response.usage.output_tokens,
-                    "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
-                },
-                finish_reason=response.stop_reason,
-                metadata={"provider": "anthropic"},
-            )
+                response = await asyncio.wait_for(coro, timeout=request_timeout)
 
-        except Exception as e:
-            logger.error(f"Anthropic API error: {e}")
-            raise
+                content = response.content[0].text if response.content else ""
+
+                return AIResponse(
+                    content=content,
+                    model=response.model,
+                    usage={
+                        "prompt_tokens": getattr(response.usage, "input_tokens", 0),
+                        "completion_tokens": getattr(response.usage, "output_tokens", 0),
+                        "total_tokens": (
+                            getattr(response.usage, "input_tokens", 0)
+                            + getattr(response.usage, "output_tokens", 0)
+                        ),
+                    },
+                    finish_reason=getattr(response, "stop_reason", None),
+                    metadata={"provider": "anthropic"},
+                )
+
+            except asyncio.TimeoutError as te:
+                last_exc = te
+                logger.error(
+                    "Anthropic request timed out (attempt %d/%d) after %s seconds",
+                    attempt,
+                    max_retries,
+                    request_timeout,
+                )
+                if attempt >= max_retries:
+                    raise
+                await asyncio.sleep(min(2 ** attempt + random.random(), 10))
+                continue
+            except Exception as e:
+                last_exc = e
+                logger.error("Anthropic API error on attempt %d/%d: %s", attempt, max_retries, e)
+                if attempt >= max_retries:
+                    raise
+                await asyncio.sleep(min(2 ** attempt + random.random(), 10))
+
+        if last_exc:
+            raise last_exc
 
     async def text_completion(self, prompt: str, **kwargs) -> AIResponse:
         """Generate text completion using Anthropic chat format"""
@@ -412,7 +467,38 @@ class GoogleProvider(AIProvider):
                 },
             ]
 
-            response = await self._generate_async(prompt, generation_config, safety_settings)
+            # Apply configurable timeout and retries for SDK generation
+            request_timeout = config.get("request_timeout", 60)
+            max_retries = int(config.get("max_retries", 3))
+
+            last_exc: Optional[BaseException] = None
+            for attempt in range(1, max_retries + 1):
+                try:
+                    coro = self._generate_async(prompt, generation_config, safety_settings)
+                    response = await asyncio.wait_for(coro, timeout=request_timeout)
+                    break
+                except asyncio.TimeoutError as te:
+                    last_exc = te
+                    logger.error(
+                        "Google SDK request timed out (attempt %d/%d) after %s seconds",
+                        attempt,
+                        max_retries,
+                        request_timeout,
+                    )
+                    if attempt >= max_retries:
+                        raise
+                    await asyncio.sleep(min(2 ** attempt + random.random(), 10))
+                    continue
+                except Exception as e:
+                    last_exc = e
+                    logger.error("Google SDK error on attempt %d/%d: %s", attempt, max_retries, e)
+                    if attempt >= max_retries:
+                        raise
+                    await asyncio.sleep(min(2 ** attempt + random.random(), 10))
+
+            if last_exc and not (hasattr(last_exc, '__traceback__')):
+                # ensure response variable exists; if we exhausted retries the exception will have been raised
+                pass
             logger.debug(f"Google Gemini API response: {response}")
 
             # 检查响应状态和安全过滤
@@ -530,12 +616,43 @@ class GoogleProvider(AIProvider):
             "generationConfig": generation_config,
         }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, timeout=60) as resp:
-                if resp.status != 200:
-                    text = await resp.text()
-                    raise RuntimeError(f"Google REST API error {resp.status}: {text[:200]}")
-                data = await resp.json()
+        # Apply configurable timeout and retry logic for REST path
+        request_timeout = int(config.get("request_timeout", 60))
+        max_retries = int(config.get("max_retries", 3))
+
+        last_exc: Optional[BaseException] = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                timeout_obj = aiohttp.ClientTimeout(total=request_timeout)
+                async with aiohttp.ClientSession(timeout=timeout_obj) as session:
+                    async with session.post(url, json=payload) as resp:
+                        if resp.status != 200:
+                            text = await resp.text()
+                            raise RuntimeError(f"Google REST API error {resp.status}: {text[:200]}")
+                        data = await resp.json()
+                        break
+            except asyncio.TimeoutError as te:
+                last_exc = te
+                logger.error(
+                    "Google REST request timed out (attempt %d/%d) after %s seconds",
+                    attempt,
+                    max_retries,
+                    request_timeout,
+                )
+                if attempt >= max_retries:
+                    raise
+                await asyncio.sleep(min(2 ** attempt + random.random(), 10))
+                continue
+            except Exception as e:
+                last_exc = e
+                logger.error("Google REST error on attempt %d/%d: %s", attempt, max_retries, e)
+                if attempt >= max_retries:
+                    raise
+                await asyncio.sleep(min(2 ** attempt + random.random(), 10))
+
+        # If data wasn't set because all retries failed, raise the last exception
+        if last_exc and 'data' not in locals():
+            raise last_exc
 
         # Extract text
         content = ""

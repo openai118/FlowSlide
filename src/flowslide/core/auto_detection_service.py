@@ -113,7 +113,14 @@ class AutoDetectionService:
             # by setting statement_cache_size=0 (or read from PG_STATEMENT_CACHE_SIZE env).
             # 强制所有 asyncpg 场景禁用 prepared statement 缓存，避免 pgbouncer 问题
             async_connect_args = {"statement_cache_size": 0}
-            async_engine = create_async_engine_safe(database_url, echo=False, connect_args=async_connect_args)
+            try:
+                # Convert sync DATABASE_URL to async form if needed
+                from .simple_config import get_async_database_url
+                async_db_url = get_async_database_url(database_url)
+            except Exception:
+                async_db_url = database_url
+
+            async_engine = create_async_engine_safe(async_db_url, echo=False, connect_args=async_connect_args)
 
             try:
                 async with async_engine.connect() as conn:

@@ -31,17 +31,44 @@ class DatabaseManager:
         self.local_async_url = LOCAL_DATABASE_URL.replace("sqlite:///", "sqlite+aiosqlite:///")
         # 仅接受真正的外部数据库URL（postgresql/mysql），否则视为未配置
         _raw_ext = (EXTERNAL_DATABASE_URL or "").strip()
-        if _raw_ext.startswith("postgresql://") or _raw_ext.startswith("mysql://"):
-            self.external_url = _raw_ext
-            if _raw_ext.startswith("postgresql://"):
-                self.external_async_url = _raw_ext.replace("postgresql://", "postgresql+asyncpg://")
-            elif _raw_ext.startswith("mysql://"):
-                self.external_async_url = _raw_ext.replace("mysql://", "mysql+aiomysql://")
-            else:
+        if _raw_ext:
+            # Accept schemes like 'postgresql', 'postgresql+asyncpg', 'mysql', 'mysql+aiomysql', etc.
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(_raw_ext)
+                scheme = (parsed.scheme or "").lower()
+
+                if scheme.startswith("postgresql") or scheme.startswith("mysql"):
+                    # keep the original URL as external_url (may already include +driver)
+                    self.external_url = _raw_ext
+                    # compute async form using helper which also strips unsupported query params
+                    try:
+                        from ..core.simple_config import get_async_database_url
+                        self.external_async_url = get_async_database_url(_raw_ext)
+                    except Exception:
+                        # fallback: attempt conservative replacements
+                        if scheme.startswith("postgresql"):
+                            if "asyncpg" in scheme:
+                                self.external_async_url = _raw_ext
+                            else:
+                                self.external_async_url = _raw_ext.replace(scheme + "://", "postgresql+asyncpg://", 1)
+                        elif scheme.startswith("mysql"):
+                            if "aiomysql" in scheme:
+                                self.external_async_url = _raw_ext
+                            else:
+                                self.external_async_url = _raw_ext.replace(scheme + "://", "mysql+aiomysql://", 1)
+                        else:
+                            self.external_async_url = ""
+                else:
+                    logger.info("ℹ️ DATABASE_URL is not a supported external DB (postgresql/mysql). Ignoring for external engines.")
+                    self.external_url = ""
+                    self.external_async_url = ""
+            except Exception:
+                # If parsing fails, fall back to empty external config
+                logger.info("ℹ️ Failed to parse EXTERNAL_DATABASE_URL - ignoring as external DB")
+                self.external_url = ""
                 self.external_async_url = ""
         else:
-            if _raw_ext:
-                logger.info("ℹ️ DATABASE_URL is not a supported external DB (postgresql/mysql). Ignoring for external engines.")
             self.external_url = ""
             self.external_async_url = ""
 
@@ -95,10 +122,13 @@ class DatabaseManager:
             is_pooler = any(key in hostname or key in url_lc for key in ("pooler", "pgbouncer", "pgbouncer."))
 
             # 强制所有 asyncpg 场景禁用 prepared statement 缓存，避免 pgbouncer 问题
+            # Increase pool sizes to better handle concurrent requests when
+            # using an external database. Keep relatively conservative defaults
+            # but higher than the previous tiny values.
             self.primary_engine = create_engine(
                 self.external_url,
-                pool_size=3,
-                max_overflow=2,
+                pool_size=10,
+                max_overflow=20,
                 pool_pre_ping=False,
                 pool_recycle=(300 if is_supabase or is_pooler else 3600),
                 pool_timeout=60,
@@ -148,10 +178,12 @@ class DatabaseManager:
             # 强制所有 asyncpg 场景禁用 prepared statement 缓存，避免 pgbouncer 问题
             async_connect_args = {"statement_cache_size": 0}
             # Create sync engine without passing DB-API specific connect_args that psycopg2 doesn't accept
+            # Backup engine used for synchronization; increase pool sizes
+            # so simultaneous sync/requests don't starve connections.
             self.external_engine = create_engine(
                 self.external_url,
-                pool_size=5,
-                max_overflow=10,
+                pool_size=10,
+                max_overflow=20,
                 pool_pre_ping=True,
                 pool_recycle=3600,
                 echo=False,
@@ -178,8 +210,16 @@ class DatabaseManager:
             mode_name = current_mode.value if current_mode else 'local_only'
 
             # 根据模式选择主数据库
-            if (DATABASE_MODE == "external" or mode_name in ['local_external', 'local_external_r2']) and self.external_url:
+            # 语义说明:
+            # - 若显式通过环境变量或 DATABASE_MODE 指定 external，则使用外部数据库为主
+            # - 对于 local_external 本地优先场景，默认使用本地为主（local read, external write）以保证 UI 延迟低
+            # - 如需强制在 local_external 下使用外部为主，可设置环境变量 PREFER_EXTERNAL_AS_PRIMARY=1
+            prefer_external_env = os.getenv("PREFER_EXTERNAL_AS_PRIMARY", "").strip().lower() in ("1", "true", "yes")
+            prefer_external = (DATABASE_MODE == "external") or prefer_external_env
+
+            if prefer_external and self.external_url:
                 try:
+                    # 外部被明确选为主库
                     self._create_external_engine()
                     logger.info("🎯 Using external database as primary")
                 except Exception as e:
@@ -187,8 +227,9 @@ class DatabaseManager:
                     logger.info("🔄 Falling back to local database")
                     self._create_local_engine()
             else:
+                # 默认使用本地作为主库，外部作为备份（用于异步同步）
                 self._create_local_engine()
-                logger.info("🏠 Using local database as primary")
+                logger.info("🏠 Using local database as primary (local read / external write)")
 
             # 如果配置了外部数据库且不是external模式，创建备份引擎用于同步
             if self.external_url and DATABASE_MODE != "external" and mode_name not in ['local_external', 'local_external_r2']:
@@ -198,6 +239,39 @@ class DatabaseManager:
                     logger.info("🔄 Data synchronization enabled")
                 except Exception as e:
                     logger.warning(f"⚠️ Backup engine creation failed: {e}")
+
+            # 如果当前部署模式包含 external（或者显式设置为 external），确保外部数据库被初始化
+            try:
+                wants_external = (DATABASE_MODE == "external") or (mode_name in ['local_external', 'local_external_r2'])
+                if wants_external and self.external_engine:
+                    logger.info("🔧 Ensuring external database tables and default admin (if needed)...")
+                    try:
+                        # 导入模型并在外部 DB 上创建表（使用同步引擎以避免 asyncpg/pooler 问题）
+                        from .models import Base
+                        with self.external_engine.begin() as conn:
+                            Base.metadata.create_all(bind=self.external_engine)
+
+                        # 初始化默认管理员到外部数据库（如果没有用户）
+                        from ..auth.auth_service import init_default_admin
+                        from sqlalchemy.orm import sessionmaker
+                        ExternalSession = sessionmaker(autocommit=False, autoflush=False, bind=self.external_engine)
+                        ext_db = ExternalSession()
+                        try:
+                            init_default_admin(ext_db)
+                            logger.info("✅ External database default admin initialized (if it was missing)")
+                        except Exception as _e:
+                            logger.warning(f"⚠️ 初始化外部数据库默认管理员时出错（忽略）: {_e}")
+                        finally:
+                            try:
+                                ext_db.close()
+                            except Exception:
+                                pass
+
+                    except Exception as _ext_init_e:
+                        logger.warning(f"⚠️ 确保外部数据库初始化失败（继续）: {_ext_init_e}")
+            except Exception:
+                # 防御性捕获，不影响主流程
+                pass
 
         except Exception as e:
             logger.error(f"❌ Database manager initialization failed: {e}")
@@ -278,20 +352,48 @@ def create_async_engine_safe(url: str, **kwargs):
     we pass connect_args={'statement_cache_size': 0} to avoid pgbouncer prepared statement issues.
     It merges user-provided connect_args with the enforced setting.
     """
-    # Only enforce for asyncpg URLs
+    # Normalize common sync URLs (postgresql://, mysql://) to their async counterparts
     try:
         lower = (url or "").lower()
     except Exception:
         lower = ""
 
+    # If caller passed a sync URL like postgresql://... or mysql://... convert it
+    # to async form to avoid errors like "The asyncio extension requires an async driver".
+    try:
+        if lower.startswith("postgresql://") and "asyncpg" not in lower:
+            from ..core.simple_config import get_async_database_url
+            async_url = get_async_database_url(url)
+            logger.info(f"create_async_engine_safe: converted sync postgresql URL to async form: {async_url}")
+            url = async_url
+            lower = url.lower()
+        elif lower.startswith("mysql://") and "aiomysql" not in lower:
+            from ..core.simple_config import get_async_database_url
+            async_url = get_async_database_url(url)
+            logger.info(f"create_async_engine_safe: converted sync mysql URL to async form: {async_url}")
+            url = async_url
+            lower = url.lower()
+    except Exception as _conv_e:
+        # If conversion fails, fall back and let create_async_engine raise a meaningful error
+        logger.debug(f"create_async_engine_safe: async URL conversion attempt failed: {_conv_e}")
+
+    # Only enforce for asyncpg URLs
     if "asyncpg" in lower:
         enforced = {"statement_cache_size": 0}
         user_ca = kwargs.get("connect_args") or {}
         # Merge without overwriting user-specified keys except statement_cache_size
         merged = {**user_ca, **enforced}
         kwargs["connect_args"] = merged
+        logger.info(f"create_async_engine_safe: forcing asyncpg connect_args for {url}: {kwargs.get('connect_args')}")
+    else:
+        logger.info(f"create_async_engine_safe: creating async engine for {url}")
 
-    return create_async_engine(url, **kwargs)
+    try:
+        engine = create_async_engine(url, **kwargs)
+        return engine
+    except Exception as e:
+        logger.error(f"create_async_engine_safe: failed to create engine for {url}: {e}")
+        raise
 
 temp_async_engine = create_async_engine_safe("sqlite+aiosqlite:///./data/flowslide.db", echo=False)
 
@@ -362,7 +464,14 @@ async def init_db():
 async def close_db():
     """Close database connections"""
     if async_engine:
-        await async_engine.dispose()
+        try:
+            await asyncio.wait_for(async_engine.dispose(), timeout=5)
+        except asyncio.TimeoutError:
+            logger.warning("Warning: async_engine.dispose() timed out after 5s")
+        except asyncio.CancelledError:
+            logger.warning("Warning: async_engine.dispose() was cancelled")
+        except Exception as e:
+            logger.warning(f"Warning: exception during async_engine.dispose(): {e}")
 
 
 def update_session_makers():

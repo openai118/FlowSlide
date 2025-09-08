@@ -41,6 +41,14 @@ class DataSyncService:
             "external" if db_manager.external_engine else "local",
         ).lower()
 
+        # Ensure outbox table exists for async double-write strategy
+        try:
+            # defer actual creation until DB is initialized; try best-effort here
+            self._ensure_outbox_table()
+        except Exception:
+            # will be retried when sync service starts
+            pass
+
     def _determine_sync_directions(self) -> List[str]:
         """根据数据库配置确定同步方向"""
         directions = []
@@ -92,6 +100,12 @@ class DataSyncService:
 
         while self.is_running:
             try:
+                # First process any pending outbox entries to push local writes to external
+                try:
+                    await self._process_outbox()
+                except Exception as _o:
+                    logger.debug(f"Outbox processing error (will continue): {_o}")
+
                 await self.sync_data()
                 await asyncio.sleep(self.sync_interval)
             except Exception as e:
@@ -141,7 +155,7 @@ class DataSyncService:
 
     async def _sync_local_to_external(self):
         """从本地同步到外部数据库（仅限 local_external / local_external_r2 模式）"""
-        from ..core.mode_manager import mode_manager, DeploymentMode
+        from ..core.deployment_mode_manager import mode_manager, DeploymentMode
         try:
             current_mode = mode_manager.current_mode or mode_manager.detect_current_mode()
         except Exception:
@@ -167,7 +181,7 @@ class DataSyncService:
 
     async def _sync_external_to_local(self):
         """从外部数据库同步到本地（仅限 local_external / local_external_r2 模式）"""
-        from ..core.mode_manager import mode_manager, DeploymentMode
+        from ..core.deployment_mode_manager import mode_manager, DeploymentMode
         try:
             current_mode = mode_manager.current_mode or mode_manager.detect_current_mode()
         except Exception:
@@ -203,7 +217,7 @@ class DataSyncService:
             try:
                 current_mode = mode_manager.current_mode or mode_manager.detect_current_mode()
             except Exception:
-                current_mode = mode_manager.detect_current_mode()
+                current_mode = None
         except Exception:
             current_mode = None
 
@@ -231,7 +245,7 @@ class DataSyncService:
                         logger.info("📭 No local user changes to sync")
                         return
 
-                    logger.info(f"📤 Found {len(changed_users)} local users with changes")
+                        logger.info(f"📤 Found {len(changed_users)} local users with changes")
 
                     # 同步到外部数据库
                     with db_manager.external_engine.connect() as external_conn:  # type: ignore[union-attr]
@@ -1780,7 +1794,7 @@ class DataSyncService:
                                                 external_id=ext_id,
                                                 attempted_username=user.username,
                                                 reason="external_id_mismatch_on_update",
-                                                payload={"local_external_id": local_ext_id, "found_external_id": ext_id}
+                                                payload={"local_external_id": local_ext_id, "found_external_id": ext_id},
                                             )
                                             session.add(sc)
                                             session.commit()
@@ -2028,6 +2042,169 @@ class DataSyncService:
             "external_db_type": db_manager.database_type if db_manager.external_engine else None,
             "external_db_configured": bool(db_manager.external_url)
         }
+
+    # ---------------- 新增：本地 outbox 支持 ----------------
+    def _ensure_outbox_table(self):
+        """Ensure a lightweight outbox table exists in local DB for queued external writes."""
+        try:
+            from ..database.database import SessionLocal
+            with SessionLocal() as s:
+                s.execute(text(
+                    """
+                    CREATE TABLE IF NOT EXISTS sync_outbox (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        created_at REAL,
+                        topic TEXT,
+                        payload TEXT,
+                        attempts INTEGER DEFAULT 0,
+                        last_error TEXT
+                    )
+                    """
+                ))
+                s.commit()
+                logger.info("✅ Ensured local outbox table exists")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to ensure outbox table: {e}")
+
+    def enqueue_outbox(self, topic: str, payload: str):
+        """Insert a message into the local outbox (synchronous helper for write paths).
+
+        payload should be a JSON string. This method is intentionally lightweight and
+        safe to call inside existing DB write transactions after the local write.
+        """
+        try:
+            from ..database.database import SessionLocal
+            with SessionLocal() as s:
+                s.execute(
+                    text("INSERT INTO sync_outbox (created_at, topic, payload, attempts) VALUES (:c, :t, :p, 0)"),
+                    {"c": datetime.now().timestamp(), "t": topic, "p": payload},
+                )
+                s.commit()
+                logger.debug(f"📨 Enqueued outbox message topic={topic}")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to enqueue outbox message: {e}")
+
+    async def _process_outbox(self, batch_size: int = 20):
+        """Process pending outbox entries and push them to external database.
+
+        This runs periodically in the sync service loop. It attempts best-effort delivery
+        and increments attempts on failure. Successful deliveries remove the outbox row.
+        """
+        if not db_manager.external_engine:
+            return
+
+        try:
+            from ..database.database import SessionLocal
+            rows = []
+            # Load a batch from local outbox
+            with SessionLocal() as s:
+                rows = s.execute(text("SELECT id, created_at, topic, payload, attempts FROM sync_outbox ORDER BY created_at LIMIT :lim"), {"lim": batch_size}).fetchall()
+
+            if not rows:
+                return
+
+            for r in rows:
+                try:
+                    # push to external depending on topic
+                    await asyncio.get_event_loop().run_in_executor(None, self._push_outbox_row_sync, dict(r))
+                    # on success remove row
+                    with SessionLocal() as sdel:
+                        sdel.execute(text("DELETE FROM sync_outbox WHERE id = :id"), {"id": r.id})
+                        sdel.commit()
+                except Exception as e:
+                    # increment attempts and save last_error
+                    with SessionLocal() as supd:
+                        supd.execute(text("UPDATE sync_outbox SET attempts = attempts + 1, last_error = :err WHERE id = :id"), {"err": str(e)[:2000], "id": r.id})
+                        supd.commit()
+                    logger.warning(f"⚠️ Outbox push failed for id={r.id}: {e}")
+
+        except Exception as e:
+            logger.debug(f"Outbox processing encountered error: {e}")
+
+    def _push_outbox_row_sync(self, row: dict):
+        """Synchronous helper to apply an outbox row to external DB. Runs in threadpool."""
+        topic = row.get('topic')
+        payload = row.get('payload')
+        # Only implement a small set of topics (presentations, templates, users) — extendable
+        try:
+            if topic == 'presentation_upsert':
+                # payload expected to be JSON with full project fields
+                import json
+                data = json.loads(payload)
+                # Upsert into external projects table by project_id
+                with db_manager.external_engine.connect() as conn:  # type: ignore[union-attr]
+                    conn.execute(text("SELECT 1"))
+                    # Try update then insert if not exists (Postgres compatible)
+                    res = conn.execute(text("SELECT id FROM projects WHERE project_id = :pid"), {"pid": data.get('project_id')}).fetchone()
+                    if res:
+                        conn.execute(text("""
+                            UPDATE projects SET title=:title, scenario=:scenario, topic=:topic, requirements=:requirements, status=:status, owner_id=:owner_id, outline=:outline, slides_html=:slides_html, slides_data=:slides_data, confirmed_requirements=:confirmed_requirements, project_metadata=:project_metadata, version=:version, updated_at=:updated_at WHERE project_id=:project_id
+                        """), {
+                            "title": data.get('title'),
+                            "scenario": data.get('scenario'),
+                            "topic": data.get('topic'),
+                            "requirements": data.get('requirements'),
+                            "status": data.get('status'),
+                            "owner_id": data.get('owner_id'),
+                            "outline": data.get('outline'),
+                            "slides_html": data.get('slides_html'),
+                            "slides_data": data.get('slides_data'),
+                            "confirmed_requirements": data.get('confirmed_requirements'),
+                            "project_metadata": data.get('project_metadata'),
+                            "version": data.get('version'),
+                            "updated_at": data.get('updated_at') or datetime.now().timestamp(),
+                            "project_id": data.get('project_id')
+                        })
+                    else:
+                        conn.execute(text("""
+                            INSERT INTO projects (project_id, title, scenario, topic, requirements, status, owner_id, outline, slides_html, slides_data, confirmed_requirements, project_metadata, version, created_at, updated_at)
+                            VALUES (:project_id, :title, :scenario, :topic, :requirements, :status, :owner_id, :outline, :slides_html, :slides_data, :confirmed_requirements, :project_metadata, :version, :created_at, :updated_at)
+                        """), {
+                            "project_id": data.get('project_id'),
+                            "title": data.get('title'),
+                            "scenario": data.get('scenario'),
+                            "topic": data.get('topic'),
+                            "requirements": data.get('requirements'),
+                            "status": data.get('status'),
+                            "owner_id": data.get('owner_id'),
+                            "outline": data.get('outline'),
+                            "slides_html": data.get('slides_html'),
+                            "slides_data": data.get('slides_data'),
+                            "confirmed_requirements": data.get('confirmed_requirements'),
+                            "project_metadata": data.get('project_metadata'),
+                            "version": data.get('version'),
+                            "created_at": data.get('created_at') or datetime.now().timestamp(),
+                            "updated_at": data.get('updated_at') or datetime.now().timestamp()
+                        })
+                    try:
+                        conn.commit()
+                    except Exception:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+            elif topic == 'template_upsert':
+                # Similar handling for templates
+                import json
+                data = json.loads(payload)
+                with db_manager.external_engine.connect() as conn:  # type: ignore[union-attr]
+                    res = conn.execute(text("SELECT id FROM ppt_templates WHERE id = :id"), {"id": data.get('id')}).fetchone()
+                    if res:
+                        conn.execute(text("UPDATE ppt_templates SET project_id=:project_id, template_type=:template_type, template_name=:template_name, description=:description, html_template=:html_template, applicable_scenarios=:applicable_scenarios, style_config=:style_config, usage_count=:usage_count, updated_at=:updated_at WHERE id=:id"), data)
+                    else:
+                        conn.execute(text("INSERT INTO ppt_templates (id, project_id, template_type, template_name, description, html_template, applicable_scenarios, style_config, usage_count, created_at, updated_at) VALUES (:id, :project_id, :template_type, :template_name, :description, :html_template, :applicable_scenarios, :style_config, :usage_count, :created_at, :updated_at)"), data)
+                    try:
+                        conn.commit()
+                    except Exception:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+            else:
+                # Unknown topic: ignore
+                logger.debug(f"Outbox: unknown topic {topic}")
+        except Exception as e:
+            raise
 
     # ---------------- 新增：配置文件同步 ----------------
     def _ensure_external_config_table(self):

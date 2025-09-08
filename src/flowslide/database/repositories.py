@@ -35,6 +35,31 @@ class ProjectRepository:
         self.session.add(project)
         await self.session.commit()
         await self.session.refresh(project)
+        # enqueue outbox to push this new project to external DB asynchronously
+        try:
+            import json
+            from ..services.data_sync_service import sync_service
+
+            payload = json.dumps({
+                "project_id": project.project_id,
+                "title": project.title,
+                "scenario": getattr(project, 'scenario', None),
+                "topic": getattr(project, 'topic', None),
+                "requirements": getattr(project, 'requirements', None),
+                "status": getattr(project, 'status', None),
+                "owner_id": getattr(project, 'owner_id', None),
+                "outline": getattr(project, 'outline', None),
+                "slides_html": getattr(project, 'slides_html', None),
+                "slides_data": getattr(project, 'slides_data', None),
+                "confirmed_requirements": getattr(project, 'confirmed_requirements', None),
+                "project_metadata": getattr(project, 'project_metadata', None),
+                "version": getattr(project, 'version', None),
+                "created_at": getattr(project, 'created_at', None),
+                "updated_at": getattr(project, 'updated_at', None),
+            }, ensure_ascii=False)
+            sync_service.enqueue_outbox('presentation_upsert', payload)
+        except Exception:
+            pass
         return project
 
     async def get_by_id(self, project_id: str) -> Optional[Project]:
@@ -113,6 +138,31 @@ class ProjectRepository:
             await self.session.refresh(project)
 
             logger.info(f"Successfully updated project {project_id}")
+            # enqueue outbox to push updated project to external DB asynchronously
+            try:
+                import json
+                from ..services.data_sync_service import sync_service
+
+                payload = json.dumps({
+                    "project_id": project.project_id,
+                    "title": project.title,
+                    "scenario": getattr(project, 'scenario', None),
+                    "topic": getattr(project, 'topic', None),
+                    "requirements": getattr(project, 'requirements', None),
+                    "status": getattr(project, 'status', None),
+                    "owner_id": getattr(project, 'owner_id', None),
+                    "outline": getattr(project, 'outline', None),
+                    "slides_html": getattr(project, 'slides_html', None),
+                    "slides_data": getattr(project, 'slides_data', None),
+                    "confirmed_requirements": getattr(project, 'confirmed_requirements', None),
+                    "project_metadata": getattr(project, 'project_metadata', None),
+                    "version": getattr(project, 'version', None),
+                    "created_at": getattr(project, 'created_at', None),
+                    "updated_at": getattr(project, 'updated_at', None),
+                }, ensure_ascii=False)
+                sync_service.enqueue_outbox('presentation_upsert', payload)
+            except Exception:
+                pass
             return project
 
         except Exception as e:
@@ -280,6 +330,19 @@ class SlideDataRepository:
         self.session.add(slide)
         await self.session.commit()
         await self.session.refresh(slide)
+        # enqueue outbox for slide upsert
+        try:
+            import json
+            from ..services.data_sync_service import sync_service
+            payload = json.dumps({
+                "project_id": slide.project_id,
+                "slide_index": slide.slide_index,
+                "content": getattr(slide, 'content', None),
+                "updated_at": slide.updated_at,
+            }, ensure_ascii=False)
+            sync_service.enqueue_outbox('presentation_upsert', payload)
+        except Exception:
+            pass
         return slide
 
     async def upsert_slide(
@@ -318,6 +381,19 @@ class SlideDataRepository:
             await self.session.commit()
             await self.session.refresh(existing_slide)
             logger.info(f"✅ 幻灯片更新成功: 数据库ID={existing_slide.id}")
+            # enqueue outbox for slide upsert
+            try:
+                import json
+                from ..services.data_sync_service import sync_service
+                payload = json.dumps({
+                    "project_id": existing_slide.project_id,
+                    "slide_index": existing_slide.slide_index,
+                    "content": getattr(existing_slide, 'content', None),
+                    "updated_at": existing_slide.updated_at,
+                }, ensure_ascii=False)
+                sync_service.enqueue_outbox('presentation_upsert', payload)
+            except Exception:
+                pass
             return existing_slide
         else:
             # Create new slide
@@ -450,6 +526,26 @@ class PPTTemplateRepository:
         self.session.add(template)
         await self.session.commit()
         await self.session.refresh(template)
+        # enqueue outbox for template upsert
+        try:
+            import json
+            from ..services.data_sync_service import sync_service
+            payload = json.dumps({
+                "id": template.id,
+                "project_id": template.project_id,
+                "template_type": template.template_type,
+                "template_name": template.template_name,
+                "description": template.description,
+                "html_template": template.html_template,
+                "applicable_scenarios": template.applicable_scenarios,
+                "style_config": template.style_config,
+                "usage_count": template.usage_count,
+                "created_at": template.created_at,
+                "updated_at": template.updated_at,
+            }, ensure_ascii=False)
+            sync_service.enqueue_outbox('template_upsert', payload)
+        except Exception:
+            pass
         return template
 
     async def get_template_by_id(self, template_id: int) -> Optional[PPTTemplate]:
@@ -487,6 +583,28 @@ class PPTTemplateRepository:
         stmt = update(PPTTemplate).where(PPTTemplate.id == template_id).values(**update_data)
         result = await self.session.execute(stmt)
         await self.session.commit()
+        # enqueue outbox for template upsert (updated)
+        try:
+            import json
+            from ..services.data_sync_service import sync_service
+            tpl = await self.get_template_by_id(template_id)
+            if tpl:
+                payload = json.dumps({
+                    "id": tpl.id,
+                    "project_id": tpl.project_id,
+                    "template_type": tpl.template_type,
+                    "template_name": tpl.template_name,
+                    "description": tpl.description,
+                    "html_template": tpl.html_template,
+                    "applicable_scenarios": tpl.applicable_scenarios,
+                    "style_config": tpl.style_config,
+                    "usage_count": tpl.usage_count,
+                    "created_at": tpl.created_at,
+                    "updated_at": tpl.updated_at,
+                }, ensure_ascii=False)
+                sync_service.enqueue_outbox('template_upsert', payload)
+        except Exception:
+            pass
         return result.rowcount > 0
 
     async def increment_usage_count(self, template_id: int) -> bool:

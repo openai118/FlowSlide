@@ -184,22 +184,17 @@ async def delete_project(project_id: str):
     try:
         project_manager = DatabaseProjectManager()
 
-        # Check if project exists
-        project = await project_manager.get_project(project_id)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
-
-        # Delete project
+        # Attempt deletion directly (avoid loading full project which may trigger
+        # JSON/bytes decoding). The repository returns False when no project row
+        # was deleted.
         success = await project_manager.delete_project(project_id)
         await project_manager.close()
 
         if success:
-            return {
-                "status": "success",
-                "message": f"Project {project_id} deleted successfully",
-            }
+            return {"status": "success", "message": f"Project {project_id} deleted successfully"}
         else:
-            raise HTTPException(status_code=500, detail="Failed to delete project")
+            # No rows deleted -> project not found
+            raise HTTPException(status_code=404, detail="Project not found")
 
     except HTTPException:
         raise
@@ -398,16 +393,55 @@ async def sync_to_external():
 async def sync_from_external():
     """从外部数据库恢复数据到本地"""
     try:
-        from ..database import db_manager
-        from ..services.data_sync_service import sync_service
+        # Defensive import: catch import-time errors (circular imports or init failures)
+        try:
+            from ..database import db_manager
+        except Exception as ie:
+            logger.exception("❌ Failed to import db_manager for sync_from_external")
+            raise HTTPException(status_code=500, detail=f"Failed to import database manager: {ie}")
+
+        try:
+            from ..services.data_sync_service import sync_service
+        except Exception as ie:
+            logger.exception("❌ Failed to import sync_service for sync_from_external")
+            raise HTTPException(status_code=500, detail=f"Failed to import data sync service: {ie}")
 
         if not db_manager.external_engine:
-            raise HTTPException(status_code=400, detail="外部数据库未配置")
+            # If an external URL is configured but the engine wasn't created during
+            # initialization (common in local_primary/local_external mode), attempt
+            # to create the backup/external engine on demand so manual syncs work.
+            if getattr(db_manager, 'external_url', None):
+                try:
+                    logger.info("ℹ️ external_engine not initialized but EXTERNAL_DATABASE_URL present — creating backup engine on demand")
+                    # _create_backup_engine creates self.external_engine and external_async_engine
+                    db_manager._create_backup_engine()
+                    # mark sync as enabled for manual operations
+                    db_manager.sync_enabled = True
+                    logger.info("✅ Created external backup engine on demand")
+                except Exception as be:
+                    logger.exception("❌ Failed to create external backup engine on demand")
+                    raise HTTPException(status_code=500, detail=f"外部数据库存在但初始化失败: {be}")
+            else:
+                # Log detailed diagnostics to help explain why external DB is considered missing
+                import os
+                logger.error("❌ Sync from external: external_url is empty on db_manager")
+                logger.error(f"   db_manager.external_url={getattr(db_manager, 'external_url', None)!r}")
+                logger.error(f"   db_manager.external_async_url={getattr(db_manager, 'external_async_url', None)!r}")
+                logger.error(f"   db_manager.external_engine={getattr(db_manager, 'external_engine', None)!r}")
+                logger.error(f"   ENV DATABASE_URL={os.getenv('DATABASE_URL')!r}")
+                logger.error(f"   ENV EXTERNAL_DATABASE_URL={os.getenv('EXTERNAL_DATABASE_URL')!r}")
+                logger.error(f"   ENV DATABASE_MODE={os.getenv('DATABASE_MODE')!r}")
+                raise HTTPException(status_code=400, detail="外部数据库未配置（请检查环境变量 DATABASE_URL / EXTERNAL_DATABASE_URL）")
 
         logger.info("🔄 Starting manual sync from external database...")
 
-        # 执行外部到本地的同步
-        await sync_service._sync_external_to_local()
+        # 执行外部到本地的同步，并捕获内部异常以便记录完整 traceback
+        try:
+            await sync_service._sync_external_to_local()
+        except Exception as se:
+            # Log full traceback for debugging, then return an HTTP 500 with the short error
+            logger.exception("❌ Exception while running _sync_external_to_local")
+            raise HTTPException(status_code=500, detail=f"从外部数据库恢复失败: {se}")
 
         return {
             "success": True,

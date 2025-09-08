@@ -166,7 +166,15 @@ async def startup_event():
         # 如果配置了外部数据库，启动数据同步
         if db_mgr.sync_enabled:
             from .services.data_sync_service import start_data_sync
-            asyncio.create_task(start_data_sync())
+            # Start the background data sync task and keep a handle for graceful shutdown
+            data_sync_task = asyncio.create_task(start_data_sync())
+            # store on app.state so shutdown handler can find and stop it
+            try:
+                app.state.data_sync_task = data_sync_task
+            except Exception:
+                # fallback: attach attribute directly
+                setattr(app.state, 'data_sync_task', data_sync_task)
+            logger.info("✅ Data sync background task started")
 
         # 注册模式切换回调以实现热重载
         try:
@@ -190,7 +198,13 @@ async def startup_event():
         # 如果配置了R2，启动定期备份
         if os.getenv("R2_ACCESS_KEY_ID"):
             from .services.backup_service import create_backup
-            asyncio.create_task(schedule_backup(create_backup))
+            # start scheduled backup and keep handle for shutdown
+            backup_task = asyncio.create_task(schedule_backup(create_backup))
+            try:
+                app.state.backup_task = backup_task
+            except Exception:
+                setattr(app.state, 'backup_task', backup_task)
+            logger.info("✅ Scheduled backup task started")
 
         # Import templates on first-time SQLite setup, otherwise ensure templates exist (for external DB or existing DB)
         if not db_exists and db_mgr.database_type == "sqlite":
@@ -237,6 +251,39 @@ async def shutdown_event():
     """Clean up database connections on shutdown"""
     try:
         logger.info("Shutting down application...")
+
+        # Attempt graceful shutdown of data sync background task
+        try:
+            from .services.data_sync_service import stop_data_sync
+
+            data_sync_task = getattr(app.state, 'data_sync_task', None)
+            if data_sync_task is not None:
+                logger.info("Stopping data sync service...")
+                # signal the service to stop
+                await stop_data_sync()
+                # wait briefly for the task to finish
+                try:
+                    await asyncio.wait_for(data_sync_task, timeout=5.0)
+                    logger.info("✅ Data sync task stopped")
+                except asyncio.TimeoutError:
+                    logger.warning("Data sync task did not stop within timeout; cancelling")
+                    data_sync_task.cancel()
+        except Exception as e:
+            logger.debug(f"No data sync task to stop or stop failed: {e}")
+
+        # Attempt graceful shutdown of backup task
+        try:
+            backup_task = getattr(app.state, 'backup_task', None)
+            if backup_task is not None:
+                logger.info("Stopping scheduled backup task...")
+                try:
+                    await asyncio.wait_for(backup_task, timeout=2.0)
+                except asyncio.TimeoutError:
+                    logger.info("Cancelling scheduled backup task")
+                    backup_task.cancel()
+        except Exception as e:
+            logger.debug(f"No backup task to stop or cancel failed: {e}")
+
         logger.info("Application shutdown complete")
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")

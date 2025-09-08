@@ -1047,7 +1047,25 @@ async def test_google_provider_proxy(request: Request):
     try:
         import aiohttp
 
-        data = await request.json()
+        # Parse body defensively to avoid FastAPI returning 400 on malformed JSON.
+        try:
+            data = await request.json()
+            if not isinstance(data, dict):
+                data = {}
+        except Exception as parse_err:
+            # Attempt to read raw body for logging, but continue with empty payload
+            try:
+                raw = await request.body()
+                raw_text = raw.decode("utf-8", errors="ignore")
+            except Exception:
+                raw_text = None
+            logger.debug(
+                "Google provider test: failed to parse JSON body: %s; raw=%s",
+                str(parse_err),
+                _sanitize_text(raw_text) if raw_text else "(no body)",
+            )
+            data = {}
+
         base_url = (data.get("base_url") or "https://generativelanguage.googleapis.com").rstrip("/")
         api_key = (data.get("api_key") or "").strip()
         model = (data.get("model") or "gemini-1.5-flash").strip()
