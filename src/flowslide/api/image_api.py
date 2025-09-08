@@ -730,6 +730,7 @@ async def upload_image(
     description: str = Form(""),
     category: str = Form("local_storage"),
     tags: str = Form(""),
+    presign: bool = Form(False),
     user: User = Depends(get_current_user_required),
 ):
     """上传图片"""
@@ -754,7 +755,21 @@ async def upload_image(
             content_type=file.content_type,
         )
 
-        # 上传图片
+        # 如果请求 presign，返回 presigned 上传指令而不实际上传文件
+        from ..services.image.providers.base import provider_registry
+
+        if presign:
+            storage_providers = provider_registry.get_storage_providers()
+            if not storage_providers:
+                raise HTTPException(status_code=400, detail="No storage provider available")
+            provider = storage_providers[0]
+            if not hasattr(provider, "create_presigned_upload"):
+                raise HTTPException(status_code=400, detail="Provider does not support presigned uploads")
+
+            presign_result = await provider.create_presigned_upload(upload_request)
+            return presign_result
+
+        # 上传图片（默认行为）
         image_service = get_image_service()
         result = await image_service.upload_image(upload_request, file_data)
 
@@ -772,6 +787,136 @@ async def upload_image(
     except Exception as e:
         logger.error(f"Image upload failed: {e}")
         raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
+
+
+@router.post("/api/image/upload/presign")
+async def presign_upload(
+    filename: str = Form(...),
+    content_type: str = Form(...),
+    file_size: int = Form(...),
+    title: str = Form(""),
+    description: str = Form(""),
+    category: str = Form("local_storage"),
+    tags: str = Form(""),
+    user: User = Depends(get_current_user_required),
+):
+    """返回presigned upload指令（由第一个可用存储提供者生成）"""
+    try:
+        from ..services.image.models import ImageUploadRequest
+
+        upload_request = ImageUploadRequest(
+            filename=filename,
+            file_size=file_size,
+            title=title if title else filename.split(".")[0],
+            description=description,
+            category=category,
+            tags=([tag.strip() for tag in tags.split(",") if tag.strip()] if tags else []),
+            content_type=content_type,
+        )
+
+        image_service = get_image_service()
+        storage_providers = provider_registry.get_storage_providers()
+        if not storage_providers:
+            raise HTTPException(status_code=400, detail="No storage provider available")
+
+        provider = storage_providers[0]
+        if not hasattr(provider, "create_presigned_upload"):
+            raise HTTPException(status_code=400, detail="Provider does not support presigned uploads")
+
+        result = await provider.create_presigned_upload(upload_request)
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Presign upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Presign upload failed: {str(e)}")
+
+
+@router.post("/api/image/upload/complete")
+async def complete_presigned_upload(
+    data: Dict[str, Any], user: User = Depends(get_current_user_required)
+):
+    """在客户端完成 presigned PUT 后，服务端注册存储引用并保存图片元数据的引用。
+
+    要求的字段（JSON）:
+      - provider: 可选，字符串标识（例如 's3'）
+      - bucket: 可选，存储桶名
+      - object_key: 必需，对象键
+      - filename: 可选，文件名
+      - content_type: 可选
+      - file_size: 可选，字节数（整数）
+      - title/description/tags: 可选
+    """
+    try:
+        from ..services.image.models import (
+            ImageInfo,
+            ImageMetadata,
+            ImageFormat,
+            ImageProvider,
+            ImageSourceType,
+        )
+        import hashlib
+
+        object_key = data.get("object_key")
+        if not object_key:
+            raise HTTPException(status_code=400, detail="object_key is required")
+
+        filename = data.get("filename") or object_key.split("/")[-1]
+        content_type = data.get("content_type") or "application/octet-stream"
+        file_size = int(data.get("file_size") or 0)
+        title = data.get("title") or (filename.rsplit(".", 1)[0] if filename else object_key)
+        description = data.get("description") or ""
+        tags = data.get("tags") or []
+
+        # 构建基本的 ImageInfo 元数据（占位，因没有实际字节无法生成真实 checksum/尺寸）
+        # 选择合适的 provider/source_type
+        provider_enum = ImageProvider.USER_UPLOAD
+        source_type = ImageSourceType.LOCAL_STORAGE
+
+        # 构造 minimal ImageMetadata
+        fmt = ImageFormat.JPEG
+        try:
+            # 尝试依据扩展名选择格式
+            ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+            if ext in ('png',):
+                fmt = ImageFormat.PNG
+            elif ext in ('webp',):
+                fmt = ImageFormat.WEBP
+            elif ext in ('gif',):
+                fmt = ImageFormat.GIF
+        except Exception:
+            pass
+
+        metadata = ImageMetadata(width=0, height=0, format=fmt, file_size=file_size)
+
+        image_info = ImageInfo(
+            image_id=object_key,
+            source_type=source_type,
+            provider=provider_enum,
+            original_url="",
+            local_path=f"s3://{data.get('bucket','')}/{object_key}" if data.get('bucket') else object_key,
+            filename=filename,
+            title=title,
+            description=description,
+            alt_text=title,
+            metadata=metadata,
+            tags=[{"name": t} if isinstance(t, str) else t for t in tags],
+            keywords=[t if isinstance(t, str) else str(t) for t in tags],
+        )
+
+        # 保存为 metadata reference，使用 object_key 的 sha256 作为 content_hash
+        cache_key = hashlib.sha256(object_key.encode()).hexdigest()
+        image_service = get_image_service()
+        await image_service.cache_manager._save_image_metadata_reference(cache_key, image_info)
+
+        return {"success": True, "image_id": object_key, "cache_key": cache_key}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to complete presigned upload: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to complete presigned upload: {str(e)}")
 
 
 class ImageUpdateRequest(BaseModel):

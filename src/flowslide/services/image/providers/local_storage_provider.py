@@ -106,6 +106,29 @@ class FileSystemStorageProvider(LocalStorageProvider):
                 error_code="upload_error",
             )
 
+    async def create_presigned_upload(self, request: ImageUploadRequest) -> Dict[str, Any]:
+        """Fallback presigned upload for local provider: return a local file path where client can PUT the file.
+
+        This is a simple local instruction for environments where direct client-to-storage is possible
+        (e.g., behind a reverse proxy). The server still accepts direct uploads via `upload()`.
+        """
+        # Create a unique file path and return it as an instruction
+        image_id = str(uuid.uuid4())
+        file_ext = Path(request.filename).suffix or ".bin"
+        timestamp = int(time.time())
+        safe_filename = f"{timestamp}_{image_id}{file_ext}"
+        category_dir = self.base_dir / (request.category or "uncategorized")
+        category_dir.mkdir(parents=True, exist_ok=True)
+        file_path = category_dir / safe_filename
+
+        # Return a simple presigned-like structure the caller can use
+        return {
+            "upload_type": "local_path",
+            "file_path": str(file_path),
+            "method": "PUT",
+            "instructions": "Write binary data to the given local path on the server filesystem (used in trusted environments).",
+        }
+
     async def list_images(
         self,
         page: int = 1,

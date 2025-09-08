@@ -95,6 +95,14 @@ class ImageService:
             else:
                 logger.debug("Local storage provider already registered")
 
+            # 尝试注册 S3 / R2 存储提供者（如果配置存在）
+            try:
+                from .providers.s3_r2_provider import register_s3_provider_if_configured
+
+                register_s3_provider_if_configured(self.config.get("s3", {}) or self.config.get("storage", {}))
+            except Exception as e:
+                logger.debug(f"S3/R2 provider registration skipped or failed: {e}")
+
             # 初始化AI图片生成提供者
             from .config.image_config import is_provider_configured
             from .providers.dalle_provider import DalleProvider

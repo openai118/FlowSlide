@@ -5,6 +5,7 @@
 import asyncio
 import logging
 import os
+import random
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 from sqlalchemy import text
@@ -40,6 +41,9 @@ class DataSyncService:
             "SYNC_AUTHORITATIVE",
             "external" if db_manager.external_engine else "local",
         ).lower()
+        # Outbox retry configuration
+        self.outbox_max_attempts = int(os.getenv("OUTBOX_MAX_ATTEMPTS", "5"))
+        self.outbox_base_backoff = int(os.getenv("OUTBOX_BASE_BACKOFF_SECONDS", "60"))
 
         # Ensure outbox table exists for async double-write strategy
         try:
@@ -1657,53 +1661,98 @@ class DataSyncService:
             if not key:
                 return results
 
+            # Create a temp dir to store the downloaded backup and extracted files.
             tmp_dir = Path(tempfile.mkdtemp(prefix='r2_restore_'))
             try:
+                # Streaming download with limits and retries so we don't block event loop or blow memory.
                 from botocore.config import Config
                 import boto3
 
-                config = Config(region_name='auto')
+                # Tunables via env vars
+                max_bytes = int(os.getenv('R2_MAX_DOWNLOAD_BYTES', str(50 * 1024 * 1024)))  # default 50MB
+                max_retries = int(os.getenv('R2_DOWNLOAD_RETRIES', '3'))
+                retry_backoff_base = int(os.getenv('R2_DOWNLOAD_BACKOFF_BASE', '2'))
+
+                config = Config(max_pool_connections=4)
                 s3_client = boto3.client(
                     's3',
                     aws_access_key_id=backup_service.r2_config['access_key'],
                     aws_secret_access_key=backup_service.r2_config['secret_key'],
                     endpoint_url=backup_service.r2_config['endpoint'],
-                    config=config
+                    config=config,
                 )
 
                 local_backup_path = tmp_dir / Path(key).name
-                await asyncio.to_thread(s3_client.download_file, backup_service.r2_config['bucket'], key, str(local_backup_path))
 
-                # 解压并查找 .db 文件
-                with zipfile.ZipFile(str(local_backup_path), 'r') as zf:
-                    db_members = [m for m in zf.namelist() if m.endswith('.db')]
-                    if not db_members:
-                        logger.info("R2 备份中未找到 .db 文件")
-                        return results
+                def _download_with_stream_and_retries():
+                    last_exc = None
+                    for attempt in range(1, max_retries + 1):
+                        try:
+                            # Use get_object and stream to file so we can enforce size limits
+                            resp = s3_client.get_object(Bucket=backup_service.r2_config['bucket'], Key=key)
+                            body = resp['Body']
+                            total = 0
+                            with open(local_backup_path, 'wb') as wf:
+                                while True:
+                                    chunk = body.read(65536)
+                                    if not chunk:
+                                        break
+                                    total += len(chunk)
+                                    if total > max_bytes:
+                                        raise IOError(f"R2 download exceeded max bytes ({max_bytes})")
+                                    wf.write(chunk)
+                            return
+                        except Exception as de:
+                            last_exc = de
+                            wait = retry_backoff_base ** attempt
+                            try:
+                                time.sleep(min(wait, 30))
+                            except Exception:
+                                pass
+                    # exhausted retries
+                    raise last_exc if last_exc is not None else RuntimeError('Unknown download error')
 
-                    extracted_db = tmp_dir / Path(db_members[0]).name
-                    zf.extract(db_members[0], path=str(tmp_dir))
-                    extracted_path = tmp_dir / db_members[0]
-                    if extracted_path.exists():
-                        shutil.move(str(extracted_path), str(extracted_db))
+                # Run blocking download in thread so asyncio event loop isn't blocked
+                await asyncio.to_thread(_download_with_stream_and_retries)
 
-                    conn = sqlite3.connect(str(extracted_db))
-                    conn.row_factory = sqlite3.Row
-                    cur = conn.cursor()
-                    try:
-                        cur.execute('SELECT * FROM users')
-                        rows = cur.fetchall()
-                        for r in rows:
-                            row = dict(r)
-                            for k in ('created_at', 'updated_at', 'last_login'):
-                                if k in row and row[k] is not None:
-                                    try:
-                                        row[k] = float(row[k])
-                                    except Exception:
-                                        pass
-                            results.append(row)
-                    finally:
-                        conn.close()
+                # 解压并查找 .db 文件（仍在线程中完成以避免阻塞）
+                def _extract_and_read_db():
+                    with zipfile.ZipFile(str(local_backup_path), 'r') as zf:
+                        db_members = [m for m in zf.namelist() if m.endswith('.db')]
+                        if not db_members:
+                            raise RuntimeError('No .db file found in R2 backup')
+
+                        extracted_db = tmp_dir / Path(db_members[0]).name
+                        zf.extract(db_members[0], path=str(tmp_dir))
+                        extracted_path = tmp_dir / db_members[0]
+                        if extracted_path.exists():
+                            shutil.move(str(extracted_path), str(extracted_db))
+
+                        # Open sqlite and read users table
+                        conn = sqlite3.connect(str(extracted_db))
+                        try:
+                            conn.row_factory = sqlite3.Row
+                            cur = conn.cursor()
+                            cur.execute('SELECT * FROM users')
+                            rows = cur.fetchall()
+                            out = []
+                            for r in rows:
+                                row = dict(r)
+                                for k in ('created_at', 'updated_at', 'last_login'):
+                                    if k in row and row[k] is not None:
+                                        try:
+                                            row[k] = float(row[k])
+                                        except Exception:
+                                            pass
+                                out.append(row)
+                            return out
+                        finally:
+                            try:
+                                conn.close()
+                            except Exception:
+                                pass
+
+                results = await asyncio.to_thread(_extract_and_read_db)
 
             finally:
                 try:
@@ -2057,7 +2106,22 @@ class DataSyncService:
                         topic TEXT,
                         payload TEXT,
                         attempts INTEGER DEFAULT 0,
-                        last_error TEXT
+                        last_error TEXT,
+                        next_attempt_at REAL
+                    )
+                    """
+                ))
+                # Dead-letter table for permanently failed messages
+                s.execute(text(
+                    """
+                    CREATE TABLE IF NOT EXISTS sync_outbox_dead (
+                        id INTEGER PRIMARY KEY,
+                        created_at REAL,
+                        topic TEXT,
+                        payload TEXT,
+                        attempts INTEGER,
+                        last_error TEXT,
+                        failed_at REAL
                     )
                     """
                 ))
@@ -2084,6 +2148,20 @@ class DataSyncService:
         except Exception as e:
             logger.warning(f"⚠️ Failed to enqueue outbox message: {e}")
 
+    async def enqueue_outbox_session(self, session: AsyncSession, topic: str, payload: str):
+        """Insert an outbox row using the provided AsyncSession so it participates in caller's transaction.
+
+        This does NOT commit; the caller should commit/rollback as appropriate.
+        """
+        try:
+            await session.execute(
+                text("INSERT INTO sync_outbox (created_at, topic, payload, attempts) VALUES (:c, :t, :p, 0)"),
+                {"c": datetime.now().timestamp(), "t": topic, "p": payload},
+            )
+            logger.debug(f"📨 Enqueued outbox message (session) topic={topic}")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to enqueue outbox message (session): {e}")
+
     async def _process_outbox(self, batch_size: int = 20):
         """Process pending outbox entries and push them to external database.
 
@@ -2096,9 +2174,15 @@ class DataSyncService:
         try:
             from ..database.database import SessionLocal
             rows = []
-            # Load a batch from local outbox
+            # Load a batch from local outbox; only those whose next_attempt_at is now or null
             with SessionLocal() as s:
-                rows = s.execute(text("SELECT id, created_at, topic, payload, attempts FROM sync_outbox ORDER BY created_at LIMIT :lim"), {"lim": batch_size}).fetchall()
+                now_ts = datetime.now().timestamp()
+                rows = s.execute(
+                    text(
+                        "SELECT id, created_at, topic, payload, attempts, next_attempt_at FROM sync_outbox WHERE next_attempt_at IS NULL OR next_attempt_at <= :now ORDER BY created_at LIMIT :lim"
+                    ),
+                    {"now": now_ts, "lim": batch_size},
+                ).fetchall()
 
             if not rows:
                 return
@@ -2112,11 +2196,53 @@ class DataSyncService:
                         sdel.execute(text("DELETE FROM sync_outbox WHERE id = :id"), {"id": r.id})
                         sdel.commit()
                 except Exception as e:
-                    # increment attempts and save last_error
-                    with SessionLocal() as supd:
-                        supd.execute(text("UPDATE sync_outbox SET attempts = attempts + 1, last_error = :err WHERE id = :id"), {"err": str(e)[:2000], "id": r.id})
-                        supd.commit()
-                    logger.warning(f"⚠️ Outbox push failed for id={r.id}: {e}")
+                    # increment attempts and schedule next attempt or move to dead-letter
+                    try:
+                        attempt_count = (r.attempts or 0) + 1
+                    except Exception:
+                        attempt_count = 1
+
+                    now_ts = datetime.now().timestamp()
+                    if attempt_count >= self.outbox_max_attempts:
+                        # move to dead-letter table
+                        with SessionLocal() as sdl:
+                            try:
+                                sdl.execute(
+                                    text(
+                                        "INSERT INTO sync_outbox_dead (id, created_at, topic, payload, attempts, last_error, failed_at) VALUES (:id, :created_at, :topic, :payload, :attempts, :last_error, :failed_at)"
+                                    ),
+                                    {
+                                        "id": r.id,
+                                        "created_at": r.created_at,
+                                        "topic": r.topic,
+                                        "payload": r.payload,
+                                        "attempts": attempt_count,
+                                        "last_error": str(e)[:2000],
+                                        "failed_at": now_ts,
+                                    },
+                                )
+                                sdl.execute(text("DELETE FROM sync_outbox WHERE id = :id"), {"id": r.id})
+                                sdl.commit()
+                                logger.warning(f"💀 Outbox message id={r.id} moved to dead-letter after {attempt_count} attempts")
+                            except Exception as exdl:
+                                try:
+                                    sdl.rollback()
+                                except Exception:
+                                    pass
+                                logger.error(f"⚠️ Failed moving outbox id={r.id} to dead-letter: {exdl}")
+                    else:
+                        # schedule next attempt with exponential backoff + jitter
+                        backoff = min(3600, self.outbox_base_backoff * (2 ** (attempt_count - 1)))
+                        # jitter 0.8-1.2x
+                        backoff = int(backoff * (0.8 + random.random() * 0.4))
+                        next_at = now_ts + backoff
+                        with SessionLocal() as supd:
+                            supd.execute(
+                                text("UPDATE sync_outbox SET attempts = :att, last_error = :err, next_attempt_at = :next_at WHERE id = :id"),
+                                {"att": attempt_count, "err": str(e)[:2000], "next_at": next_at, "id": r.id},
+                            )
+                            supd.commit()
+                        logger.warning(f"⚠️ Outbox push failed for id={r.id}, attempts={attempt_count}, next_attempt_at={next_at}: {e}")
 
         except Exception as e:
             logger.debug(f"Outbox processing encountered error: {e}")

@@ -211,6 +211,13 @@ class LocalStorageProvider(BaseImageProvider):
         """上传图片"""
         pass
 
+    async def create_presigned_upload(self, request: ImageUploadRequest) -> Dict[str, Any]:
+        """Optional: create a presigned upload instruction (url + headers/form) for client to upload directly to storage.
+
+        Return structure depends on provider; default implementation raises NotImplementedError so callers can fall back.
+        """
+        raise NotImplementedError()
+
     @abstractmethod
     async def list_images(
         self,

@@ -23,6 +23,88 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 
+def _normalize_image_entry(entry: dict) -> dict:
+    """Convert various image-like dict shapes into a compact storage-reference form.
+
+    Keeps absolute_url when available, and produces a `storage` object with
+    provider/bucket/object_key/cache_key when possible. If the entry is a
+    data URI it is left untouched (client should have uploaded via presign).
+    """
+    try:
+        if not isinstance(entry, dict):
+            return entry
+
+        # direct storage-style fields
+        object_key = entry.get("object_key") or entry.get("image_id")
+        cache_key = entry.get("cache_key")
+        absolute_url = entry.get("absolute_url") or entry.get("url") or entry.get("local_path")
+
+        # src handling (data:, s3://, http://)
+        src = entry.get("src")
+        if isinstance(src, str):
+            if src.startswith("data:"):
+                # leave embedded data URIs as-is — they should be converted client-side
+                return entry
+            if src.startswith("s3://") or src.startswith("/api/image/view/") or src.startswith("http"):
+                # prefer using the src as absolute_url
+                absolute_url = absolute_url or src
+                if src.startswith("s3://"):
+                    # s3://bucket/key
+                    try:
+                        _, rest = src.split("s3://", 1)
+                        if "/" in rest:
+                            bucket, key = rest.split("/", 1)
+                        else:
+                            bucket, key = rest, ""
+                        object_key = object_key or key
+                        cache_key = cache_key or object_key
+                        storage = {"provider": "s3", "bucket": bucket, "object_key": object_key}
+                        if cache_key:
+                            storage["cache_key"] = cache_key
+                        return {"storage": storage, "image_id": object_key, "absolute_url": absolute_url}
+                    except Exception:
+                        pass
+
+        # If we already have an object_key or image_id assume it's a storage ref
+        if object_key:
+            storage = {"provider": entry.get("provider") or "s3", "object_key": object_key}
+            if entry.get("bucket"):
+                storage["bucket"] = entry.get("bucket")
+            if cache_key:
+                storage["cache_key"] = cache_key
+            out = {"storage": storage, "image_id": object_key}
+            if absolute_url:
+                out["absolute_url"] = absolute_url
+            return out
+
+        # fallback: return original entry
+        return entry
+    except Exception:
+        return entry
+
+
+def _normalize_slides_for_outbox(slides: list) -> list:
+    """Recursively normalize slides_data so image-like dicts become storage refs.
+
+    This is defensive: it will not modify plain strings or other content. It
+    traverses lists/dicts and converts any dict that contains common image keys.
+    """
+    def walk(obj):
+        if isinstance(obj, list):
+            return [walk(i) for i in obj]
+        if isinstance(obj, dict):
+            # detect image-like dicts quickly
+            keys = set(obj.keys())
+            if keys & {"image_id", "object_key", "absolute_url", "src", "local_path", "cache_key"}:
+                return _normalize_image_entry(obj)
+            return {k: walk(v) for k, v in obj.items()}
+        return obj
+
+    if not isinstance(slides, list):
+        return slides
+    return [walk(s) for s in slides]
+
+
 class ProjectRepository:
     """Repository for Project operations"""
 
@@ -33,13 +115,14 @@ class ProjectRepository:
         """Create a new project"""
         project = Project(**project_data)
         self.session.add(project)
-        await self.session.commit()
-        await self.session.refresh(project)
+        # flush so generated defaults (ids/project_id) are available before enqueue
+        await self.session.flush()
         # enqueue outbox to push this new project to external DB asynchronously
         try:
             import json
             from ..services.data_sync_service import sync_service
 
+            slides_data_normalized = _normalize_slides_for_outbox(getattr(project, 'slides_data', None) or [])
             payload = json.dumps({
                 "project_id": project.project_id,
                 "title": project.title,
@@ -50,16 +133,24 @@ class ProjectRepository:
                 "owner_id": getattr(project, 'owner_id', None),
                 "outline": getattr(project, 'outline', None),
                 "slides_html": getattr(project, 'slides_html', None),
-                "slides_data": getattr(project, 'slides_data', None),
+                "slides_data": slides_data_normalized,
                 "confirmed_requirements": getattr(project, 'confirmed_requirements', None),
                 "project_metadata": getattr(project, 'project_metadata', None),
                 "version": getattr(project, 'version', None),
                 "created_at": getattr(project, 'created_at', None),
                 "updated_at": getattr(project, 'updated_at', None),
             }, ensure_ascii=False)
-            sync_service.enqueue_outbox('presentation_upsert', payload)
+            # Prefer to enqueue within the current session to keep outbox atomic with business changes
+            try:
+                await sync_service.enqueue_outbox_session(self.session, 'presentation_upsert', payload)
+            except Exception:
+                # Fallback to global enqueue which uses a separate session
+                sync_service.enqueue_outbox('presentation_upsert', payload)
         except Exception:
             pass
+        # now commit flushed changes and outbox atomically
+        await self.session.commit()
+        await self.session.refresh(project)
         return project
 
     async def get_by_id(self, project_id: str) -> Optional[Project]:
@@ -133,9 +224,8 @@ class ProjectRepository:
             # 设置更新时间
             project.updated_at = time.time()
 
-            # 提交更改
-            await self.session.commit()
-            await self.session.refresh(project)
+            # flush changes so they are visible to session-local outbox insert
+            await self.session.flush()
 
             logger.info(f"Successfully updated project {project_id}")
             # enqueue outbox to push updated project to external DB asynchronously
@@ -143,6 +233,7 @@ class ProjectRepository:
                 import json
                 from ..services.data_sync_service import sync_service
 
+                slides_data_normalized = _normalize_slides_for_outbox(getattr(project, 'slides_data', None) or [])
                 payload = json.dumps({
                     "project_id": project.project_id,
                     "title": project.title,
@@ -153,16 +244,21 @@ class ProjectRepository:
                     "owner_id": getattr(project, 'owner_id', None),
                     "outline": getattr(project, 'outline', None),
                     "slides_html": getattr(project, 'slides_html', None),
-                    "slides_data": getattr(project, 'slides_data', None),
+                    "slides_data": slides_data_normalized,
                     "confirmed_requirements": getattr(project, 'confirmed_requirements', None),
                     "project_metadata": getattr(project, 'project_metadata', None),
                     "version": getattr(project, 'version', None),
                     "created_at": getattr(project, 'created_at', None),
                     "updated_at": getattr(project, 'updated_at', None),
                 }, ensure_ascii=False)
-                sync_service.enqueue_outbox('presentation_upsert', payload)
+                try:
+                    await sync_service.enqueue_outbox_session(self.session, 'presentation_upsert', payload)
+                except Exception:
+                    sync_service.enqueue_outbox('presentation_upsert', payload)
             except Exception:
                 pass
+            await self.session.commit()
+            await self.session.refresh(project)
             return project
 
         except Exception as e:
@@ -340,7 +436,10 @@ class SlideDataRepository:
                 "content": getattr(slide, 'content', None),
                 "updated_at": slide.updated_at,
             }, ensure_ascii=False)
-            sync_service.enqueue_outbox('presentation_upsert', payload)
+            try:
+                await sync_service.enqueue_outbox_session(self.session, 'presentation_upsert', payload)
+            except Exception:
+                sync_service.enqueue_outbox('presentation_upsert', payload)
         except Exception:
             pass
         return slide
@@ -391,7 +490,10 @@ class SlideDataRepository:
                     "content": getattr(existing_slide, 'content', None),
                     "updated_at": existing_slide.updated_at,
                 }, ensure_ascii=False)
-                sync_service.enqueue_outbox('presentation_upsert', payload)
+                try:
+                    await sync_service.enqueue_outbox_session(self.session, 'presentation_upsert', payload)
+                except Exception:
+                    sync_service.enqueue_outbox('presentation_upsert', payload)
             except Exception:
                 pass
             return existing_slide
@@ -543,7 +645,10 @@ class PPTTemplateRepository:
                 "created_at": template.created_at,
                 "updated_at": template.updated_at,
             }, ensure_ascii=False)
-            sync_service.enqueue_outbox('template_upsert', payload)
+            try:
+                await sync_service.enqueue_outbox_session(self.session, 'template_upsert', payload)
+            except Exception:
+                sync_service.enqueue_outbox('template_upsert', payload)
         except Exception:
             pass
         return template
@@ -602,7 +707,10 @@ class PPTTemplateRepository:
                     "created_at": tpl.created_at,
                     "updated_at": tpl.updated_at,
                 }, ensure_ascii=False)
-                sync_service.enqueue_outbox('template_upsert', payload)
+                try:
+                    await sync_service.enqueue_outbox_session(self.session, 'template_upsert', payload)
+                except Exception:
+                    sync_service.enqueue_outbox('template_upsert', payload)
         except Exception:
             pass
         return result.rowcount > 0
