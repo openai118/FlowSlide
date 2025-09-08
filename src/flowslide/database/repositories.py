@@ -121,11 +121,36 @@ class ProjectRepository:
             raise
 
     async def delete(self, project_id: str) -> bool:
-        """Delete project"""
-        stmt = delete(Project).where(Project.project_id == project_id)
-        result = await self.session.execute(stmt)
-        await self.session.commit()
-        return result.rowcount > 0
+        """Delete project and all dependent records to avoid FK constraint errors.
+
+        This method deletes TodoStage, TodoBoard, SlideData, PPTTemplate and
+        ProjectVersion rows that reference the project, then deletes the Project
+        row. All deletes are performed in the current session and committed once.
+        On error the transaction is rolled back and the exception is raised.
+        """
+        try:
+            # Delete todo stages (they reference project_id and todo_board)
+            await self.session.execute(delete(TodoStage).where(TodoStage.project_id == project_id))
+
+            # Delete todo board (one-to-one with project)
+            await self.session.execute(delete(TodoBoard).where(TodoBoard.project_id == project_id))
+
+            # Delete slide data and templates that reference the project
+            await self.session.execute(delete(SlideData).where(SlideData.project_id == project_id))
+            await self.session.execute(delete(PPTTemplate).where(PPTTemplate.project_id == project_id))
+
+            # Delete project versions
+            await self.session.execute(delete(ProjectVersion).where(ProjectVersion.project_id == project_id))
+
+            # Finally delete the project itself
+            result = await self.session.execute(delete(Project).where(Project.project_id == project_id))
+
+            await self.session.commit()
+            return result.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error deleting project {project_id}: {e}")
+            await self.session.rollback()
+            raise
 
 
 class TodoBoardRepository:

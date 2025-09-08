@@ -109,7 +109,11 @@ class AutoDetectionService:
             start_time = time.time()
 
             # 创建异步引擎进行测试
-            async_engine = create_async_engine(database_url, echo=False)
+            # If asyncpg is used behind pgbouncer, disable asyncpg's statement cache
+            # by setting statement_cache_size=0 (or read from PG_STATEMENT_CACHE_SIZE env).
+            # 强制所有 asyncpg 场景禁用 prepared statement 缓存，避免 pgbouncer 问题
+            async_connect_args = {"statement_cache_size": 0}
+            async_engine = create_async_engine(database_url, echo=False, connect_args=async_connect_args)
 
             try:
                 async with async_engine.connect() as conn:

@@ -1181,6 +1181,49 @@ class DataSyncService:
                                     {"project_id": project.project_id}
                                 ).fetchone()
 
+
+                                # --- 修复：dict/list 字段序列化为 JSON 字符串，兼容 SQLite ---
+                                import json
+                                def _jsonify(val):
+                                    if isinstance(val, (dict, list)):
+                                        return json.dumps(val, ensure_ascii=False)
+                                    return val
+
+                                update_params = {
+                                    "title": project.title,
+                                    "scenario": project.scenario,
+                                    "topic": project.topic,
+                                    "requirements": project.requirements,
+                                    "status": project.status,
+                                    "owner_id": project.owner_id,
+                                    "outline": _jsonify(project.outline),
+                                    "slides_html": project.slides_html,
+                                    "slides_data": _jsonify(project.slides_data),
+                                    "confirmed_requirements": _jsonify(project.confirmed_requirements),
+                                    "project_metadata": _jsonify(project.project_metadata),
+                                    "version": project.version,
+                                    "updated_at": project.updated_at or project.created_at,
+                                    "project_id": project.project_id
+                                }
+
+                                insert_params = {
+                                    "project_id": project.project_id,
+                                    "title": project.title,
+                                    "scenario": project.scenario,
+                                    "topic": project.topic,
+                                    "requirements": project.requirements,
+                                    "status": project.status,
+                                    "owner_id": project.owner_id,
+                                    "outline": _jsonify(project.outline),
+                                    "slides_html": project.slides_html,
+                                    "slides_data": _jsonify(project.slides_data),
+                                    "confirmed_requirements": _jsonify(project.confirmed_requirements),
+                                    "project_metadata": _jsonify(project.project_metadata),
+                                    "version": project.version,
+                                    "created_at": project.created_at,
+                                    "updated_at": project.updated_at or project.created_at
+                                }
+
                                 if existing:
                                     # 项目已存在，比较时间戳决定是否更新
                                     external_timestamp = max(project.created_at, project.updated_at or 0)
@@ -1211,22 +1254,7 @@ class DataSyncService:
                                                     updated_at = :updated_at
                                                 WHERE project_id = :project_id
                                             """),
-                                            {
-                                                "title": project.title,
-                                                "scenario": project.scenario,
-                                                "topic": project.topic,
-                                                "requirements": project.requirements,
-                                                "status": project.status,
-                                                "owner_id": project.owner_id,
-                                                "outline": project.outline,
-                                                "slides_html": project.slides_html,
-                                                "slides_data": project.slides_data,
-                                                "confirmed_requirements": project.confirmed_requirements,
-                                                "project_metadata": project.project_metadata,
-                                                "version": project.version,
-                                                "updated_at": project.updated_at or project.created_at,
-                                                "project_id": project.project_id
-                                            }
+                                            update_params
                                         )
                                         logger.info(f"📥 Updated project {project.title} (ID: {project.project_id}) in local database")
                                     else:
@@ -1239,23 +1267,7 @@ class DataSyncService:
                                             (project_id, title, scenario, topic, requirements, status, owner_id, outline, slides_html, slides_data, confirmed_requirements, project_metadata, version, created_at, updated_at)
                                             VALUES (:project_id, :title, :scenario, :topic, :requirements, :status, :owner_id, :outline, :slides_html, :slides_data, :confirmed_requirements, :project_metadata, :version, :created_at, :updated_at)
                                         """),
-                                        {
-                                            "project_id": project.project_id,
-                                            "title": project.title,
-                                            "scenario": project.scenario,
-                                            "topic": project.topic,
-                                            "requirements": project.requirements,
-                                            "status": project.status,
-                                            "owner_id": project.owner_id,
-                                            "outline": project.outline,
-                                            "slides_html": project.slides_html,
-                                            "slides_data": project.slides_data,
-                                            "confirmed_requirements": project.confirmed_requirements,
-                                            "project_metadata": project.project_metadata,
-                                            "version": project.version,
-                                            "created_at": project.created_at,
-                                            "updated_at": project.updated_at or project.created_at
-                                        }
+                                        insert_params
                                     )
                                     logger.info(f"📥 Inserted new project {project.title} (ID: {project.project_id}) to local database")
 

@@ -82,58 +82,40 @@ class DatabaseManager:
             raise ValueError("External database URL not configured")
 
         try:
-            # 解析数据库URL以检测是否是Supabase
+            # 解析数据库URL以检测是否是 Supabase 或 pgbouncer/pooler
             from urllib.parse import urlparse
             parsed = urlparse(self.external_url)
 
-            # 检查是否是Supabase（通过URL特征识别）
-            is_supabase = ('supabase' in parsed.hostname if parsed.hostname else False) or ('pooler.supabase.com' in self.external_url)
+            hostname = parsed.hostname or ""
+            url_lc = (self.external_url or "").lower()
 
-            if is_supabase:
-                # Supabase使用pgbouncer，需要特殊配置
-                statement_cache_size = int(os.getenv("PG_STATEMENT_CACHE_SIZE", "0"))
-                self.primary_engine = create_engine(
-                    self.external_url,
-                    pool_size=3,  # 较小的连接池大小
-                    max_overflow=2,  # 允许少量溢出
-                    pool_pre_ping=False,  # 禁用连接池ping以避免prepared statements
-                    pool_recycle=300,  # 更频繁的连接回收
-                    pool_timeout=60,  # 增加超时时间
-                    echo=False
-                )
-                self.primary_async_engine = create_async_engine(
-                    self.external_async_url,
-                    pool_size=3,
-                    max_overflow=2,
-                    pool_pre_ping=False,
-                    pool_recycle=300,
-                    pool_timeout=60,
-                    echo=False,
-                    connect_args={"statement_cache_size": statement_cache_size}  # 禁用prepared statements以兼容pgbouncer
-                )
-                logger.info("🎯 Detected Supabase - using pgbouncer-compatible configuration")
-            else:
-                # 普通PostgreSQL配置
-                statement_cache_size = int(os.getenv("PG_STATEMENT_CACHE_SIZE", "0"))
-                self.primary_engine = create_engine(
-                    self.external_url,
-                    pool_size=3,
-                    max_overflow=2,
-                    pool_pre_ping=False,
-                    pool_recycle=3600,
-                    pool_timeout=60,
-                    echo=False,
-                )
-                self.primary_async_engine = create_async_engine(
-                    self.external_async_url,
-                    pool_size=3,
-                    max_overflow=2,
-                    pool_pre_ping=False,
-                    pool_recycle=3600,
-                    pool_timeout=60,
-                    echo=False,
-                    connect_args={"statement_cache_size": statement_cache_size}  # 兼容pgbouncer
-                )
+            # 检查是否是 Supabase 或常见的 pgbouncer/pooler 特征
+            is_supabase = ("supabase" in hostname) or ("pooler.supabase.com" in url_lc)
+            is_pooler = any(key in hostname or key in url_lc for key in ("pooler", "pgbouncer", "pgbouncer."))
+
+            # 强制所有 asyncpg 场景禁用 prepared statement 缓存，避免 pgbouncer 问题
+            self.primary_engine = create_engine(
+                self.external_url,
+                pool_size=3,
+                max_overflow=2,
+                pool_pre_ping=False,
+                pool_recycle=(300 if is_supabase or is_pooler else 3600),
+                pool_timeout=60,
+                echo=False,
+            )
+
+            async_connect_args = {"statement_cache_size": 0}
+            self.primary_async_engine = create_async_engine(
+                self.external_async_url,
+                pool_size=3,
+                max_overflow=2,
+                pool_pre_ping=False,
+                pool_recycle=(300 if is_supabase or is_pooler else 3600),
+                pool_timeout=60,
+                echo=False,
+                connect_args=async_connect_args,
+            )
+            logger.info("🔒 asyncpg statement_cache_size=0 强制关闭，避免 pgbouncer/prepared statement 问题")
 
             # 测试数据库连接
             logger.info("🔍 Testing database connection...")
@@ -162,11 +144,8 @@ class DatabaseManager:
 
             # For Supabase/pgbouncer we only need to adjust async driver options
             # Do NOT pass statement_cache_size into the sync create_engine (psycopg2)
-            async_connect_args = {}
-            if is_supabase:
-                # Supabase使用pgbouncer，需要禁用prepared statements for asyncpg
-                statement_cache_size = int(os.getenv("PG_STATEMENT_CACHE_SIZE", "0"))
-                async_connect_args = {"statement_cache_size": statement_cache_size}
+            # 强制所有 asyncpg 场景禁用 prepared statement 缓存，避免 pgbouncer 问题
+            async_connect_args = {"statement_cache_size": 0}
 
             # Create sync engine without passing DB-API specific connect_args that psycopg2 doesn't accept
             self.external_engine = create_engine(
