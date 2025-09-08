@@ -1030,8 +1030,10 @@ class DataSyncService:
             # 获取增量同步的时间窗口
             cutoff_time = self.last_sync_time or (datetime.now() - timedelta(hours=24))
 
+
             def sync_presentations():
                 from ..database.database import SessionLocal
+                import json
 
                 with SessionLocal() as local_session:
                     # 获取本地有变更的项目（新增、修改）
@@ -1040,21 +1042,40 @@ class DataSyncService:
                         {"cutoff": cutoff_time.timestamp()}
                     ).fetchall()
 
-                    if not changed_projects:
-                        logger.info("📭 No local presentation changes to sync")
-                        return
+                    # 获取本地所有项目ID
+                    local_project_ids = set([row.project_id for row in local_session.execute(text("SELECT project_id FROM projects")).fetchall()])
 
-                    logger.info(f"📤 Found {len(changed_projects)} local presentations with changes")
-
-                    # 同步到外部数据库
+                    # 获取外部所有项目ID
+                    external_project_ids = set()
                     if db_manager.external_engine:
                         with db_manager.external_engine.connect() as external_conn:
+                            external_project_ids = set([row.project_id for row in external_conn.execute(text("SELECT project_id FROM projects")).fetchall()])
+
+                            # 1. 同步删除：本地不存在但外部还存在的项目，删除外部
+                            to_delete = external_project_ids - local_project_ids
+                            if to_delete:
+                                for pid in to_delete:
+                                    external_conn.execute(text("DELETE FROM projects WHERE project_id = :project_id"), {"project_id": pid})
+                                    logger.info(f"🗑️ Deleted project {pid} from external database (local no longer exists)")
+
+                            # 2. 同步新增/修改
+                            if not changed_projects:
+                                logger.info("📭 No local presentation changes to sync")
+                                return
+
+                            logger.info(f"📤 Found {len(changed_projects)} local presentations with changes")
+
                             for project in changed_projects:
                                 # 首先尝试通过project_id匹配项目
                                 existing = external_conn.execute(
                                     text("SELECT id, project_id, created_at, updated_at FROM projects WHERE project_id = :project_id"),
                                     {"project_id": project.project_id}
                                 ).fetchone()
+
+                                def _jsonify(val):
+                                    if isinstance(val, (dict, list)):
+                                        return json.dumps(val, ensure_ascii=False)
+                                    return val
 
                                 if existing:
                                     # 项目已存在，比较时间戳决定是否更新
@@ -1092,11 +1113,11 @@ class DataSyncService:
                                                 "requirements": project.requirements,
                                                 "status": project.status,
                                                 "owner_id": project.owner_id,
-                                                "outline": project.outline,
+                                                "outline": _jsonify(project.outline),
                                                 "slides_html": project.slides_html,
-                                                "slides_data": project.slides_data,
-                                                "confirmed_requirements": project.confirmed_requirements,
-                                                "project_metadata": project.project_metadata,
+                                                "slides_data": _jsonify(project.slides_data),
+                                                "confirmed_requirements": _jsonify(project.confirmed_requirements),
+                                                "project_metadata": _jsonify(project.project_metadata),
                                                 "version": project.version,
                                                 "updated_at": project.updated_at or project.created_at,
                                                 "project_id": project.project_id
@@ -1123,11 +1144,11 @@ class DataSyncService:
                                             "requirements": project.requirements,
                                             "status": project.status,
                                             "owner_id": project.owner_id,
-                                            "outline": project.outline,
+                                            "outline": _jsonify(project.outline),
                                             "slides_html": project.slides_html,
-                                            "slides_data": project.slides_data,
-                                            "confirmed_requirements": project.confirmed_requirements,
-                                            "project_metadata": project.project_metadata,
+                                            "slides_data": _jsonify(project.slides_data),
+                                            "confirmed_requirements": _jsonify(project.confirmed_requirements),
+                                            "project_metadata": _jsonify(project.project_metadata),
                                             "version": project.version,
                                             "created_at": project.created_at,
                                             "updated_at": project.updated_at or project.created_at
