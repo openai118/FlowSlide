@@ -19,6 +19,11 @@ RUN apt-get update && \
     build-essential \
     curl \
     git \
+    # system libs commonly required by PyTorch wheels and native deps
+    libgomp1 \
+    libopenblas-dev \
+    libsndfile1 \
+    libatlas3-base \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for faster dependency management
@@ -41,7 +46,8 @@ RUN python -m venv /opt/venv && \
     # Install CPU-only PyTorch wheels first to avoid pulling CUDA libs into the venv
     # This uses the official CPU wheel index and prevents pip from selecting CUDA-enabled
     # manylinux wheels which are very large and can exhaust buildkit temporary storage.
-    /opt/venv/bin/pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+    # Prefer prebuilt CPU wheels from PyTorch index to avoid building from source
+    /opt/venv/bin/pip install --no-cache-dir --prefer-binary torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
     # Clean up pip cache immediately after PyTorch install
     rm -rf /root/.cache/pip && \
     # Install the project and development extras into the venv.
