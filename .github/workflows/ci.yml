@@ -1,3 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Test on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.11, 3.10]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest
+
+      - name: Run tests
+        env:
+          DISABLE_BACKGROUND_DETECTION: "1"
+          DEPLOYMENT_DETECT_TIMEOUT: "1"
+        run: |
+          pytest -q
 name: CI/CD Pipeline
 
 on:
@@ -98,6 +135,18 @@ jobs:
         cp .env.example .env
       env:
         SECRET_KEY: test-secret-key-for-ci
+        # Prefer EXTERNAL_DATABASE_URL; keep DATABASE_URL for compatibility with older setups
+        EXTERNAL_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flowslide_test
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flowslide_test
+
+    - name: Run outbox quick tests (fast-fail)
+      run: |
+        echo "Running outbox quick tests..."
+        pytest tests/test_outbox_default_handler.py tests/test_outbox_idempotent_handler.py -q
+      env:
+        TESTING: true
+        SECRET_KEY: test-secret-key-for-ci
+        EXTERNAL_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flowslide_test
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flowslide_test
         
     - name: Run linting
@@ -127,6 +176,7 @@ jobs:
       env:
         TESTING: true
         SECRET_KEY: test-secret-key-for-ci
+        EXTERNAL_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flowslide_test
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flowslide_test
         
     - name: Upload coverage to Codecov
