@@ -2047,29 +2047,22 @@ async def generate_outline(project_id: str, user: User = Depends(get_current_use
         # Extract page count settings from confirmed requirements
         page_count_settings = confirmed_requirements.get("page_count_settings", {})
 
-        # Generate outline using AI with page count settings
-        outline = await ppt_service.generate_outline(project_request, page_count_settings)
+        # Enqueue outline generation as a persistent task and return task_id
+        from ..services.db_project_manager import DatabaseProjectManager
+        from ..database.repositories import GenerationTaskRepository
 
-        # Convert outline to dict format
-        outline_dict = {
-            "title": outline.title,
-            "slides": outline.slides,
-            "metadata": outline.metadata,
-        }
-
-        # Format as JSON
-        import json
-
-        formatted_json = json.dumps(outline_dict, ensure_ascii=False, indent=2)
-
-        # Update outline generation stage
-        await ppt_service._update_outline_generation_stage(project_id, outline_dict)
-
-        return {
-            "status": "success",
-            "outline_content": formatted_json,
-            "message": "Outline generated successfully",
-        }
+        dbm = DatabaseProjectManager()
+        db_service = await dbm._get_db_service()
+        try:
+            task_repo = GenerationTaskRepository(db_service.session)
+            payload = {"project_id": project_id, "request": project_request.__dict__, "page_count_settings": page_count_settings}
+            task_id = await task_repo.enqueue(project_id, "outline_generation", payload)
+            return {"status": "enqueued", "task_id": task_id}
+        finally:
+            try:
+                await db_service.session.close()
+            except Exception:
+                pass
 
     except Exception as e:
         logger.error(f"Error generating outline: {e}")
@@ -2137,40 +2130,39 @@ async def regenerate_outline(project_id: str, user: User = Depends(get_current_u
             )
 
 
-            result = await ppt_service.generate_outline_from_file(file_request)
+            # Enqueue a file-based outline generation task
+            from ..services.db_project_manager import DatabaseProjectManager
+            from ..database.repositories import GenerationTaskRepository
 
-            # Update outline generation stage
-            await ppt_service._update_outline_generation_stage(project_id, result["outline_dict"])
-
-            return {
-                "status": "success",
-                "outline_content": result["outline_content"],
-                "message": "File-based outline regenerated successfully",
-            }
+            dbm = DatabaseProjectManager()
+            db_service = await dbm._get_db_service()
+            try:
+                task_repo = GenerationTaskRepository(db_service.session)
+                payload = {"project_id": project_id, "file_request": file_request.__dict__}
+                task_id = await task_repo.enqueue(project_id, "file_outline_generation", payload)
+                return {"status": "enqueued", "task_id": task_id}
+            finally:
+                try:
+                    await db_service.session.close()
+                except Exception:
+                    pass
         else:
-            # Use standard outline generation
-            outline = await ppt_service.generate_outline(project_request, page_count_settings)
+            # Enqueue standard outline generation task
+            from ..services.db_project_manager import DatabaseProjectManager
+            from ..database.repositories import GenerationTaskRepository
 
-            # Convert outline to dict format
-            outline_dict = {
-                "title": outline.title,
-                "slides": outline.slides,
-                "metadata": outline.metadata,
-            }
-
-            # Format as JSON
-            import json
-
-            formatted_json = json.dumps(outline_dict, ensure_ascii=False, indent=2)
-
-            # Update outline generation stage
-            await ppt_service._update_outline_generation_stage(project_id, outline_dict)
-
-            return {
-                "status": "success",
-                "outline_content": formatted_json,
-                "message": "Outline regenerated successfully",
-            }
+            dbm = DatabaseProjectManager()
+            db_service = await dbm._get_db_service()
+            try:
+                task_repo = GenerationTaskRepository(db_service.session)
+                payload = {"project_id": project_id, "request": project_request.__dict__, "page_count_settings": page_count_settings}
+                task_id = await task_repo.enqueue(project_id, "outline_generation", payload)
+                return {"status": "enqueued", "task_id": task_id}
+            finally:
+                try:
+                    await db_service.session.close()
+                except Exception:
+                    pass
 
     except Exception as e:
         logger.error(f"Error regenerating outline: {e}")

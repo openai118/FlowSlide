@@ -160,6 +160,22 @@ python -m src.flowslide.main
 - **Docker & Docker Compose** (推荐用于生产部署)
 - **Cloudflare R2 存储** (用于备份功能，可选)
 
+### Supabase / pgbouncer 兼容性说明
+
+在某些托管 PostgreSQL（例如 Supabase）场景下，数据库连接可能通过 pgbouncer 或类似的连接池中间件进行代理。这些环境下使用异步驱动（asyncpg）进行健康检测时，可能触及 prepared-statement 缓存或 pooler 行为的兼容性问题。为提高检测可靠性，FlowSlide 在检测外部数据库时会：
+
+- 优先尝试异步检测（asyncpg），如失败会自动使用同步短连接回退（psycopg2）进行快速健康检查。
+- 可通过环境变量 `DISABLE_SYNC_DB_FALLBACK=1` 来禁用同步回退（默认启用）。
+
+如果你在使用 Supabase/pgbouncer，建议在部署环境安装可选的依赖：
+
+```bash
+pip install .[postgres]
+```
+
+这会安装 `psycopg2-binary`，以便回退检测可用并避免因 asyncpg/pgbouncer 导致的误报。
+
+
 ### 1. 克隆项目
 
 ```bash

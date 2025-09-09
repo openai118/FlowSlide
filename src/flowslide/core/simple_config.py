@@ -22,12 +22,13 @@ except ImportError:
 LOCAL_DATABASE_URL = "sqlite:///./data/flowslide.db"
 
 # 外部数据库（可选，用于备份/同步）
-EXTERNAL_DATABASE_URL = os.getenv("DATABASE_URL", "")
+# 支持两种环境变量：显式的 EXTERNAL_DATABASE_URL 优先，其次兼容老的 DATABASE_URL
+EXTERNAL_DATABASE_URL = os.getenv("EXTERNAL_DATABASE_URL", os.getenv("DATABASE_URL", ""))
 
 # 数据库模式选择
 DATABASE_MODE = os.getenv("DATABASE_MODE", "local")  # local, external, hybrid
 
-# 最终使用的数据库URL
+# 最终使用的数据库URL：如果部署模式为 external 且配置了外部 DB，则使用外部 DB，否则使用本地
 if DATABASE_MODE == "external" and EXTERNAL_DATABASE_URL:
     DATABASE_URL = EXTERNAL_DATABASE_URL
 else:

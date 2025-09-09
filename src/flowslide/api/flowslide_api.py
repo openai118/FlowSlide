@@ -709,6 +709,66 @@ async def archive_project(project_id: str):
         raise HTTPException(status_code=500, detail=f"Error archiving project: {str(e)}")
 
 
+@router.post("/projects/{project_id}/tasks/generate")
+async def enqueue_generation_task(project_id: str, request: Request):
+    """Enqueue a generation task for a project (returns task_id)"""
+    try:
+        body = await request.json()
+        task_type = body.get("task_type") or body.get("type") or "ppt_generation"
+        payload = body.get("payload") or {}
+
+        # Use DatabaseProjectManager to obtain a DatabaseService with session
+        from ..services.db_project_manager import DatabaseProjectManager
+        from ..database.repositories import GenerationTaskRepository
+
+        dbm = DatabaseProjectManager()
+        db_service = await dbm._get_db_service()
+        try:
+            session = db_service.session
+            task_repo = GenerationTaskRepository(session)
+            task_id = await task_repo.enqueue(project_id, task_type, payload)
+            return {"status": "success", "task_id": task_id}
+        finally:
+            try:
+                await db_service.session.close()
+            except Exception:
+                pass
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to enqueue generation task: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to enqueue generation task: {str(e)}")
+
+
+@router.get("/tasks/{task_id}")
+async def get_task_status(task_id: str):
+    """Return status and progress for a generation task"""
+    try:
+        from ..services.db_project_manager import DatabaseProjectManager
+        from ..database.repositories import GenerationTaskRepository
+
+        dbm = DatabaseProjectManager()
+        db_service = await dbm._get_db_service()
+        try:
+            repo = GenerationTaskRepository(db_service.session)
+            task = await repo.get_task_by_id(task_id)
+            if not task:
+                raise HTTPException(status_code=404, detail="Task not found")
+            return {"status": "success", "task": task}
+        finally:
+            try:
+                await db_service.session.close()
+            except Exception:
+                pass
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Failed to get task status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # File Upload Endpoints
 
 
@@ -882,11 +942,30 @@ async def analyze_uploaded_content(file: UploadFile = File(...)):
 async def generate_slides(outline: PPTOutline, scenario: str = "general"):
     """Generate slides from outline"""
     try:
-        slides_html = await _ppt_service().generate_slides_from_outline(outline, scenario)
-        return {"slides_html": slides_html, "status": "success"}
+        # Instead of executing generation synchronously, enqueue a persistent task
+        from ..services.db_project_manager import DatabaseProjectManager
+        from ..database.repositories import GenerationTaskRepository
+
+        dbm = DatabaseProjectManager()
+        db_service = await dbm._get_db_service()
+        try:
+            session = db_service.session
+            task_repo = GenerationTaskRepository(session)
+            try:
+                payload = {"outline": outline.dict(), "scenario": scenario}
+            except Exception:
+                payload = {"outline": outline, "scenario": scenario}
+
+            task_id = await task_repo.enqueue(None, "slides_from_outline", payload)
+            return {"status": "enqueued", "task_id": task_id}
+        finally:
+            try:
+                await db_service.session.close()
+            except Exception:
+                pass
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating slides: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error enqueuing slide generation: {str(e)}")
 
 
 @router.post("/files/generate-outline", response_model=FileOutlineGenerationResponse)

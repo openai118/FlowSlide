@@ -73,7 +73,11 @@ class EnhancedPPTService(PPTService):
             import os
             from pathlib import Path
 
-            from summeryanyfile.core.file_cache_manager import FileCacheManager
+            # Try import as installed package first, fall back to local 'src.summeryanyfile'
+            try:
+                from summeryanyfile.core.file_cache_manager import FileCacheManager
+            except Exception:
+                from src.summeryanyfile.core.file_cache_manager import FileCacheManager
 
             # 获取项目根目录
             project_root = Path(__file__).parent.parent.parent.parent

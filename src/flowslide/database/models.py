@@ -323,6 +323,28 @@ class SyncConflict(Base):
         }
 
 
+class GenerationTask(Base):
+    """Minimal persistent task table for long-running generation jobs"""
+
+    __tablename__ = "generation_tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    task_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    project_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("projects.project_id"), nullable=True, index=True)
+    task_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    payload: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="pending", index=True)  # pending|running|success|failed
+    progress: Mapped[float] = mapped_column(Float, default=0.0)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    next_attempt_at: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
+
+    # Relationship back to project (optional)
+    project: Mapped[Optional["Project"]] = relationship("Project", foreign_keys=[project_id])
+
+
 class AIProviderConfig(Base):
     """AI provider configuration model for storing AI provider settings"""
 

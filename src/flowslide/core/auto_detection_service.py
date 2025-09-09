@@ -72,9 +72,10 @@ class AutoDetectionService:
 
         try:
             # 动态导入配置以避免循环导入
-            from .simple_config import DATABASE_URL, LOCAL_DATABASE_URL, DATABASE_MODE
-            
-            database_url = (DATABASE_URL or "").strip()
+            from .simple_config import DATABASE_URL, LOCAL_DATABASE_URL, DATABASE_MODE, EXTERNAL_DATABASE_URL
+
+            # If an explicit EXTERNAL_DATABASE_URL is configured in env, prefer it for detection
+            database_url = (EXTERNAL_DATABASE_URL or DATABASE_URL or "").strip()
             database_mode = DATABASE_MODE
             
             # 如果使用的是本地数据库URL，则认为是本地模式
@@ -86,14 +87,20 @@ class AutoDetectionService:
                 self._cache_result("external_db", result)
                 return result
 
-            # 如果数据库模式显式为 local，则强制认为是本地数据库
-            if (database_mode or "").strip().lower() == "local":
+            # If caller explicitly disables external DB detection via env, skip attempting connection
+            disable_detection = os.getenv("DISABLE_EXTERNAL_DB_DETECTION", "").strip().lower() in ("1","true","yes")
+            if disable_detection:
                 result = ServiceCheckResult(
                     status=ServiceStatus.UNAVAILABLE,
-                    message="数据库模式设置为local，使用本地数据库"
+                    message="外部数据库检测已被环境变量禁用"
                 )
                 self._cache_result("external_db", result)
                 return result
+
+            # Note: previously DATABASE_MODE=='local' short-circuited here and returned UNAVAILABLE.
+            # Change: if an EXTERNAL_DATABASE_URL is configured, we should attempt to connect and
+            # report actual availability. This does not change which DB is used as primary; it
+            # only provides an accurate detection of external DB accessibility.
 
             # 检查是否是有效的外部数据库URL
             if not (database_url.startswith("postgresql://") or database_url.startswith("mysql://")):
@@ -144,13 +151,68 @@ class AutoDetectionService:
                         )
 
             except Exception as e:
+                # Async attempt failed. As a compatibility measure for environments
+                # using pgbouncer (Supabase), try a short synchronous psycopg2
+                # connection as a fallback. Many poolers are incompatible with
+                # asyncpg prepared statement caching; a plain sync connection
+                # avoids that issue and gives a reliable availability signal.
                 response_time = (time.time() - start_time) * 1000
-                check_result = ServiceCheckResult(
-                    status=ServiceStatus.CONNECTION_FAILED,
-                    message=f"外部数据库连接失败: {str(e)}",
-                    response_time_ms=round(response_time, 2),
-                    error_details=str(e)
-                )
+
+                sync_fallback_disabled = os.getenv("DISABLE_SYNC_DB_FALLBACK", "").strip().lower() in ("1","true","yes")
+
+                if sync_fallback_disabled:
+                    check_result = ServiceCheckResult(
+                        status=ServiceStatus.CONNECTION_FAILED,
+                        message=f"外部数据库异步检测失败（未尝试同步回退）: {str(e)}",
+                        response_time_ms=round(response_time, 2),
+                        error_details=str(e)
+                    )
+                else:
+                    # Try psycopg2 sync connect as a quick health check
+                    try:
+                        import psycopg2
+                    except Exception as ie:
+                        check_result = ServiceCheckResult(
+                            status=ServiceStatus.CONNECTION_FAILED,
+                            message=("外部数据库异步检测失败，且未找到 psycopg2 库以执行同步回退: "
+                                     f"async_error={str(e)} sync_import_error={str(ie)}"),
+                            response_time_ms=round(response_time, 2),
+                            error_details=f"async:{str(e)}; sync_import:{str(ie)}"
+                        )
+                    else:
+                        try:
+                            # Use a short timeout to avoid long blocking
+                            sync_start = time.time()
+                            # psycopg2 accepts a libpq connection string / URI
+                            conn = psycopg2.connect(database_url, connect_timeout=5)
+                            cur = conn.cursor()
+                            cur.execute("SELECT 1")
+                            row = cur.fetchone()
+                            cur.close()
+                            conn.close()
+                            sync_response_time = (time.time() - sync_start) * 1000
+
+                            if row and row[0] == 1:
+                                check_result = ServiceCheckResult(
+                                    status=ServiceStatus.AVAILABLE,
+                                    message=("外部数据库连接正常（通过同步 psycopg2 回退检测）"),
+                                    response_time_ms=round(sync_response_time, 2)
+                                )
+                            else:
+                                check_result = ServiceCheckResult(
+                                    status=ServiceStatus.CONNECTION_FAILED,
+                                    message=("外部数据库同步回退检测失败：查询返回异常结果"),
+                                    response_time_ms=round(sync_response_time, 2),
+                                    error_details=f"async_error:{str(e)}"
+                                )
+                        except Exception as se:
+                            sync_response_time = (time.time() - start_time) * 1000
+                            check_result = ServiceCheckResult(
+                                status=ServiceStatus.CONNECTION_FAILED,
+                                message=("外部数据库同步回退检测失败: " + str(se)),
+                                response_time_ms=round(sync_response_time, 2),
+                                error_details=f"async_error:{str(e)}; sync_error:{str(se)}"
+                            )
 
             finally:
                 await async_engine.dispose()

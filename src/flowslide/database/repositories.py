@@ -18,6 +18,7 @@ from .models import (
     SlideData,
     TodoBoard,
     TodoStage,
+    GenerationTask,
 )
 
 logger = logging.getLogger(__name__)
@@ -424,24 +425,45 @@ class SlideDataRepository:
         """Create a single slide"""
         slide = SlideData(**slide_data)
         self.session.add(slide)
-        await self.session.commit()
-        await self.session.refresh(slide)
-        # enqueue outbox for slide upsert
+        # flush so defaults (ids, timestamps) are available for the outbox payload
+        await self.session.flush()
+
+        # enqueue outbox for slide upsert using a normalized payload (no raw blobs/paths)
         try:
             import json
             from ..services.data_sync_service import sync_service
-            payload = json.dumps({
+
+            # Build a normalized slide dict suitable for outbox
+            try:
+                slide_meta = getattr(slide, 'slide_metadata', None) or {}
+            except Exception:
+                slide_meta = {}
+
+            # Reuse the normalization helper to defensively convert any image-like entries
+            normalized_meta = _normalize_slides_for_outbox([slide_meta])[0] if isinstance(slide_meta, dict) else slide_meta
+
+            payload_obj = {
                 "project_id": slide.project_id,
                 "slide_index": slide.slide_index,
-                "content": getattr(slide, 'content', None),
-                "updated_at": slide.updated_at,
-            }, ensure_ascii=False)
+                "slide_id": getattr(slide, 'slide_id', None),
+                "title": getattr(slide, 'title', None),
+                "html_content": getattr(slide, 'html_content', None),
+                "slide_metadata": normalized_meta,
+                "updated_at": getattr(slide, 'updated_at', None),
+            }
+            payload = json.dumps(payload_obj, ensure_ascii=False)
+
             try:
                 await sync_service.enqueue_outbox_session(self.session, 'presentation_upsert', payload)
             except Exception:
+                # fallback to global enqueue if session-based enqueue fails
                 sync_service.enqueue_outbox('presentation_upsert', payload)
         except Exception:
             pass
+
+        # commit and refresh then return
+        await self.session.commit()
+        await self.session.refresh(slide)
         return slide
 
     async def upsert_slide(
@@ -477,25 +499,42 @@ class SlideDataRepository:
                         updated_fields.append(key)
 
             logger.info(f"📊 更新的字段: {updated_fields}")
-            await self.session.commit()
-            await self.session.refresh(existing_slide)
-            logger.info(f"✅ 幻灯片更新成功: 数据库ID={existing_slide.id}")
-            # enqueue outbox for slide upsert
+
+            # flush so updated_at and other defaults are visible for session-local outbox enqueue
+            await self.session.flush()
+
+            # enqueue outbox for slide upsert with normalized payload
             try:
                 import json
                 from ..services.data_sync_service import sync_service
-                payload = json.dumps({
+
+                try:
+                    slide_meta = getattr(existing_slide, 'slide_metadata', None) or {}
+                except Exception:
+                    slide_meta = {}
+
+                normalized_meta = _normalize_slides_for_outbox([slide_meta])[0] if isinstance(slide_meta, dict) else slide_meta
+
+                payload_obj = {
                     "project_id": existing_slide.project_id,
                     "slide_index": existing_slide.slide_index,
-                    "content": getattr(existing_slide, 'content', None),
-                    "updated_at": existing_slide.updated_at,
-                }, ensure_ascii=False)
+                    "slide_id": getattr(existing_slide, 'slide_id', None),
+                    "title": getattr(existing_slide, 'title', None),
+                    "html_content": getattr(existing_slide, 'html_content', None),
+                    "slide_metadata": normalized_meta,
+                    "updated_at": getattr(existing_slide, 'updated_at', None),
+                }
+                payload = json.dumps(payload_obj, ensure_ascii=False)
                 try:
                     await sync_service.enqueue_outbox_session(self.session, 'presentation_upsert', payload)
                 except Exception:
                     sync_service.enqueue_outbox('presentation_upsert', payload)
             except Exception:
                 pass
+
+            await self.session.commit()
+            await self.session.refresh(existing_slide)
+            logger.info(f"✅ 幻灯片更新成功: 数据库ID={existing_slide.id}")
             return existing_slide
         else:
             # Create new slide
@@ -956,3 +995,137 @@ class GlobalMasterTemplateRepository:
         result = await self.session.execute(stmt)
         await self.session.commit()
         return result.rowcount > 0
+
+
+class GenerationTaskRepository:
+    """Repository for persistent generation tasks"""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def enqueue(self, project_id: Optional[str], task_type: str, payload: Dict[str, Any]) -> str:
+        """Create a new generation task and return task_id"""
+        import uuid, json, time
+
+        task_id = uuid.uuid4().hex
+        task = {
+            "task_id": task_id,
+            "project_id": project_id,
+            "task_type": task_type,
+            "payload": payload,
+            "status": "pending",
+            "progress": 0.0,
+            "attempts": 0,
+            "created_at": time.time(),
+            "updated_at": time.time(),
+        }
+        # Use the mapped GenerationTask model
+        from .models import GenerationTask
+
+        dbtask = GenerationTask(**task)
+        self.session.add(dbtask)
+        await self.session.commit()
+        await self.session.refresh(dbtask)
+        return task_id
+
+    async def get_pending(self, limit: int = 5) -> List[dict]:
+        """Fetch pending tasks ordered by creation time and ready-to-run (next_attempt_at)"""
+        import time
+        now = time.time()
+        stmt = select(GenerationTask).where(
+            GenerationTask.status == "pending",
+            (GenerationTask.next_attempt_at == None) | (GenerationTask.next_attempt_at <= now)
+        ).order_by(GenerationTask.created_at).limit(limit)
+        result = await self.session.execute(stmt)
+        tasks = result.scalars().all()
+        out = []
+        for t in tasks:
+            out.append({
+                "id": t.id,
+                "task_id": t.task_id,
+                "project_id": t.project_id,
+                "task_type": t.task_type,
+                "payload": t.payload,
+                "status": t.status,
+                "progress": t.progress,
+                "attempts": t.attempts,
+                "created_at": t.created_at,
+                "updated_at": t.updated_at,
+            })
+        return out
+
+    async def claim_task(self, task_id: str) -> bool:
+        """Attempt to atomically mark a pending task as running (claim).
+
+        Returns True if claimed, False otherwise.
+        """
+        import time
+        stmt = (
+            update(GenerationTask)
+            .where(GenerationTask.task_id == task_id, GenerationTask.status == "pending")
+            .values(status="running", attempts=GenerationTask.attempts + 1, updated_at=time.time())
+        )
+        res = await self.session.execute(stmt)
+        await self.session.commit()
+        return res.rowcount > 0
+
+    async def mark_success(self, task_id: str):
+        import time
+        await self.session.execute(
+            update(GenerationTask)
+            .where(GenerationTask.task_id == task_id)
+            .values(status="success", progress=100.0, updated_at=time.time())
+        )
+        await self.session.commit()
+
+    async def mark_failed_with_backoff(self, task_id: str, error: str, base_backoff: int = 60, max_attempts: int = 5):
+        import time, random
+        # increment attempts already done during claim; fetch attempts
+        stmt = select(GenerationTask).where(GenerationTask.task_id == task_id)
+        result = await self.session.execute(stmt)
+        t = result.scalar_one_or_none()
+        if not t:
+            return
+        attempts = (t.attempts or 0)
+        if attempts >= max_attempts:
+            # move to failed/dead-letter
+            await self.session.execute(
+                update(GenerationTask)
+                .where(GenerationTask.task_id == task_id)
+                .values(status="failed", last_error=error, updated_at=time.time(), next_attempt_at=None)
+            )
+            await self.session.commit()
+            return
+
+        # compute exponential backoff with jitter
+        backoff = base_backoff * (2 ** (attempts - 1))
+        jitter = random.uniform(0, backoff * 0.2)
+        next_at = time.time() + backoff + jitter
+
+        await self.session.execute(
+            update(GenerationTask)
+            .where(GenerationTask.task_id == task_id)
+            .values(status="pending", last_error=error, updated_at=time.time(), next_attempt_at=next_at)
+        )
+        await self.session.commit()
+
+    async def get_task_by_id(self, task_id: str) -> Optional[dict]:
+        stmt = select(GenerationTask).where(GenerationTask.task_id == task_id)
+        result = await self.session.execute(stmt)
+        t = result.scalar_one_or_none()
+        if not t:
+            return None
+        return {
+            "id": t.id,
+            "task_id": t.task_id,
+            "project_id": t.project_id,
+            "task_type": t.task_type,
+            "payload": t.payload,
+            "status": t.status,
+            "progress": t.progress,
+            "attempts": t.attempts,
+            "last_error": t.last_error,
+            "next_attempt_at": getattr(t, 'next_attempt_at', None),
+            "created_at": t.created_at,
+            "updated_at": t.updated_at,
+        }

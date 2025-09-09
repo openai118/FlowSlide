@@ -6,6 +6,7 @@
 import os
 import logging
 import asyncio
+import threading
 from typing import Dict, Any, List, Optional, Callable
 from enum import Enum
 from datetime import datetime, timedelta
@@ -55,20 +56,77 @@ class DeploymentModeManager:
         self.switch_context: Optional[ModeSwitchContext] = None
 
         # 初始化当前模式
-        self.current_mode = self.detect_current_mode()
+        # Fast path: if deployment pinned mode is set, use it immediately; otherwise
+        # set a safe default (LOCAL_ONLY) and run auto-detection in background so
+        # imports and startup are not blocked by network checks.
+        pinned_mode = os.getenv("DEPLOYMENT_PINNED_MODE")
+        if pinned_mode:
+            try:
+                self.current_mode = DeploymentMode(pinned_mode.strip().lower())
+                logger.info(f"使用 DEPLOYMENT_PINNED_MODE (immediate): {self.current_mode}")
+            except Exception:
+                logger.warning(f"DEPLOYMENT_PINNED_MODE 值无效: {pinned_mode}. 使用默认 local_only")
+                self.current_mode = DeploymentMode.LOCAL_ONLY
+        else:
+            # default quick-start mode; background thread will update it later
+            self.current_mode = DeploymentMode.LOCAL_ONLY
+
         self.last_mode_check = datetime.now()
+
+        # Launch background detection to update current_mode without blocking imports
+        try:
+            threading.Thread(target=self._run_detection_in_background, daemon=True).start()
+        except Exception as e:
+            logger.warning(f"无法启动后台部署检测线程: {e}")
+        # Callbacks to notify when mode changes (call signature: fn(old_mode, new_mode))
+        self.mode_change_callbacks: List[Callable[[Optional[DeploymentMode], DeploymentMode], None]] = []
 
         # 模式切换历史
         self.mode_history: List[Dict[str, Any]] = []
-
-        # 模式切换回调
-        self.mode_change_callbacks: List[Callable] = []
 
         # 模式兼容性矩阵
         self.compatibility_matrix = self._build_compatibility_matrix()
 
         # 模式切换策略
         self.switch_strategies = self._build_switch_strategies()
+
+    def _run_detection_in_background(self):
+        """Run detect_deployment_mode asynchronously in a background thread and
+        update self.current_mode when complete. This avoids blocking imports
+        and long startup times while still performing the detection."""
+        try:
+            # Respect explicit pinned mode: if DEPLOYMENT_PINNED_MODE is set,
+            # do not let the background auto-detection override the pinned choice.
+            if os.getenv("DEPLOYMENT_PINNED_MODE"):
+                logger.info("DEPLOYMENT_PINNED_MODE is set; skipping background auto-detection to avoid overriding pinned mode")
+                return
+            # Import locally to avoid circular imports at module load time
+            from .auto_detection_service import auto_detection_service as detection_service
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+                detected = loop.run_until_complete(detection_service.detect_deployment_mode())
+                if detected:
+                    old = self.current_mode
+                    self.current_mode = detected
+                    self.last_mode_check = datetime.now()
+                    logger.info(f"自动部署检测完成，设置部署模式为: {detected}")
+                    # Notify callbacks
+                    try:
+                        for cb in list(self.mode_change_callbacks):
+                            try:
+                                cb(old, detected)
+                            except Exception as _cb_e:
+                                logger.warning(f"mode change callback raised: {_cb_e}")
+                    except Exception:
+                        pass
+            finally:
+                try:
+                    loop.close()
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning(f"后台部署检测失败: {e}")
 
     def _build_compatibility_matrix(self) -> Dict[str, List[str]]:
         """构建模式兼容性矩阵"""
@@ -162,6 +220,21 @@ class DeploymentModeManager:
                 "post_switch_actions": ["cleanup_external_connections"]
             }
         }
+
+    def register_mode_change_callback(self, fn: Callable[[Optional[DeploymentMode], DeploymentMode], None]):
+        """Register a callback to be invoked when deployment mode changes.
+
+        The callback is called with (old_mode, new_mode).
+        """
+        if fn not in self.mode_change_callbacks:
+            self.mode_change_callbacks.append(fn)
+
+    def unregister_mode_change_callback(self, fn: Callable[[Optional[DeploymentMode], DeploymentMode], None]):
+        """Unregister a previously registered callback."""
+        try:
+            self.mode_change_callbacks.remove(fn)
+        except ValueError:
+            pass
 
     def detect_current_mode(self) -> DeploymentMode:
         """检测当前部署模式

@@ -5,6 +5,7 @@
 
 import os
 import logging
+import threading
 from typing import Dict, Any, List
 from enum import Enum
 
@@ -23,8 +24,26 @@ class DataSyncStrategy:
     """数据同步策略配置"""
 
     def __init__(self):
-        self.deployment_mode = self._detect_deployment_mode()
+        # Fast path: respect FORCE_DEPLOYMENT_MODE or DEPLOYMENT_PINNED_MODE if set,
+        # otherwise default to LOCAL_ONLY to avoid blocking on import. Launch a
+        # background detection to update the deployment mode and strategies later.
+        pinned_mode = os.getenv("FORCE_DEPLOYMENT_MODE") or os.getenv("DEPLOYMENT_PINNED_MODE")
+        if pinned_mode:
+            try:
+                self.deployment_mode = DeploymentMode(pinned_mode.lower())
+            except Exception:
+                logging.getLogger(__name__).warning(f"Invalid pinned mode: {pinned_mode}, falling back to LOCAL_ONLY")
+                self.deployment_mode = DeploymentMode.LOCAL_ONLY
+        else:
+            self.deployment_mode = DeploymentMode.LOCAL_ONLY
+
         self.sync_strategies = self._load_sync_strategies()
+
+        # Run async auto-detection in background so import/initialization is non-blocking
+        try:
+            threading.Thread(target=self._run_detection_in_background, daemon=True).start()
+        except Exception:
+            pass
 
     def _detect_deployment_mode(self) -> DeploymentMode:
         """检测当前部署模式"""
@@ -159,6 +178,37 @@ class DataSyncStrategy:
 
         # 根据部署模式调整策略
         return self._adjust_strategies_for_mode(base_strategies)
+
+    def _run_detection_in_background(self):
+        """Run auto-detection in a background thread and update deployment_mode and strategies."""
+        try:
+            # Import locally to avoid circular imports during module import
+            from .auto_detection_service import auto_detection_service
+            import asyncio
+
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+                detected = loop.run_until_complete(auto_detection_service.detect_deployment_mode())
+            finally:
+                try:
+                    loop.close()
+                except Exception:
+                    pass
+
+            if detected and detected != self.deployment_mode:
+                logger = logging.getLogger(__name__)
+                old = self.deployment_mode
+                self.deployment_mode = detected
+                # Recompute strategies based on new mode
+                try:
+                    self.sync_strategies = self._load_sync_strategies()
+                except Exception as _e:
+                    logging.getLogger(__name__).warning(f"Failed to update sync strategies after detection: {_e}")
+                logger.info(f"Detected deployment mode (background): {detected}")
+
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Background deployment detection failed: {e}")
 
     def _adjust_strategies_for_mode(self, strategies: Dict[str, Any]) -> Dict[str, Any]:
         """根据部署模式调整同步策略"""
