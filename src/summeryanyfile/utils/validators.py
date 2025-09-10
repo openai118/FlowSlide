@@ -223,10 +223,10 @@ def validate_slide_data(slide_data: Dict[str, Any]) -> List[str]:
 
 def validate_ppt_outline(outline_data: Dict[str, Any]) -> List[str]:
     """
-    验证PPT大纲数据
+    验证Slide大纲数据
 
     Args:
-        outline_data: PPT大纲数据
+        outline_data: Slide大纲数据
 
     Returns:
         错误信息列表

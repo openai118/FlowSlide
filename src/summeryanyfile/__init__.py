@@ -1,12 +1,12 @@
 """
-通用文本转PPT大纲生成器
+通用文本转Slide大纲生成器
 
 基于LLM的智能文档分析和演示大纲生成工具
 """
 
 __version__ = "0.1.0"
 __author__ = "SummeryAnyFile Team"
-__description__ = "通用文本转PPT大纲生成器 - 基于LLM的智能文档分析和演示大纲生成工具"
+__description__ = "通用文本转Slide大纲生成器 - 基于LLM的智能文档分析和演示大纲生成工具"
 
 from .core.document_processor import DocumentProcessor
 from .core.markitdown_converter import MarkItDownConverter

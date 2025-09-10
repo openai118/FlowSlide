@@ -163,6 +163,26 @@ async def startup_event():
         await init_db()
         logger.info("Database initialized successfully")
 
+        # Optionally start generation worker to process queued generation tasks
+        try:
+            from .services.worker_runner import main as _worker_main
+
+            start_worker = os.getenv("START_GENERATION_WORKER", "true").lower() in (
+                "true",
+                "1",
+                "yes",
+                "on",
+            )
+            if start_worker:
+                worker_task = asyncio.create_task(_worker_main())
+                try:
+                    app.state.generation_worker_task = worker_task
+                except Exception:
+                    setattr(app.state, "generation_worker_task", worker_task)
+                logger.info("✅ Generation worker background task started")
+        except Exception as e:
+            logger.warning(f"Generation worker not started: {e}")
+
         # 如果配置了外部数据库，启动数据同步
         if db_mgr.sync_enabled:
             from .services.data_sync_service import start_data_sync

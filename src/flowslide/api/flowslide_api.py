@@ -970,7 +970,7 @@ async def generate_slides(outline: PPTOutline, scenario: str = "general"):
 
 @router.post("/files/generate-outline", response_model=FileOutlineGenerationResponse)
 async def generate_outline_from_file(request: FileOutlineGenerationRequest):
-    """使用summeryanyfile从文件生成PPT大纲"""
+    """使用summeryanyfile从文件生成Slide大纲"""
     try:
         # 调用增强的PPT服务来生成大纲
         result = await _ppt_service().generate_outline_from_file(request)
@@ -1000,7 +1000,7 @@ async def upload_file_and_generate_outline(
     tech_highlights: Optional[str] = Form(None),
     target_audience: Optional[str] = Form(None),
 ):
-    """上传文件并直接生成PPT大纲"""
+    """上传文件并直接生成Slide大纲"""
     try:
         # Validate file
         if file.filename is None or file.size is None:

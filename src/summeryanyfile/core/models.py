@@ -207,7 +207,7 @@ class ProcessingConfig:
 
 @dataclass
 class PPTOutline:
-    """PPT大纲结果"""
+    """Slide大纲结果"""
 
     title: str
     total_pages: int

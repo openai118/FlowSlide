@@ -247,7 +247,7 @@ class FileUploadResponse(BaseModel):
 
 
 class FileOutlineGenerationRequest(BaseModel):
-    """从文件生成PPT大纲的请求模型"""
+    """从文件生成Slide大纲的请求模型"""
 
     file_path: str = Field(..., description="Uploaded file path")
     filename: str = Field(..., description="Original filename")
@@ -272,7 +272,7 @@ class FileOutlineGenerationRequest(BaseModel):
 
 
 class FileOutlineGenerationResponse(BaseModel):
-    """从文件生成PPT大纲的响应模型"""
+    """从文件生成Slide大纲的响应模型"""
 
     success: bool
     outline: Optional[Dict[str, Any]] = None

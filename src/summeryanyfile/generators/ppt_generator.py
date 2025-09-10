@@ -1,5 +1,5 @@
 """
-PPT大纲生成器 - 主要的生成器类
+Slide大纲生成器 - 主要的生成器类
 """
 
 import logging
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class PPTOutlineGenerator(LoggerMixin):
-    """基于迭代细化的PPT大纲生成器"""
+    """基于迭代细化的Slide大纲生成器"""
 
     def __init__(
         self,
@@ -27,7 +27,7 @@ class PPTOutlineGenerator(LoggerMixin):
         cache_dir: Optional[str] = None,
     ):
         """
-        初始化PPT大纲生成器
+        初始化Slide大纲生成器
 
         Args:
             config: 处理配置
@@ -92,7 +92,7 @@ class PPTOutlineGenerator(LoggerMixin):
         fixed_pages: Optional[int] = None,
     ) -> PPTOutline:
         """
-        从文本生成PPT大纲
+        从文本生成Slide大纲
 
         Args:
             text: 输入文本
@@ -100,9 +100,9 @@ class PPTOutlineGenerator(LoggerMixin):
             progress_callback: 进度回调函数
 
         Returns:
-            PPT大纲对象
+            Slide大纲对象
         """
-        self.logger.info("开始从文本生成PPT大纲...")
+        self.logger.info("开始从文本生成Slide大纲...")
 
         if not text.strip():
             raise ValueError("输入文本不能为空")
@@ -155,14 +155,14 @@ class PPTOutlineGenerator(LoggerMixin):
                 initial_state, progress_callback
             )
 
-            # 转换为PPT大纲对象
+            # 转换为Slide大纲对象
             outline = self._state_to_outline(final_state)
 
-            self.logger.info(f"PPT大纲生成完成，共 {outline.total_pages} 页")
+            self.logger.info(f"Slide大纲生成完成，共 {outline.total_pages} 页")
             return outline
 
         except Exception as e:
-            self.logger.error(f"PPT大纲生成失败: {e}")
+            self.logger.error(f"Slide大纲生成失败: {e}")
             raise
 
     async def generate_from_file(
@@ -183,7 +183,7 @@ class PPTOutlineGenerator(LoggerMixin):
         fixed_pages: Optional[int] = None,
     ) -> PPTOutline:
         """
-        从文件生成PPT大纲
+        从文件生成Slide大纲
 
         Args:
             file_path: 文件路径
@@ -191,9 +191,9 @@ class PPTOutlineGenerator(LoggerMixin):
             progress_callback: 进度回调函数
 
         Returns:
-            PPT大纲对象
+            Slide大纲对象
         """
-        self.logger.info(f"开始从文件生成PPT大纲: {file_path}")
+        self.logger.info(f"开始从文件生成Slide大纲: {file_path}")
 
         try:
             # 加载文档（在线程池中执行以避免阻塞主服务）
@@ -228,11 +228,11 @@ class PPTOutlineGenerator(LoggerMixin):
             )
 
         except Exception as e:
-            self.logger.error(f"从文件生成PPT大纲失败: {e}")
+            self.logger.error(f"从文件生成Slide大纲失败: {e}")
             raise
 
     def _state_to_outline(self, state: Dict[str, Any]) -> PPTOutline:
-        """将状态转换为PPT大纲对象"""
+        """将状态转换为Slide大纲对象"""
         slides = []
 
         for slide_data in state.get("slides", []):
@@ -240,7 +240,7 @@ class PPTOutlineGenerator(LoggerMixin):
             slides.append(slide)
 
         return PPTOutline(
-            title=state.get("ppt_title", "PPT大纲"),
+            title=state.get("ppt_title", "Slide大纲"),
             total_pages=state.get("total_pages", len(slides)),
             page_count_mode=state.get("page_count_mode", "final"),
             slides=slides,
@@ -324,14 +324,14 @@ class PPTOutlineGenerator(LoggerMixin):
             progress_callback: 进度回调
 
         Returns:
-            PPT大纲对象
+            Slide大纲对象
         """
         last_exception = None
 
         for attempt in range(max_retries):
             try:
                 if attempt > 0:
-                    self.logger.info(f"第 {attempt + 1} 次尝试生成PPT大纲...")
+                    self.logger.info(f"第 {attempt + 1} 次尝试生成Slide大纲...")
 
                 return await self.generate_from_text(
                     text,

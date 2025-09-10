@@ -88,10 +88,10 @@ class ProjectManager:
                 TodoStage(
                     id="outline_generation",
                     name="大纲生成",
-                    description="基于确认的需求生成PPT大纲结构",
+                    description="基于确认的需求生成Slide大纲结构",
                     status="pending",  # Start as pending
                     progress=0.0,
-                    subtasks=["生成PPT大纲"],  # Simplified - only title
+                    subtasks=["生成Slide大纲"],  # Simplified - only title
                 ),
                 TodoStage(
                     id="ppt_creation",

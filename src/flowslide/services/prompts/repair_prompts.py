@@ -33,7 +33,7 @@ class RepairPrompts:
 
         errors_text = "\n".join(["- " + str(error) for error in validation_errors])
 
-        return f"""作为专业的PPT大纲修复助手，请修复以下PPT大纲JSON数据中的错误。
+        return f"""作为专业的Slide大纲修复助手，请修复以下Slide大纲JSON数据中的错误。
 
 项目信息：
 - 主题：{confirmed_requirements.get('topic', '未知')}

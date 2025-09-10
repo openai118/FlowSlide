@@ -124,10 +124,10 @@ class JSONParser:
         返回默认的JSON结构
 
         Returns:
-            默认的PPT大纲结构
+            默认的Slide大纲结构
         """
         return {
-            "title": "PPT大纲",
+            "title": "Slide大纲",
             "total_pages": 10,
             "page_count_mode": "estimated",
             "slides": [
@@ -154,7 +154,7 @@ class JSONParser:
         """
         # 确保必需字段存在
         if "title" not in data:
-            data["title"] = "PPT大纲"
+            data["title"] = "Slide大纲"
 
         if "slides" not in data or not isinstance(data["slides"], list):
             data["slides"] = []

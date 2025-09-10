@@ -201,7 +201,7 @@ class WorkflowManager(LoggerMixin):
                 "refine_outline",
                 "finalize_outline",
             ],
-            "description": "基于LangGraph的PPT大纲生成工作流",
+            "description": "基于LangGraph的Slide大纲生成工作流",
         }
 
     def reset_workflow(self):

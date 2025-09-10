@@ -200,7 +200,7 @@ class GraphNodes(LoggerMixin):
 
     async def refine_outline(self, state: PPTState, config: RunnableConfig) -> Dict[str, Any]:
         """
-        细化PPT大纲节点
+        细化Slide大纲节点
 
         Args:
             state: 当前状态
@@ -212,7 +212,7 @@ class GraphNodes(LoggerMixin):
         current_index = state["current_index"]
         total_chunks = len(state["document_chunks"])
 
-        self.logger.info(f"正在细化PPT大纲 ({current_index + 1}/{total_chunks})...")
+        self.logger.info(f"正在细化Slide大纲 ({current_index + 1}/{total_chunks})...")
 
         # 检查是否还有内容需要处理
         if current_index >= total_chunks:
@@ -279,13 +279,13 @@ class GraphNodes(LoggerMixin):
             }
 
         except Exception as e:
-            self.logger.error(f"PPT大纲细化失败: {e}")
+            self.logger.error(f"Slide大纲细化失败: {e}")
             # 继续处理下一个块
             return {**state, "current_index": current_index + 1}
 
     async def finalize_outline(self, state: PPTState, config: RunnableConfig) -> Dict[str, Any]:
         """
-        最终优化PPT大纲节点
+        最终优化Slide大纲节点
 
         Args:
             state: 当前状态
@@ -294,7 +294,7 @@ class GraphNodes(LoggerMixin):
         Returns:
             更新的状态字段
         """
-        self.logger.info("开始最终优化PPT大纲...")
+        self.logger.info("开始最终优化Slide大纲...")
 
         try:
             # 准备当前大纲
@@ -410,7 +410,7 @@ class GraphNodes(LoggerMixin):
             }
 
         except Exception as e:
-            self.logger.error(f"PPT大纲最终优化失败: {e}")
+            self.logger.error(f"Slide大纲最终优化失败: {e}")
             # 返回当前状态，但标记为最终状态
             slides = state["slides"]
             for i, slide in enumerate(slides):

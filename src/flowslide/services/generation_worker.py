@@ -31,13 +31,17 @@ async def _process_task(session, task_row: dict, base_backoff: int = 60, max_att
         try:
             # Execute the task based on type
             ppt_service = get_ppt_service()
-            if task_type == "ppt_generation":
-                # payload may include stage to run
+            # Support multiple task types that can trigger project workflow execution
+            if task_type in ("ppt_generation", "outline_generation", "file_outline_generation"):
+                # payload may include stage to run (for partial runs) or a request
                 stage = payload.get("stage") if isinstance(payload, dict) else None
                 if stage:
+                    # mark the stage pending and start from that stage
                     await ppt_service.start_workflow_from_stage(project_id, stage)
+                    # run the workflow from that stage immediately
+                    await ppt_service._execute_project_workflow(project_id, payload.get("request") if isinstance(payload, dict) else None)
                 else:
-                    # default: run full project workflow
+                    # default: run full project workflow (outline/file outline handling is inside the service)
                     await ppt_service._execute_project_workflow(project_id, payload.get("request") if isinstance(payload, dict) else None)
 
             # mark success

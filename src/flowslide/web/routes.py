@@ -2680,10 +2680,56 @@ async def stream_stage_response(
                     if chunk:
                         yield f"data: {json.dumps({'content': chunk, 'done': False})}\n\n"
 
-            # Update stage status to completed
-            await ppt_service.project_manager.update_stage_status(
-                project_id, stage_id, "completed", 100.0
-            )
+            # Update stage status to completed only after verifying persistence succeeded
+            try:
+                project_after = await ppt_service.project_manager.get_project(project_id)
+
+                # For outline generation, ensure outline exists in DB
+                if stage_id == "outline_generation":
+                    has_outline = bool(
+                        project_after and project_after.outline and project_after.outline.get("slides")
+                    )
+                    if has_outline:
+                        await ppt_service.project_manager.update_stage_status(
+                            project_id, stage_id, "completed", 100.0
+                        )
+                    else:
+                        await ppt_service.project_manager.update_stage_status(
+                            project_id,
+                            stage_id,
+                            "failed",
+                            0.0,
+                            {"error": "Outline not persisted to database"},
+                        )
+
+                # For ppt creation, ensure slides data or html is saved
+                elif stage_id == "ppt_creation":
+                    has_slides = bool(
+                        project_after and (
+                            (project_after.slides_data and len(project_after.slides_data) > 0)
+                            or (project_after.slides_html and len(project_after.slides_html) > 0)
+                        )
+                    )
+                    if has_slides:
+                        await ppt_service.project_manager.update_stage_status(
+                            project_id, stage_id, "completed", 100.0
+                        )
+                    else:
+                        await ppt_service.project_manager.update_stage_status(
+                            project_id,
+                            stage_id,
+                            "failed",
+                            0.0,
+                            {"error": "Slides not persisted to database"},
+                        )
+
+                else:
+                    # Generic: mark completed
+                    await ppt_service.project_manager.update_stage_status(
+                        project_id, stage_id, "completed", 100.0
+                    )
+            except Exception as stage_update_error:
+                logger.error(f"Error verifying/persisting stage result: {stage_update_error}")
 
             # Send completion signal
             yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"

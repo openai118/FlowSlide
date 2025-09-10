@@ -724,7 +724,7 @@
             <div style="display: inline-block; background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 12px 20px; border-radius: 40px; margin-bottom: 15px; box-shadow: 0 6px 20px rgba(102, 126, 234, 0.25);">
                 <h3 style="margin: 0; font-weight: 600; font-size: 1.1em;">📝 需求确认</h3>
             </div>
-            <p style="color: var(--text-secondary); margin-bottom: 0; font-size: 1em; line-height: 1.5;">请确认以下信息，AI将根据您的确认生成定制化的PPT内容</p>
+            <p style="color: var(--text-secondary); margin-bottom: 0; font-size: 1em; line-height: 1.5;">请确认以下信息，AI将根据您的确认生成定制化的Slide内容</p>
         </div>
 
         <!-- Loading indicator for requirements form -->
@@ -834,8 +834,8 @@
 
 
             <div style="margin-bottom: 25px;">
-                <label style="display: block; margin-bottom: 8px; color: var(--text-primary); font-weight: bold;">PPT页数设置 (Page Count)</label>
-                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 15px;">选择PPT的页数生成方式：</p>
+                <label style="display: block; margin-bottom: 8px; color: var(--text-primary); font-weight: bold;">Slide页数设置 (Page Count)</label>
+                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 15px;">选择Slide的页数生成方式：</p>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                     <div class="page-count-option active" data-mode="ai_decide" style="border: 2px solid var(--glass-border); background: var(--glass-bg); border-radius: 10px; padding: 15px; cursor: pointer; text-align: center; transition: all 0.3s ease;">
                         <div style="font-size: 24px; margin-bottom: 8px;">🤖</div>
@@ -871,8 +871,8 @@
             </div>
 
             <div style="margin-bottom: 25px;">
-                <label style="display: block; margin-bottom: 8px; color: var(--text-primary); font-weight: bold;">PPT风格 (Style)</label>
-                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 15px;">选择适合您内容的PPT风格：</p>
+                <label style="display: block; margin-bottom: 8px; color: var(--text-primary); font-weight: bold;">Slide风格 (Style)</label>
+                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 15px;">选择适合您内容的Slide风格：</p>
                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                     <div class="style-option" data-style="general" style="border: 2px solid var(--glass-border); background: var(--glass-bg); border-radius: 10px; padding: 15px; cursor: pointer; text-align: center; transition: all 0.3s ease;">
                         <div style="font-size: 24px; margin-bottom: 8px;">📋</div>
@@ -897,8 +897,8 @@
                     <label style="display: block; margin-bottom: 8px; color: var(--text-primary); font-weight: bold;">自定义风格提示词</label>
                     <textarea id="custom_style_prompt" name="custom_style_prompt"
                               style="width: 100%; height: 120px; padding: 12px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--text-primary); border-radius: 8px; font-size: 14px; resize: vertical;"
-                              placeholder="请输入您希望的PPT风格描述，例如：简约现代风格，使用蓝色主题，卡片式布局..."></textarea>
-                    <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">详细描述您期望的PPT风格，AI将根据您的描述生成相应的设计</p>
+                              placeholder="请输入您希望的Slide风格描述，例如：简约现代风格，使用蓝色主题，卡片式布局..."></textarea>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">详细描述您期望的Slide风格，AI将根据您的描述生成相应的设计</p>
                 </div>
             </div>
 
@@ -921,10 +921,10 @@
 
         {% if todo_board.overall_progress >= 100 %}
         <a href="/projects/{{ todo_board.task_id }}/preview" target="_blank" style="background: linear-gradient(135deg, #27ae60, #229954); color: white; text-decoration: none; padding: 10px 20px; border-radius: 10px; font-weight: 600; transition: all 0.3s ease; box-shadow: 0 3px 12px rgba(39, 174, 96, 0.25); display: flex; align-items: center; gap: 6px; font-size: 0.9em;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 5px 16px rgba(39, 174, 96, 0.35)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 3px 12px rgba(39, 174, 96, 0.25)'">
-            🔍 预览 PPT
+            🔍 预览 Slide
         </a>
         <a href="/projects/{{ todo_board.task_id }}/edit" target="_blank" style="background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; text-decoration: none; padding: 10px 20px; border-radius: 10px; font-weight: 600; transition: all 0.3s ease; box-shadow: 0 3px 12px rgba(231, 76, 60, 0.25); display: flex; align-items: center; gap: 6px; font-size: 0.9em;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 5px 16px rgba(231, 76, 60, 0.35)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 3px 12px rgba(231, 76, 60, 0.25)'">
-            ✏️ 编辑 PPT
+            ✏️ 编辑 Slide
         </a>
         {% endif %}
 
@@ -1380,9 +1380,9 @@ function showOutlineSection() {
         outlineSection.innerHTML = `
             <div style="text-align: center; margin-bottom: 30px;">
                 <h3 style="color: var(--text-primary); margin-bottom: 10px;">
-                    <i class="fas fa-brain"></i> PPT 大纲生成
+                    <i class="fas fa-brain"></i> Slide大纲生成
                 </h3>
-                <p style="color: var(--text-secondary);">AI正在为您生成专业的PPT大纲，您可以实时查看并编辑</p>
+                <p style="color: var(--text-secondary);">AI正在为您生成专业的Slide大纲，您可以实时查看并编辑</p>
             </div>
 
             <div style="background: var(--input-bg); border-radius: 10px; padding: 20px; border: 2px solid var(--border-color);">
@@ -1469,7 +1469,7 @@ function showOutlineSection() {
                     <div id="outline-toolbar-new" style="background: var(--input-bg); border: 1px solid var(--border-color); border-bottom: none; border-radius: 8px 8px 0 0; padding: 10px; display: flex; align-items: center; justify-content: space-between;">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span style="color: var(--text-primary); font-weight: 500;">
-                                <i class="fas fa-list-ul"></i> PPT大纲预览
+                                <i class="fas fa-list-ul"></i> Slide大纲预览
                             </span>
                             <span style="color: var(--text-secondary); font-size: 12px;">支持简洁视图和详细视图切换</span>
                         </div>
@@ -1492,7 +1492,7 @@ function showOutlineSection() {
                         </div>
                         <div id="outline-loading-new" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: var(--text-secondary); display: none;">
                             <i class="fas fa-spinner fa-spin fa-2x" style="margin-bottom: 15px;"></i>
-                            <p>正在加载大纲...</p>
+                            <p>正在加载 Slide大纲...</p>
                         </div>
                         <div id="outline-error-new" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: var(--accent-red); display: none;">
                             <i class="fas fa-exclamation-triangle fa-2x" style="margin-bottom: 15px;"></i>
@@ -1523,7 +1523,7 @@ function showOutlineSection() {
                                      resize: vertical; background: var(--input-bg); color: var(--text-primary);"
                               placeholder='请输入JSON格式的大纲，例如：
 {
-  "title": "PPT标题",
+  "title": "Slide标题",
   "slides": [
     {
       "page_number": 1,
@@ -1808,7 +1808,7 @@ async function startFileOutlineGeneration() {
 
             <div class="loading-tips">
                 <h5><i class="fas fa-lightbulb"></i> 小贴士</h5>
-                <p>AI正在智能分析您上传的文件内容，提取关键信息并生成结构化的PPT大纲。</p>
+                <p>AI正在智能分析您上传的文件内容，提取关键信息并生成结构化的Slide大纲。</p>
             </div>
         `;
         placeholderDiv.className = 'loading-container';
@@ -1898,7 +1898,7 @@ async function startFileOutlineGeneration() {
             console.log('大纲内容正在生成中，暂时无法解析为JSON');
         }
 
-        // Show start PPT generation button
+        // Show start Slide generation button
         showStartPPTButton();
 
     } catch (error) {
@@ -2074,7 +2074,7 @@ async function startOutlineGenerationNew() {
             }, 500);
         }
 
-        // Show start PPT generation button
+        // Show start Slide generation button
         showStartPPTButton();
     } catch (error) {
         console.error('Error streaming outline generation:', error);
@@ -2113,7 +2113,7 @@ async function regenerateOutlineNew() {
         actionsDiv.style.display = 'none';
     }
 
-    // 隐藏开始PPT生成按钮
+    // 隐藏开始Slide生成按钮
     hideStartPPTButton();
 
     // 确保切换到JSON视图以显示生成过程
@@ -2164,7 +2164,7 @@ async function regenerateOutlineNew() {
 
             <div class="loading-tips">
                 <h5><i class="fas fa-lightbulb"></i> 小贴士</h5>
-                <p>AI正在重新分析您的需求并生成全新的PPT大纲，请稍候...</p>
+                <p>AI正在重新分析您的需求并生成全新的Slide大纲，请稍候...</p>
             </div>
         `;
 
@@ -2249,7 +2249,7 @@ async function regenerateOutlineNew() {
             }, 500);
         }
 
-        // Show start PPT generation button
+        // Show start Slide generation button
         showStartPPTButton();
     } catch (error) {
         console.error('Error during outline regeneration:', error);
@@ -2444,13 +2444,13 @@ function confirmOutlineNew() {
             }
         }).then(response => {
             if (response.ok) {
-                // Hide edit/confirm buttons and show start PPT button
+                // Hide edit/confirm buttons and show start Slide button
                 const actionsDiv = document.getElementById('outline-actions');
                 if (actionsDiv) {
                     actionsDiv.style.display = 'none';
                 }
 
-                // Show start PPT generation button
+                // Show start Slide generation button
                 showStartPPTButton();
             } else {
                 alert('确认失败，请重试');
@@ -2464,13 +2464,13 @@ function confirmOutlineNew() {
 
 
 
-// Show start PPT generation button
+// Show start Slide generation button
 function showStartPPTButton() {
     // Check if button already exists
     let startPPTButton = document.getElementById('start-ppt-button');
 
     if (!startPPTButton) {
-        // Create start PPT button only if it doesn't exist
+        // Create start Slide button only if it doesn't exist
         const outlineSection = document.getElementById('outline-section');
         if (outlineSection) {
             startPPTButton = document.createElement('div');
@@ -2493,7 +2493,7 @@ function showStartPPTButton() {
     }
 }
 
-// Hide start PPT generation button
+// Hide start Slide generation button
 function hideStartPPTButton() {
     const startPPTButton = document.getElementById('start-ppt-button');
     if (startPPTButton) {
@@ -2501,7 +2501,7 @@ function hideStartPPTButton() {
     }
 }
 
-// Start PPT generation from outline
+// Start Slide generation from outline
 function startPPTGenerationFromOutline() {
     // Redirect to template selection page directly without confirmation
     window.location.href = `/projects/${currentProjectId}/template-selection`;
@@ -2676,13 +2676,13 @@ async function startStageExecution(stageId) {
     streamBtn.disabled = true;
     streamBtn.textContent = '处理中...';
 
-    // If this is PPT creation stage, show editor button immediately
+    // If this is Slide creation stage, show editor button immediately
     if (stageId === 'ppt_creation') {
         // Show the existing editor button if it exists
         const existingEditorBtn = document.getElementById(`editor-btn-${stageId}`);
         if (existingEditorBtn) {
             existingEditorBtn.style.display = 'inline-block';
-            console.log('Editor button shown for PPT creation stage');
+            console.log('Editor button shown for Slide creation stage');
         } else {
             // Create new editor button if not exists
             const editorBtn = document.createElement('button');
@@ -2696,7 +2696,7 @@ async function startStageExecution(stageId) {
                 streamBtn.parentNode.insertBefore(editorBtn, streamBtn.nextSibling);
             }
 
-            console.log('Editor button created for PPT creation stage');
+            console.log('Editor button created for Slide creation stage');
         }
     }
 
@@ -2769,12 +2769,12 @@ async function startStageExecution(stageId) {
                                 }
                             }
 
-                            // If this is PPT creation stage, update editor button text
+                            // If this is Slide creation stage, update editor button text
                             if (stageId === 'ppt_creation') {
                                 const existingEditorBtn = taskItem.querySelector('.editor-btn');
                                 if (existingEditorBtn) {
-                                    existingEditorBtn.innerHTML = '<i class="fas fa-edit"></i> 查看PPT';
-                                    console.log('Updated editor button text to "查看PPT"');
+                                    existingEditorBtn.innerHTML = '<i class="fas fa-edit"></i> 查看Slide';
+                                    console.log('Updated editor button text to "查看Slide"');
                                 }
                             }
 
@@ -2864,7 +2864,7 @@ function getStageDisplayName(stageId) {
         'outline_generation': '大纲生成',
         'theme_configuration': '主题配置',
         'content_enhancement': '内容增强',
-        'ppt_creation': 'PPT生成',
+        'ppt_creation': 'Slide生成',
         'quality_review': '质量审核'
     };
 
@@ -2923,6 +2923,10 @@ async function updateStageStatusSilent(stageId, status, progress = null) {
 // Subtask management functions removed - now using complete stage execution
 
 // Real-time updates
+// Track consecutive connection failures to avoid showing an alarm on brief network hiccups
+let todoConnectionFailures = 0;
+const TODO_CONN_FAILURE_THRESHOLD = 3; // show big error after 3 consecutive failures
+
 setInterval(async function() {
     try {
         const response = await fetch(`/api/projects/${currentProjectId}/todo`);
@@ -2981,7 +2985,7 @@ setInterval(async function() {
                     icon.parentElement.style.background = '#3498db';
                     if (taskStatus) taskStatus.textContent = '🔄';
 
-                    // Show editor button for PPT creation stage when it starts running
+                    // Show editor button for Slide creation stage when it starts running
                     if (stage.id === 'ppt_creation') {
                         const editorBtn = document.getElementById(`editor-btn-${stage.id}`);
                         if (editorBtn) {
@@ -3004,12 +3008,27 @@ setInterval(async function() {
         }
 
     } catch (error) {
-        console.error('Error updating TODO board:', error);
-        // Show connection error message
+        console.warn('Error updating TODO board (transient?):', error);
+        // Increment failure counter and show an unobtrusive notice only on first failure
+        todoConnectionFailures += 1;
+
         const errorElement = document.getElementById('connection-error');
         if (errorElement) {
-            errorElement.style.display = 'block';
-            errorElement.textContent = '连接错误，请刷新页面重试';
+            if (todoConnectionFailures >= TODO_CONN_FAILURE_THRESHOLD) {
+                // After threshold, show prominent error asking user to refresh
+                errorElement.style.display = 'block';
+                errorElement.textContent = '连接错误，请刷新页面重试';
+            } else {
+                // Show a subtle transient message (non-blocking)
+                errorElement.style.display = 'block';
+                errorElement.textContent = '网络波动，正在重试...';
+                // Hide subtle message after a short timeout to reduce UI flicker
+                setTimeout(() => {
+                    if (todoConnectionFailures < TODO_CONN_FAILURE_THRESHOLD && errorElement) {
+                        errorElement.style.display = 'none';
+                    }
+                }, 3000);
+            }
         }
     }
 }, 3000); // Update every 3 seconds
@@ -3031,8 +3050,65 @@ document.addEventListener('DOMContentLoaded', function() {
     const fromRequirements = urlParams.get('from_requirements') === 'true' ||
                             sessionStorage.getItem('requirements_just_confirmed') === 'true';
 
+    // If URL explicitly asks to open outline panel (e.g. from project detail "重试")
+    const openParam = urlParams.get('open');
+    if (openParam === 'outline') {
+        // Ensure outline UI is created and visible
+        setTimeout(() => {
+            showOutlineSection();
+
+            // Reveal actions and try to focus the outline area
+            const actionsDiv = document.getElementById('outline-actions');
+            if (actionsDiv) actionsDiv.style.display = 'block';
+
+            const outlineSection = document.getElementById('outline-section');
+            if (outlineSection) {
+                outlineSection.scrollIntoView({behavior: 'smooth', block: 'start'});
+            }
+        }, 200);
+    }
+
     // Clear the session storage flag
     sessionStorage.removeItem('requirements_just_confirmed');
+
+    // Ensure the outline stage's retry/stream button opens the outline editor and uses green CTA style
+    try {
+        setTimeout(() => {
+            const outlineStageEl = document.querySelector('[data-stage-id="outline_generation"]');
+            if (outlineStageEl) {
+                const outlineStreamBtn = outlineStageEl.querySelector('.btn-stream');
+                if (outlineStreamBtn) {
+                    // Replace click behavior to open outline panel (preserve original behavior by keeping a data attribute)
+                    outlineStreamBtn.dataset.originalOnclick = outlineStreamBtn.getAttribute('onclick') || '';
+                    outlineStreamBtn.onclick = function(ev) {
+                        // Open the outline panel in-place (same as hero CTA)
+                        try {
+                            showOutlineSection();
+                            const actionsDiv = document.getElementById('outline-actions');
+                            if (actionsDiv) actionsDiv.style.display = 'block';
+                            const outlineSection = document.getElementById('outline-section');
+                            if (outlineSection) outlineSection.scrollIntoView({behavior: 'smooth', block: 'start'});
+                        } catch (e) {
+                            // fallback to using URL param
+                            const url = new URL(window.location.href);
+                            url.searchParams.set('open', 'outline');
+                            window.location.href = url.toString();
+                        }
+                        // prevent other handlers from navigating away
+                        ev && ev.stopPropagation && ev.stopPropagation();
+                        ev && ev.preventDefault && ev.preventDefault();
+                    };
+
+                    // Update button appearance to match hero CTA (green)
+                    outlineStreamBtn.classList.remove('btn-outline-warning', 'btn-info', 'btn-secondary');
+                    outlineStreamBtn.classList.add('btn-success');
+                    outlineStreamBtn.style.cssText = "background: linear-gradient(135deg, #27ae60, #229954) !important; color: white; border: none; padding: 8px 14px; border-radius: 8px; font-weight: 600;";
+                }
+            }
+        }, 300);
+    } catch (e) {
+        console.warn('Failed to rewire outline retry button:', e);
+    }
 
     // Check requirements confirmation status and outline generation status
     const requirementsStage = document.querySelector('[data-stage-id="requirements_confirmation"]');
@@ -3566,7 +3642,7 @@ function editOutlineContent() {
 
     content.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h3 style="color: var(--text-primary); margin: 0;">编辑PPT大纲</h3>
+            <h3 style="color: var(--text-primary); margin: 0;">编辑Slide大纲</h3>
             <button onclick="this.closest('.modal').remove()" style="background: #e74c3c; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 16px;">×</button>
         </div>
         <div style="flex: 1; display: flex; flex-direction: column;">
@@ -4565,7 +4641,7 @@ function editOutlineNew() {
 
     content.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h3 style="color: var(--text-primary); margin: 0;">编辑PPT大纲</h3>
+            <h3 style="color: var(--text-primary); margin: 0;">编辑Slide大纲</h3>
             <button onclick="this.closest('.modal').remove()" style="background: #e74c3c; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 16px;">×</button>
         </div>
         <div style="flex: 1; display: flex; flex-direction: column;">
@@ -5131,7 +5207,7 @@ function debugOutlineContent() {
 // Convert JSON to mindmap data for new section
 function convertJsonToMindmapNew(jsonData) {
     const mindmapData = {
-        name: jsonData.title || 'PPT大纲',
+        name: jsonData.title || 'Slide大纲',
         children: []
     };
 
@@ -5193,7 +5269,7 @@ function toggleContentSourceTodo() {
         if (pdfProcessingMode) pdfProcessingMode.style.display = 'none';
         if (topicInput) {
             topicInput.required = true;
-            topicInput.placeholder = '请输入PPT主题';
+            topicInput.placeholder = '请输入Slide主题';
         }
     }
 }

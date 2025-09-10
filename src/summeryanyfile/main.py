@@ -30,7 +30,7 @@ logger = get_logger(__name__)
 @click.option("--debug", is_flag=True, help="启用调试模式")
 @click.pass_context
 def cli(ctx, config, log_level, debug):
-    """通用文本转PPT大纲生成器"""
+    """通用文本转Slide大纲生成器"""
     ctx.ensure_object(dict)
 
     # 设置日志
@@ -88,7 +88,7 @@ def generate(
     no_magic_pdf,
     no_progress,
 ):
-    """生成PPT大纲"""
+    """生成Slide大纲"""
     settings = ctx.obj["settings"]
 
     # 更新设置
@@ -204,7 +204,7 @@ async def _run_generation(
                 console.print(f"[dim]{step_name} ({percent:.1f}%)[/dim]")
 
         try:
-            # 生成PPT大纲
+            # 生成Slide大纲
             outline = await generator.generate_from_file(
                 local_path, encoding=encoding, progress_callback=progress_callback
             )
@@ -223,7 +223,7 @@ async def _run_generation(
                 with open(output_file, "w", encoding="utf-8") as f:
                     json.dump(result_json, f, ensure_ascii=False, indent=2)
 
-                console.print(f"[green]PPT大纲已保存到:[/green] {output_file}")
+                console.print(f"[green]Slide大纲已保存到:[/green] {output_file}")
             else:
                 # 输出到控制台
                 console.print(json.dumps(result_json, ensure_ascii=False, indent=2))
@@ -247,7 +247,7 @@ async def _run_generation(
 
 def _show_generation_summary(outline):
     """显示生成摘要"""
-    table = Table(title="PPT大纲摘要")
+    table = Table(title="Slide大纲摘要")
     table.add_column("属性", style="cyan")
     table.add_column("值", style="green")
 

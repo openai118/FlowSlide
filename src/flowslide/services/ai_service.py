@@ -355,7 +355,7 @@ Try saying something like: "Create a PPT about artificial intelligence for begin
         template = self.scenario_templates.get(scenario, self.scenario_templates["general"])
 
         if language == "zh":
-            response = f"""# {topic} - PPT大纲
+            response = f"""# {topic} - Slide大纲
 
 ## 基本信息
 - **主题**: {topic}

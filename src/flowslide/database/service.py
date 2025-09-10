@@ -181,7 +181,7 @@ class DatabaseService:
                 "stage_id": "outline_generation",
                 "stage_index": 1,
                 "title": "大纲生成",
-                "description": "基于确认的需求生成PPT大纲结构",
+                "description": "基于确认的需求生成Slide大纲结构",
                 "status": "pending",
             },
             {
