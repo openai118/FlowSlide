@@ -371,8 +371,18 @@ async def test_ai_provider(provider_name: str, request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Provider test failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Provider test failed: {str(e)}")
+        # Log full exception and return structured JSON so frontend won't receive HTTP 500
+        logger.exception(f"Provider test failed: {str(e)}")
+        return JSONResponse(
+            {
+                "provider": provider_name,
+                "status": "error",
+                "success": False,
+                "error": "Provider test failed",
+                "detail": str(e)[:1000],
+            },
+            status_code=200,
+        )
 
 
 @router.get("/scenarios", response_model=List[PPTScenario])

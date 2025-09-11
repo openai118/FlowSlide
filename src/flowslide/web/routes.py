@@ -938,9 +938,7 @@ async def validate_openai_api_key(
 
 
 @router.post("/api/ai/providers/openai/test")
-async def test_openai_provider_proxy(
-    request: Request, user: User = Depends(get_current_user_required)
-):
+async def test_openai_provider_proxy(request: Request):
     """Proxy endpoint to test OpenAI provider, avoiding CORS issues - uses frontend provided config"""
     try:
         import aiohttp
@@ -2754,10 +2752,8 @@ async def edit_project_ppt(
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
-        # 允许编辑器在Slide生成过程中显示，提供更好的用户体验
-        # 如果没有slides_data，创建一个空的结构供编辑器使用
-        if not project.slides_data:
-            project.slides_data = []
+        # Note: slides_data is already properly populated by DatabaseService._convert_db_project_to_api
+        # from the SlideData table. No need to override it here.
 
         return templates.TemplateResponse(
             "project_slides_editor.html",
@@ -4520,19 +4516,49 @@ async def test_pdf_export_endpoint():
     return {"status": "PDF export endpoint is working", "timestamp": time.time()}
 
 
+async def _get_user_optional_unless_direct_download(request: Request):
+    """Dependency: return user from get_current_user_optional unless direct_download from localhost is requested."""
+    try:
+        direct = request.query_params.get("direct_download", "0")
+        client_host = request.client.host if request and request.client else None
+    except Exception:
+        direct = "0"
+        client_host = None
+
+    # If direct_download and from localhost, bypass user dependency (return None)
+    if direct and str(direct).lower() in ("1", "true", "yes") and client_host in ("127.0.0.1", "::1", "localhost"):
+        return None
+
+    # Otherwise fall back to original optional user dependency
+    # get_current_user_optional is synchronous, don't await it
+    return get_current_user_optional(request)
+
+
 @router.get("/api/projects/{project_id}/export/pdf")
 async def export_project_pdf(
-    project_id: str, individual: bool = False, user: User = Depends(get_current_user_optional)
+    request: Request,
+    project_id: str,
+    individual: bool = False,
+    direct_download: bool = False,
+    user: User = Depends(_get_user_optional_unless_direct_download),
 ):
     """Export project as PDF using Pyppeteer"""
-    print(f"🔥 PDF EXPORT REQUEST RECEIVED: project_id={project_id}")
-    logging.info(f"🔥 PDF EXPORT REQUEST RECEIVED: project_id={project_id}")
+    print(f"🔥 PDF EXPORT REQUEST RECEIVED: project_id={project_id} direct_download={direct_download} individual={individual}")
+    logging.info(f"🔥 PDF EXPORT REQUEST RECEIVED: project_id={project_id} direct_download={direct_download} individual={individual}")
     try:
         project = await ppt_service.project_manager.get_project(project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        if user and not _user_can_access_project(user, project):
-            raise HTTPException(status_code=403, detail="Access denied")
+
+        # If direct_download is requested from localhost, allow bypassing auth checks
+        try:
+            client_host = (request.client.host if request and request.client else None)
+        except Exception:
+            client_host = None
+
+        if not direct_download or (client_host not in ("127.0.0.1", "::1", "localhost")):
+            if user and not _user_can_access_project(user, project):
+                raise HTTPException(status_code=403, detail="Access denied")
 
         # Check if we have slides data
         if not project.slides_data or len(project.slides_data) == 0:
@@ -4546,41 +4572,19 @@ async def export_project_pdf(
                 detail="PDF generation service unavailable. Please ensure Pyppeteer is installed: pip install pyppeteer",
             )
 
-        # Create temp file in thread pool to avoid blocking
-        temp_pdf_path = await run_blocking_io(
-            lambda: tempfile.NamedTemporaryFile(suffix=".pdf", delete=False).name
-        )
+        # Delegate PDF generation to dedicated service
+        from ..services.pdf_export import generate_pdf_file
 
         logging.info(f"Generating PDF for project: {project.topic}")
         logging.info(f"Project has {len(project.slides_data)} slides")
 
-        # Prefer simple, single-pass path: one combined HTML rendered once
-        success = False
         try:
-            combined_html = await _generate_combined_html_for_pdf(project)
-            # Use converter directly in simple mode
-            success = await pdf_converter.convert_single_html_to_pdf(
-                combined_html, temp_pdf_path, simple=True
-            )
-            if success:
-                logging.info("PDF generated via single-pass simple mode")
+            temp_pdf_path = await generate_pdf_file(project, individual=individual)
         except Exception as e:
-            logging.info(f"Simple single-pass PDF attempt failed, will fallback: {e}")
-
-        if not success:
-            # Fallback: legacy per-slide HTML -> batch convert -> merge
-            success = await _generate_pdf_with_pyppeteer(project, temp_pdf_path, individual)
-
-        if not success:
-            # Clean up temp file and raise error
-            logging.error(f"❌ PDF generation failed for project {project.project_id}")
-            print(f"❌ PDF generation failed for project {project.project_id}")
-            await run_blocking_io(
-                lambda: (os.unlink(temp_pdf_path) if os.path.exists(temp_pdf_path) else None)
-            )
+            logging.error(f"❌ PDF generation failed for project {project.project_id}: {e}")
+            print(f"❌ PDF generation failed for project {project.project_id}: {e}")
             raise HTTPException(status_code=500, detail="PDF generation failed")
 
-        # Return PDF file
         logging.info("PDF generated successfully")
 
         # 创建安全的文件名（ASCII 回退 + UTF-8 显示名）
@@ -4623,10 +4627,27 @@ async def export_project_pdf(
 
 @router.get("/api/projects/{project_id}/export/pdf/individual")
 async def export_project_pdf_individual(
-    project_id: str, user: User = Depends(get_current_user_required)
+    request: Request,
+    project_id: str,
+    user: User = Depends(get_current_user_required),
 ):
     """Export project as individual PDF files for each slide"""
-    return await export_project_pdf(project_id, individual=True, user=user)
+    # Forward to the main export handler, preserving the request object
+    return await export_project_pdf(request=request, project_id=project_id, individual=True, user=user)
+
+
+@router.post("/__client_trace")
+async def __client_trace(request: Request):
+    """Receive lightweight client-side stack traces to help debugging window.open callers (dev-only)."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    try:
+        logging.info(f"Client trace received: {str(data)[:1000]}")
+    except Exception:
+        pass
+    return JSONResponse({"ok": True})
 
 
 @router.get("/api/apryse/license/check")
@@ -4700,14 +4721,31 @@ async def export_project_pptx(project_id: str, user: User = Depends(get_current_
             temp_pdf_path = temp_pdf_file.name
 
         logging.info("Step 1: Generating PDF for PPTX conversion")
-        pdf_success = await _generate_pdf_with_pyppeteer(project, temp_pdf_path, individual=False)
+        # Use centralized PDF export service so logic is consistent with export_project_pdf
+        from ..services.pdf_export import generate_pdf_file
+        try:
+            generated_pdf = await generate_pdf_file(project, individual=False)
+            # Move generated PDF to the reserved temp path for the PPTX flow
+            import shutil
 
-        if not pdf_success:
+            try:
+                # Move in blocking thread
+                await run_blocking_io(shutil.move, generated_pdf, temp_pdf_path)
+            except Exception:
+                # Fallback: try copy
+                await run_blocking_io(shutil.copyfile, generated_pdf, temp_pdf_path)
+
+            if not os.path.exists(temp_pdf_path) or os.path.getsize(temp_pdf_path) == 0:
+                raise Exception("Generated PDF missing or empty after move/copy")
+
+        except Exception as e:
             # Clean up temp file and raise error
             try:
-                os.unlink(temp_pdf_path)
+                if os.path.exists(temp_pdf_path):
+                    os.unlink(temp_pdf_path)
             except Exception:
                 pass
+            logging.error(f"PDF generation for PPTX failed: {e}")
             raise HTTPException(status_code=500, detail="PDF generation failed")
 
         # Step 2: Convert PDF to PPTX
@@ -5940,112 +5978,35 @@ async def export_speaker_notes_docx(
 
 
 async def _generate_pdf_with_pyppeteer(project, output_path: str, individual: bool = False) -> bool:
-    """Generate PDF using Pyppeteer (Python)"""
-    try:
-        pdf_converter = get_pdf_converter()
+    """Thin wrapper: delegate to centralized generate_pdf_file service and place the result at `output_path`.
 
-        # Check if PDF converter is available
-        if not pdf_converter.is_available():
-            logging.error("PDF converter is not available - Playwright not installed")
+    This preserves the original signature but ensures all PDF generation goes through
+    src.flowslide.services.pdf_export.generate_pdf_file.
+    """
+    try:
+        from ..services.pdf_export import generate_pdf_file
+        import shutil
+
+        # Generate PDF using centralized service
+        generated = await generate_pdf_file(project, individual=individual)
+
+        # Move generated file to desired output_path in a blocking thread
+        try:
+            await run_blocking_io(shutil.move, generated, output_path)
+        except Exception:
+            # Fallback to copy if move fails
+            await run_blocking_io(shutil.copyfile, generated, output_path)
+
+        # Verify
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            logging.info(f"PDF generated and placed at: {output_path}")
+            return True
+        else:
+            logging.error("Generated PDF missing or empty after move/copy")
             return False
 
-        logging.info(f"Starting PDF generation for project: {project.topic}")
-        logging.info(f"Number of slides: {len(project.slides_data)}")
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            logging.info(f"Using temporary directory: {temp_path}")
-
-            # Always generate individual HTML files for each slide for better page separation
-            # This ensures each slide becomes a separate PDF page
-            html_files = []
-            for i, slide in enumerate(project.slides_data):
-                try:
-                    logging.info(f"Processing slide {i+1}: {slide.get('title', 'No title')}")
-
-                    # Check slide data structure
-                    if not isinstance(slide, dict):
-                        logging.error(f"Slide {i+1} is not a dictionary: {type(slide)}")
-                        return False
-
-                    if "html_content" not in slide:
-                        logging.error(
-                            f"Slide {i+1} missing html_content key. Keys: {list(slide.keys())}"
-                        )
-                        return False
-
-                    html_content = slide.get("html_content", "")
-                    if not html_content or not html_content.strip():
-                        logging.error(f"Slide {i+1} has empty html_content")
-                        return False
-
-                    logging.info(f"Slide {i+1} html_content length: {len(html_content)} characters")
-
-                    # Use a specialized PDF-optimized HTML generator without navigation
-                    slide_html = await _generate_pdf_slide_html(
-                        slide, i + 1, len(project.slides_data), project.topic
-                    )
-
-                    if not slide_html or not slide_html.strip():
-                        logging.error(f"Generated HTML for slide {i+1} is empty")
-                        return False
-
-                    html_file = temp_path / f"slide_{i+1}.html"
-
-                    # Write HTML file in thread pool to avoid blocking
-                    def write_html_file(content, path):
-                        with open(path, "w", encoding="utf-8") as f:
-                            f.write(content)
-
-                    await run_blocking_io(write_html_file, slide_html, str(html_file))
-
-                    # Verify file was written
-                    if not html_file.exists():
-                        logging.error(f"HTML file was not created: {html_file}")
-                        return False
-
-                    file_size = html_file.stat().st_size
-                    if file_size == 0:
-                        logging.error(f"HTML file is empty: {html_file}")
-                        return False
-
-                    html_files.append(str(html_file))
-                    logging.info(
-                        f"Generated HTML file for slide {i+1}: {html_file} ({file_size} bytes)"
-                    )
-
-                except Exception as e:
-                    logging.error(f"Failed to generate HTML for slide {i+1}: {e}", exc_info=True)
-                    return False
-
-            if not html_files:
-                logging.error("No HTML files were generated")
-                return False
-
-            # Use Pyppeteer to convert multiple files and merge them
-            pdf_dir = temp_path / "pdfs"
-            await run_blocking_io(pdf_dir.mkdir)
-
-            logging.info(f"Starting PDF generation for {len(html_files)} files")
-
-            # Convert HTML files to PDFs and merge them
-            pdf_files = await pdf_converter.convert_multiple_html_to_pdf(
-                html_files, str(pdf_dir), output_path
-            )
-
-            if pdf_files and os.path.exists(output_path):
-                file_size = os.path.getsize(output_path)
-                logging.info(f"PDF generation successful: {output_path} ({file_size} bytes)")
-                return True
-            else:
-                logging.error("PDF generation failed: No output file created or file is empty")
-                if os.path.exists(output_path):
-                    file_size = os.path.getsize(output_path)
-                    logging.error(f"Output file exists but size is: {file_size} bytes")
-                return False
-
     except Exception as e:
-        logging.error(f"PDF generation failed with exception: {e}", exc_info=True)
+        logging.error(f"_generate_pdf_with_pyppeteer wrapper failed: {e}", exc_info=True)
         return False
 
 

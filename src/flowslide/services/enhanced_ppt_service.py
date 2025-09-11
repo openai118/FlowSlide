@@ -2464,8 +2464,16 @@ class EnhancedPPTService(PPTService):
     ) -> Dict[str, Any]:
         """验证大纲JSON数据的正确性，如果有错误则调用AI修复，最多修复10次"""
         try:
-            # 第一步：基本结构验证
-            logger.info(f"outline_data: {outline_data}")
+            # 第一步：尝试先标准化输入（把常见的字符串/别名转换为标准格式），再验证
+            logger.info(f"outline_data (raw): {outline_data}")
+            try:
+                standardized = self._standardize_outline_format(outline_data)
+                outline_data = standardized
+                logger.debug("已对大纲数据进行标准化，减少不必要的验证失败")
+            except Exception:
+                # 如果标准化失败，继续使用原始数据进行验证（将在AI修复中处理）
+                logger.debug("大纲标准化失败，继续使用原始数据进行验证")
+
             validation_errors = self._validate_outline_structure(
                 outline_data, confirmed_requirements
             )
@@ -2591,44 +2599,66 @@ class EnhancedPPTService(PPTService):
                 errors.append(f"第{slide_index}页：slide必须是字典格式")
                 return errors
 
-            # 检查必需字段
+            # 检查必需字段（接受若干等价字段以提高容错性）
             required_fields = ["page_number", "title", "content_points", "slide_type"]
+            # content_points 可以由 content 字段替代（字符串或分行字符串）
             for field in required_fields:
-                if field not in slide:
-                    errors.append(f"第{slide_index}页：缺少必需字段 {field}")
+                if field == "content_points":
+                    if "content_points" not in slide and not ("content" in slide and isinstance(slide.get("content"), str)):
+                        errors.append(f"第{slide_index}页：缺少必需字段 {field} 或可替代的 content 字段")
+                elif field == "slide_type":
+                    # 允许使用 type 作为别名
+                    if "slide_type" not in slide and "type" not in slide:
+                        errors.append(f"第{slide_index}页：缺少必需字段 {field} (或别名 type)")
+                else:
+                    if field not in slide:
+                        errors.append(f"第{slide_index}页：缺少必需字段 {field}")
 
             # 检查字段类型和值
+            # page_number：接受整数或能够转换为整数的字符串；只在值非法（非正整数）时报错，不强制索引精确匹配
             if "page_number" in slide:
                 page_num = slide["page_number"]
-                if not isinstance(page_num, int) or page_num != slide_index:
-                    errors.append(
-                        f"第{slide_index}页：page_number应为{slide_index}，实际为{page_num}"
-                    )
+                try:
+                    page_num_int = int(page_num)
+                    if page_num_int <= 0:
+                        errors.append(f"第{slide_index}页：page_number必须为正整数，实际为{page_num}")
+                except Exception:
+                    errors.append(f"第{slide_index}页：page_number必须为整数或数字字符串，实际为{page_num}")
 
             if "title" in slide:
                 title = slide["title"]
                 if not isinstance(title, str) or not title.strip():
                     errors.append(f"第{slide_index}页：title必须是非空字符串")
 
+            # content_points：如果是列表则逐条验证；如果不存在但提供了 content 字段且为字符串，则可接受
             if "content_points" in slide:
                 content_points = slide["content_points"]
-                if not isinstance(content_points, list):
-                    errors.append(f"第{slide_index}页：content_points必须是列表格式")
-                elif len(content_points) == 0:
-                    errors.append(f"第{slide_index}页：content_points不能为空")
+                if isinstance(content_points, list):
+                    if len(content_points) == 0:
+                        errors.append(f"第{slide_index}页：content_points不能为空")
+                    else:
+                        for j, point in enumerate(content_points):
+                            if not isinstance(point, str) or not point.strip():
+                                errors.append(f"第{slide_index}页：content_points[{j}]必须是非空字符串")
                 else:
-                    for j, point in enumerate(content_points):
-                        if not isinstance(point, str) or not point.strip():
-                            errors.append(f"第{slide_index}页：content_points[{j}]必须是非空字符串")
+                    # 非列表类型（例如字符串）允许，但建议在标准化阶段转换
+                    logger.debug(f"第{slide_index}页：content_points不是列表，类型为 {type(content_points)}，将在标准化阶段转换")
+            else:
+                # 没有 content_points，但若存在 content 字段（字符串）则认为可接受
+                if "content" in slide and isinstance(slide.get("content"), str):
+                    # acceptable, will be standardized later
+                    pass
+                else:
+                    errors.append(f"第{slide_index}页：缺少内容字段 (content_points 或 content)")
 
-            if "slide_type" in slide:
-                slide_type = slide["slide_type"]
-                valid_types = ["title", "content", "agenda", "thankyou"]
-                if slide_type not in valid_types:
-                    valid_types_str = ", ".join(valid_types)
-                    errors.append(
-                        f"第{slide_index}页：slide_type必须是{valid_types_str}中的一个，实际为{slide_type}"
-                    )
+            # slide_type：接受别名 'type'，不将未知类型视为致命错误（会在标准化阶段归一化）
+            if "slide_type" in slide or "type" in slide:
+                slide_type = slide.get("slide_type", slide.get("type"))
+                if not isinstance(slide_type, str) or not slide_type.strip():
+                    errors.append(f"第{slide_index}页：slide_type必须是非空字符串")
+                else:
+                    # 不对其具体取值过于严格，这会交由标准化逻辑处理
+                    logger.debug(f"第{slide_index}页：检测到 slide_type={slide_type}")
 
             return errors
 
