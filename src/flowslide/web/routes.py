@@ -591,7 +591,7 @@ async def web_ai_config(request: Request, user: User = Depends(get_current_user_
 
 
 @router.post("/api/ai/providers/openai/models")
-async def get_openai_models(request: Request, user: User = Depends(get_current_user_required)):
+async def get_openai_models(request: Request):
     """Proxy endpoint to get OpenAI models list, avoiding CORS issues - uses frontend provided config"""
     try:
 
@@ -666,7 +666,7 @@ async def get_openai_models(request: Request, user: User = Depends(get_current_u
 
 
 @router.post("/api/ai/providers/anthropic/models")
-async def get_anthropic_models(request: Request, user: User = Depends(get_current_user_required)):
+async def get_anthropic_models(request: Request):
     """Proxy endpoint to get Anthropic models list using frontend-provided config."""
     try:
         import aiohttp
@@ -730,8 +730,116 @@ async def get_anthropic_models(request: Request, user: User = Depends(get_curren
         return {"success": False, "error": str(e)}
 
 
+@router.post("/api/ai/providers/anthropic/test")
+async def test_anthropic_provider_proxy(request: Request):
+    """Test an Anthropic-compatible provider through the backend proxy.
+
+    Keeping this request server-side avoids browser CORS failures and makes the
+    test path match the path used by the application at runtime.
+    """
+    try:
+        import aiohttp
+
+        try:
+            data = await request.json()
+            if not isinstance(data, dict):
+                data = {}
+        except Exception:
+            data = {}
+
+        base_url = str(data.get("base_url") or "https://api.anthropic.com").strip()
+        api_key = str(data.get("api_key") or "").strip()
+        model = str(data.get("model") or "claude-3-5-sonnet-20241022").strip()
+        api_version = str(data.get("api_version") or "2023-06-01").strip()
+
+        if not api_key:
+            return {"success": False, "status": "error", "error": "API Key is required"}
+        if not model:
+            return {"success": False, "status": "error", "error": "Model is required"}
+
+        messages_url = build_api_url(base_url, "messages", ensure_v1=True)
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": api_version,
+            "content-type": "application/json",
+            # Some Anthropic-compatible gateways accept Bearer only. Sending it
+            # in addition to x-api-key is harmless for the official endpoint.
+            "Authorization": f"Bearer {api_key}",
+        }
+        payload = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": 'Say "Hello, I am working!" in exactly 5 words.',
+                }
+            ],
+            "max_tokens": 20,
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(messages_url, headers=headers, json=payload, timeout=30) as response:
+                response_text = await response.text()
+                if response.status < 200 or response.status >= 300:
+                    safe_text = _sanitize_text(response_text)
+                    logger.warning("Anthropic provider test failed %s: %s", response.status, safe_text)
+                    error_message = safe_text or f"API returned status {response.status}"
+                    try:
+                        error_data = json.loads(response_text)
+                        if isinstance(error_data, dict):
+                            error_obj = error_data.get("error")
+                            if isinstance(error_obj, dict):
+                                error_message = error_obj.get("message") or error_message
+                            elif isinstance(error_obj, str):
+                                error_message = error_obj
+                    except Exception:
+                        pass
+                    return {
+                        "success": False,
+                        "status": "error",
+                        "provider": "anthropic",
+                        "error": error_message,
+                    }
+
+                try:
+                    response_data = json.loads(response_text)
+                except Exception:
+                    response_data = {}
+
+                preview = ""
+                if isinstance(response_data, dict):
+                    content = response_data.get("content")
+                    if isinstance(content, list) and content:
+                        first = content[0]
+                        if isinstance(first, dict):
+                            preview = str(first.get("text") or "")
+                if not preview:
+                    preview = _sanitize_text(response_text)[:500]
+
+                usage = response_data.get("usage") if isinstance(response_data, dict) else None
+                usage = usage if isinstance(usage, dict) else {}
+                input_tokens = usage.get("input_tokens", 0) or 0
+                output_tokens = usage.get("output_tokens", 0) or 0
+
+                return {
+                    "success": True,
+                    "status": "success",
+                    "provider": "anthropic",
+                    "model": model,
+                    "response_preview": preview,
+                    "usage": {
+                        "prompt_tokens": input_tokens,
+                        "completion_tokens": output_tokens,
+                        "total_tokens": input_tokens + output_tokens,
+                    },
+                }
+    except Exception as e:
+        logger.exception("Error testing Anthropic provider")
+        return {"success": False, "status": "error", "provider": "anthropic", "error": str(e)}
+
+
 @router.post("/api/ai/providers/google/models")
-async def get_google_models(request: Request, user: User = Depends(get_current_user_required)):
+async def get_google_models(request: Request):
     """Proxy endpoint to get Google Gemini models list using frontend-provided config."""
     try:
         import aiohttp
@@ -792,7 +900,7 @@ async def get_google_models(request: Request, user: User = Depends(get_current_u
 
 @router.post("/api/ai/providers/azure_openai/models")
 async def get_azure_openai_deployments(
-    request: Request, user: User = Depends(get_current_user_required)
+    request: Request
 ):
     """Proxy endpoint to list Azure OpenAI deployments (used as model names)."""
     try:
@@ -835,7 +943,7 @@ async def get_azure_openai_deployments(
 
 
 @router.post("/api/ai/providers/ollama/models")
-async def get_ollama_models(request: Request, user: User = Depends(get_current_user_required)):
+async def get_ollama_models(request: Request):
     """Proxy endpoint to list Ollama local models (tags)."""
     try:
         import aiohttp

@@ -3272,9 +3272,19 @@ async function testProviderWithProgress(providerName) {
         progressConfig
     );
 
-    if (result.success) {
+    // ErrorHandler wraps the return value in `data`; a provider test can
+    // therefore finish without throwing while still returning success=false.
+    // Only show “测试成功” when the provider itself returned success=true.
+    const providerResult = result.success ? result.data : null;
+    if (providerResult && providerResult.success === true) {
         const displayName = ProviderUtils.getDisplayName(providerName);
         showNotification(`${displayName} 测试成功！`, 'success');
+    } else if (providerResult && providerResult.success === false) {
+        const displayName = ProviderUtils.getDisplayName(providerName);
+        showNotification(
+            `${displayName} 测试失败: ${providerResult.error || providerResult.detail || '未知错误'}`,
+            'error'
+        );
     }
 }
 
@@ -3466,14 +3476,14 @@ async function testOpenAIProvider(config) {
     }
 }
 
-// 测试 Anthropic 提供者
+// 测试 Anthropic 提供者（通过后端代理，避免 CORS）
 async function testAnthropicProvider(config) {
     try {
         let apiKey = config.anthropic_api_key;
-    let baseUrl = (config.anthropic_base_url || '').trim() || 'https://api.anthropic.com';
-        let model = config.anthropic_model || 'claude-3-5-sonnet-20241022';
+        const baseUrl = (config.anthropic_base_url || '').trim() || 'https://api.anthropic.com';
+        const model = config.anthropic_model || 'claude-3-5-sonnet-20241022';
 
-        // 如果前端没有输入API Key，尝试从后端获取
+        // 如果前端没有输入 API Key，尝试从后端获取
         if (!apiKey) {
             const configResponse = await fetch('/api/config/ai_providers');
             if (configResponse.ok) {
@@ -3488,44 +3498,35 @@ async function testAnthropicProvider(config) {
             throw new Error('请配置 Anthropic API Key');
         }
 
-        // 调用 Anthropic API 进行测试
-    // 允许自定义 Base URL（例如企业代理网关）。Anthropic 的 messages 路径位于 /v1/messages
-    const endpoint = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-    const response = await fetch(`${endpoint}/v1/messages`, {
+        const proxyResponse = await fetch('/api/ai/providers/anthropic/test', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': apiKey,
-                'anthropic-version': '2023-06-01'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                base_url: baseUrl,
+                api_key: apiKey,
                 model: model,
-                messages: [
-                    {
-                        role: 'user',
-                        content: 'Say "Hello, I am working!" in exactly 5 words.'
-                    }
-                ],
-                max_tokens: 20
+                api_version: '2023-06-01'
             })
         });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error?.message || `HTTP ${response.status}`);
-        }
+        let proxyResult = null;
+        try { proxyResult = await proxyResponse.json(); } catch (_) {}
 
-        const data = await response.json();
+        if (!proxyResponse.ok || !proxyResult || proxyResult.success !== true) {
+            const message = proxyResult?.error || proxyResult?.detail ||
+                `HTTP ${proxyResponse.status}: ${proxyResponse.statusText}`;
+            throw new Error(message);
+        }
 
         return {
             success: true,
             provider: 'anthropic',
-            model: model,
-            response_preview: data.content[0].text,
-            usage: {
-                prompt_tokens: data.usage?.input_tokens || 0,
-                completion_tokens: data.usage?.output_tokens || 0,
-                total_tokens: (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0)
+            model: proxyResult.model || model,
+            response_preview: proxyResult.response_preview || '',
+            usage: proxyResult.usage || {
+                prompt_tokens: 0,
+                completion_tokens: 0,
+                total_tokens: 0
             }
         };
     } catch (error) {
@@ -5031,11 +5032,29 @@ async function saveProviderConfigSilently(provider) {
     return result;
 }
 
+// 获取当前提供者配置的指纹（不保存 API Key 明文）
+function getProviderConfigFingerprint(provider) {
+    const card = document.querySelector(`[data-provider="${provider}"]`);
+    if (!card) return '';
+    const values = Array.from(card.querySelectorAll('input, select'))
+        .filter(input => input.name && input.name !== 'default_provider')
+        .map(input => `${input.name}=${input.value || ''}`)
+        .join('&');
+    // A short non-secret fingerprint is enough to invalidate stale status.
+    let hash = 0;
+    for (let i = 0; i < values.length; i++) {
+        hash = ((hash << 5) - hash) + values.charCodeAt(i);
+        hash |= 0;
+    }
+    return String(hash);
+}
+
 // 缓存测试结果到localStorage
 function cacheTestResult(provider, success) {
     const cacheKey = `test_result_${provider}`;
     const result = {
         success: success,
+        configFingerprint: getProviderConfigFingerprint(provider),
         timestamp: Date.now(),
         expires: Date.now() + (60 * 60 * 1000) // 1小时过期
     };
@@ -5063,8 +5082,10 @@ function loadCachedTestResults() {
         if (cached) {
             try {
                 const result = JSON.parse(cached);
-                // 检查是否过期
-                if (result.expires > Date.now()) {
+                // 检查是否过期，以及缓存是否对应当前配置
+                const fingerprintMatches = Boolean(result.configFingerprint) &&
+                    result.configFingerprint === getProviderConfigFingerprint(provider);
+                if (result.expires > Date.now() && fingerprintMatches) {
                     providerTestCache.set(provider, result);
                     window.__ai_log.info(`恢复 ${provider} 的缓存状态:`, result.success ? '可用' : '不可用');
                     // 更新UI显示
