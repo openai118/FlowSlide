@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 import aiohttp
 from bs4 import BeautifulSoup, Comment
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from ...core.simple_config import ai_config
 
