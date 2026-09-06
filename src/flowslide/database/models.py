@@ -9,6 +9,8 @@ from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from ..core.passwords import hash_password, verify_password
+
 Base = declarative_base()
 
 
@@ -33,18 +35,12 @@ class User(Base):
     last_login: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     def set_password(self, password: str):
-        """Set password hash using bcrypt"""
-        from passlib.context import CryptContext
-
-        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        self.password_hash = pwd_context.hash(password)
+        """Set a bcrypt hash using the shared, version-independent implementation."""
+        self.password_hash = hash_password(password)
 
     def check_password(self, password: str) -> bool:
-        """Check if password is correct using bcrypt"""
-        from passlib.context import CryptContext
-
-        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        return pwd_context.verify(password, self.password_hash)
+        """Verify without rewriting, truncating or otherwise modifying stored hashes."""
+        return verify_password(password, self.password_hash)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""

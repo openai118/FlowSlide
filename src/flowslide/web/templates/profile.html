@@ -286,11 +286,9 @@ async function changePassword(e){
         const res = await fetch('/api/auth/change-password', { method:'POST', body: fd });
         const data = await res.json();
         if(!res.ok || !data.success) throw new Error(data.detail || '修改失败');
-        let syncHints=[];
-        if(data.external_triggered) syncHints.push('外部同步已触发');
-        if(data.r2_triggered) syncHints.push('R2轻量同步已触发');
-        showTempMessage('密码修改成功' + (syncHints.length?'（'+syncHints.join('，')+'）':''), true);
+        showTempMessage(data.message || '密码已修改，请重新登录', true);
         ['current_password','new_password','confirm_password'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+        window.setTimeout(() => { window.location.href = data.redirect || '/auth/login'; }, 800);
     } catch(err){
         showTempMessage('密码修改失败：' + err.message, false);
     }

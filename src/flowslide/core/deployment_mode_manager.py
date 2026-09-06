@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from ..database import db_manager
 from .sync_strategy_config import DeploymentMode, DataSyncStrategy
+from .storage_policy import configured_storage_policy
 
 logger = logging.getLogger(__name__)
 
@@ -39,94 +40,25 @@ class ModeSwitchContext:
     rollback_plan: Optional[Dict[str, Any]] = None
 
 
-def get_current_deployment_mode() -> DeploymentMode:
-    """获取当前部署模式"""
-    manager = DeploymentModeManager()
-    return manager.current_mode or DeploymentMode.LOCAL_ONLY
 
 
 class DeploymentModeManager:
     """部署模式管理器"""
 
     def __init__(self):
-        self.current_mode: Optional[DeploymentMode] = None
-        self.last_mode_check: Optional[datetime] = None
-        self.mode_check_interval: int = 60  # 60秒检查一次
-        self.switch_in_progress: bool = False
-        self.switch_context: Optional[ModeSwitchContext] = None
-
-        # 初始化当前模式
-        # Fast path: if deployment pinned mode is set, use it immediately; otherwise
-        # set a safe default (LOCAL_ONLY) and run auto-detection in background so
-        # imports and startup are not blocked by network checks.
-        pinned_mode = os.getenv("DEPLOYMENT_PINNED_MODE")
-        if pinned_mode:
-            try:
-                self.current_mode = DeploymentMode(pinned_mode.strip().lower())
-                logger.info(f"使用 DEPLOYMENT_PINNED_MODE (immediate): {self.current_mode}")
-            except Exception:
-                logger.warning(f"DEPLOYMENT_PINNED_MODE 值无效: {pinned_mode}. 使用默认 local_only")
-                self.current_mode = DeploymentMode.LOCAL_ONLY
-        else:
-            # default quick-start mode; background thread will update it later
-            self.current_mode = DeploymentMode.LOCAL_ONLY
-
+        self.current_mode = DeploymentMode(configured_storage_policy().mode)
         self.last_mode_check = datetime.now()
-
-        # Launch background detection to update current_mode without blocking imports
-        try:
-            threading.Thread(target=self._run_detection_in_background, daemon=True).start()
-        except Exception as e:
-            logger.warning(f"无法启动后台部署检测线程: {e}")
-        # Callbacks to notify when mode changes (call signature: fn(old_mode, new_mode))
-        self.mode_change_callbacks: List[Callable[[Optional[DeploymentMode], DeploymentMode], None]] = []
-
-        # 模式切换历史
-        self.mode_history: List[Dict[str, Any]] = []
-
-        # 模式兼容性矩阵
+        self.mode_check_interval = 60
+        self.switch_in_progress = False
+        self.switch_context = None
+        self.mode_change_callbacks = []
+        self.mode_history = []
         self.compatibility_matrix = self._build_compatibility_matrix()
-
-        # 模式切换策略
         self.switch_strategies = self._build_switch_strategies()
 
     def _run_detection_in_background(self):
-        """Run detect_deployment_mode asynchronously in a background thread and
-        update self.current_mode when complete. This avoids blocking imports
-        and long startup times while still performing the detection."""
-        try:
-            # Respect explicit pinned mode: if DEPLOYMENT_PINNED_MODE is set,
-            # do not let the background auto-detection override the pinned choice.
-            if os.getenv("DEPLOYMENT_PINNED_MODE"):
-                logger.info("DEPLOYMENT_PINNED_MODE is set; skipping background auto-detection to avoid overriding pinned mode")
-                return
-            # Import locally to avoid circular imports at module load time
-            from .auto_detection_service import auto_detection_service as detection_service
-            loop = asyncio.new_event_loop()
-            try:
-                asyncio.set_event_loop(loop)
-                detected = loop.run_until_complete(detection_service.detect_deployment_mode())
-                if detected:
-                    old = self.current_mode
-                    self.current_mode = detected
-                    self.last_mode_check = datetime.now()
-                    logger.info(f"自动部署检测完成，设置部署模式为: {detected}")
-                    # Notify callbacks
-                    try:
-                        for cb in list(self.mode_change_callbacks):
-                            try:
-                                cb(old, detected)
-                            except Exception as _cb_e:
-                                logger.warning(f"mode change callback raised: {_cb_e}")
-                    except Exception:
-                        pass
-            finally:
-                try:
-                    loop.close()
-                except Exception:
-                    pass
-        except Exception as e:
-            logger.warning(f"后台部署检测失败: {e}")
+        """Compatibility hook: health detection must not change identity stores."""
+        return None
 
     def _build_compatibility_matrix(self) -> Dict[str, List[str]]:
         """构建模式兼容性矩阵"""
@@ -236,139 +168,9 @@ class DeploymentModeManager:
         except ValueError:
             pass
 
-    def detect_current_mode(self) -> DeploymentMode:
-        """检测当前部署模式
-
-        优先级：DEPLOYMENT_PINNED_MODE (环境变量/.env 可写入) -> 自动检测
-        说明：移除旧的 ACTIVE_DEPLOYMENT_MODE / force_mode 双轨逻辑，统一使用 DEPLOYMENT_PINNED_MODE 作为“固定模式”。
-        若 pinned 模式所需资源未就绪则忽略并降回自动检测。
-        """
-        logger.info("开始检测当前部署模式 (pinned 优先) ...")
-
-        pinned_mode = os.getenv("DEPLOYMENT_PINNED_MODE")
-        if pinned_mode:
-            pinned_lower = pinned_mode.strip().lower()
-
-            def _r2_config_complete():
-                keys = ["R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_ENDPOINT", "R2_BUCKET_NAME"]
-                missing = [k for k in keys if not os.getenv(k)]
-                if missing:
-                    logger.info(f"⚠️ pinned 模式校验: R2 缺少 {missing}")
-                    return False
-                return True
-
-            def _external_db_configured():
-                db_url = os.getenv("DATABASE_URL", "").strip()
-                if not db_url:
-                    return False
-                return db_url.startswith("postgresql://") or db_url.startswith("mysql://")
-
-            need_r2 = pinned_lower in ("local_r2", "local_external_r2")
-            need_external = pinned_lower in ("local_external", "local_external_r2")
-            r2_ok = (not need_r2) or _r2_config_complete()
-            external_ok = (not need_external) or _external_db_configured()
-
-            if r2_ok and external_ok:
-                try:
-                    logger.info(f"使用 DEPLOYMENT_PINNED_MODE: {pinned_lower}")
-                    return DeploymentMode(pinned_lower)
-                except ValueError:
-                    logger.warning(f"DEPLOYMENT_PINNED_MODE 无效值: {pinned_mode} -> 进入自动检测")
-            else:
-                logger.warning(
-                    f"DEPLOYMENT_PINNED_MODE='{pinned_mode}' 资源未就绪 (R2={r2_ok}, external={external_ok})，忽略并自动检测"
-                )
-
-        # 兼容迁移：尝试读取旧配置 force_mode，若存在且无 pinned，则迁移
-        if not pinned_mode:
-            try:
-                from .deployment_config_manager import config_manager
-                cfg = config_manager.load_config()
-                legacy_val = getattr(cfg, 'force_mode', None)
-                if legacy_val:
-                    legacy = legacy_val.strip().lower()
-                    os.environ['DEPLOYMENT_PINNED_MODE'] = legacy  # 临时注入本进程
-                    logger.info(f"迁移 legacy force_mode -> DEPLOYMENT_PINNED_MODE: {legacy}")
-                    # 清空旧字段
-                    try:
-                        cfg.force_mode = None
-                        config_manager.save_config(cfg)
-                        logger.info("已清除 legacy force_mode 字段")
-                    except Exception as _se:
-                        logger.debug(f"清除 legacy force_mode 失败(忽略): {_se}")
-                    # 递归调用一次以应用 pinned（避免重复逻辑）
-                    return self.detect_current_mode()
-            except Exception as _me:
-                logger.debug(f"legacy force_mode 迁移检查失败: {_me}")
-
-        # 使用自动检测服务进行智能检测
-        try:
-            # 动态导入以避免循环导入
-            from .auto_detection_service import AutoDetectionService
-            detection_service = AutoDetectionService()
-            
-            # 在新的事件循环中运行异步检测
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # 如果事件循环已经在运行，创建新任务
-                    import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(asyncio.run, detection_service.detect_deployment_mode())
-                        detected_mode = future.result(timeout=30)  # 30秒超时
-                else:
-                    detected_mode = loop.run_until_complete(detection_service.detect_deployment_mode())
-            except RuntimeError:
-                # 没有事件循环，创建新的
-                detected_mode = asyncio.run(detection_service.detect_deployment_mode())
-
-            logger.info(f"🔍 自动检测结果: {detected_mode.value}")
-            logger.info(f"返回自动检测结果: {detected_mode}")
-            return detected_mode
-
-        except Exception as e:
-            logger.warning(f"自动检测失败，使用传统方法: {e}")
-
-            # 回退到传统检测方法
-            # 注意：回退路径无法做连通性测试，因此为避免误判，回退时不启用 external
-            # 使用simple_config中的实际数据库URL仅用于日志与本地/SQLite识别
-            try:
-                from .simple_config import DATABASE_URL
-                database_url = DATABASE_URL
-                logger.info(f"使用simple_config中的DATABASE_URL: {database_url}")
-            except Exception as import_error:
-                logger.error(f"无法导入DATABASE_URL: {import_error}")
-                database_url = os.getenv("DATABASE_URL", "")
-                logger.info(f"使用环境变量DATABASE_URL: {database_url}")
-            
-            def _all_r2_present():
-                keys = ["R2_ACCESS_KEY_ID","R2_SECRET_ACCESS_KEY","R2_ENDPOINT","R2_BUCKET_NAME"]
-                missing = [k for k in keys if not os.getenv(k)]
-                if missing:
-                    logger.info(f"R2 回退检测: 缺少 {missing}")
-                    return False
-                return True
-            has_r2 = _all_r2_present()
-            logger.info(f"R2 回退检测结果(has_r2): {has_r2}")
-
-            # 为避免在无法测试时误入 external，回退路径一律视为无外部数据库
-            has_external_db = False
-            if database_url.startswith("sqlite:///"):
-                logger.info("检测到本地SQLite数据库（回退模式）")
-            elif database_url:
-                logger.info("检测到可能的外部数据库URL，但回退模式不启用 external")
-            else:
-                logger.info("未找到数据库URL（回退模式）")
-
-            logger.info(f"has_external_db: {has_external_db}, has_r2: {has_r2}")
-
-            # 自动检测模式
-            if has_r2:
-                logger.info("检测到模式: LOCAL_R2")
-                return DeploymentMode.LOCAL_R2
-            else:
-                logger.info("检测到模式: LOCAL_ONLY")
-                return DeploymentMode.LOCAL_ONLY
+    def detect_current_mode(self):
+        self.last_mode_check = datetime.now()
+        return DeploymentMode(configured_storage_policy().mode)
 
     def should_check_mode(self) -> bool:
         """判断是否应该检查模式变化"""
@@ -378,39 +180,12 @@ class DeploymentModeManager:
         time_since_last_check = (datetime.now() - self.last_mode_check).total_seconds()
         return time_since_last_check >= self.mode_check_interval
 
-    async def check_and_switch_mode(self) -> bool:
-        """检查并切换模式"""
-        if self.switch_in_progress:
-            logger.info("模式切换正在进行中，跳过检查")
-            return False
-
-        if not self.should_check_mode():
-            return False
-
-        current_mode = self.detect_current_mode()
-        self.last_mode_check = datetime.now()
-
-        if current_mode == self.current_mode:
-            # 追加：如果当前模式包含 R2 但 R2 已不可用，则降级
-            if current_mode in (DeploymentMode.LOCAL_R2, DeploymentMode.LOCAL_EXTERNAL_R2):
-                try:
-                    from .auto_detection_service import AutoDetectionService, ServiceStatus
-                    detection_service = AutoDetectionService()
-                    r2_status = await detection_service.check_r2_storage()
-                    if r2_status.status != ServiceStatus.AVAILABLE:
-                        # 降级目标
-                        downgrade_to = DeploymentMode.LOCAL_EXTERNAL if current_mode == DeploymentMode.LOCAL_EXTERNAL_R2 and (os.getenv('DATABASE_URL','').startswith('postgresql://') or os.getenv('DATABASE_URL','').startswith('mysql://')) else DeploymentMode.LOCAL_ONLY
-                        logger.warning(f"R2 不再可用，自动从 {current_mode.value} 降级到 {downgrade_to.value}")
-                        self.current_mode = downgrade_to
-                        return True
-                except Exception as _dg_e:
-                    logger.info(f"降级检测时忽略异常: {_dg_e}")
-            return False
-
-        # 检测到模式变化，开始切换
-        logger.info(f"检测到模式变化: {self.current_mode} -> {current_mode}")
-        await self.switch_mode(current_mode, f"自动检测到配置变化")
-        return True
+    async def check_and_switch_mode(self):
+        """Report configuration drift; mode changes require explicit initialization."""
+        configured = self.detect_current_mode()
+        if configured != self.current_mode:
+            logger.warning('Storage configuration changed; explicitly switch mode or restart to apply it')
+        return False
 
     async def switch_mode(self, target_mode: DeploymentMode, reason: str = "手动切换") -> bool:
         """切换到指定模式"""
@@ -637,7 +412,12 @@ class DeploymentModeManager:
             logger.warning(f"写入 DEPLOYMENT_PINNED_MODE 失败（不影响运行）: {_we}")
 
         # 重新加载同步策略
-        # 这里可以触发配置重新加载
+        # Publish factories only after the requested database is reachable.
+        # A mode switch must not leave authentication on the previous store.
+        from ..database.database import initialize_database, init_db
+
+        initialize_database()
+        await init_db()
 
         logger.info("配置更新完成")
 
@@ -902,15 +682,7 @@ async def start_mode_monitoring():
 
 
 def get_current_deployment_mode() -> DeploymentMode:
-    """获取当前部署模式"""
-    # Prefer the initialized/current value to avoid flicker; detect once if empty
-    try:
-        if mode_manager.current_mode is None:
-            mode_manager.current_mode = mode_manager.detect_current_mode()
-        return mode_manager.current_mode
-    except Exception:
-        # Fallback to detection if anything goes wrong
-        return mode_manager.detect_current_mode()
+    return mode_manager.current_mode or DeploymentMode(configured_storage_policy().mode)
 
 
 def is_mode_switch_in_progress() -> bool:

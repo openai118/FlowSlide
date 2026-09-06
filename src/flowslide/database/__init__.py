@@ -1,41 +1,13 @@
-"""
-Database package for FlowSlide
-"""
+"""Lazy public exports; importing a model must not initialize the application."""
 
-from .database import SessionLocal, engine, get_async_db, get_db, init_db, db_manager
-from .health_check import health_checker
-from .migrations import migration_manager
-from .models import PPTTemplate, Project, ProjectVersion, SlideData, TodoBoard, TodoStage
-from .repositories import (
-    PPTTemplateRepository,
-    ProjectRepository,
-    ProjectVersionRepository,
-    SlideDataRepository,
-    TodoBoardRepository,
-    TodoStageRepository,
-)
-from .service import DatabaseService
+from importlib import import_module
 
-__all__ = [
-    "engine",
-    "SessionLocal",
-    "get_db",
-    "get_async_db",
-    "init_db",
-    "db_manager",
-    "Project",
-    "TodoBoard",
-    "TodoStage",
-    "ProjectVersion",
-    "SlideData",
-    "PPTTemplate",
-    "migration_manager",
-    "health_checker",
-    "DatabaseService",
-    "ProjectRepository",
-    "TodoBoardRepository",
-    "TodoStageRepository",
-    "ProjectVersionRepository",
-    "SlideDataRepository",
-    "PPTTemplateRepository",
-]
+_EXPORTS = {'SessionLocal': ('.database', 'SessionLocal'), 'engine': ('.database', 'engine'), 'get_async_db': ('.database', 'get_async_db'), 'get_db': ('.database', 'get_db'), 'init_db': ('.database', 'init_db'), 'db_manager': ('.database', 'db_manager'), 'health_checker': ('.health_check', 'health_checker'), 'migration_manager': ('.migrations', 'migration_manager'), 'PPTTemplate': ('.models', 'PPTTemplate'), 'Project': ('.models', 'Project'), 'ProjectVersion': ('.models', 'ProjectVersion'), 'SlideData': ('.models', 'SlideData'), 'TodoBoard': ('.models', 'TodoBoard'), 'TodoStage': ('.models', 'TodoStage'), 'PPTTemplateRepository': ('.repositories', 'PPTTemplateRepository'), 'ProjectRepository': ('.repositories', 'ProjectRepository'), 'ProjectVersionRepository': ('.repositories', 'ProjectVersionRepository'), 'SlideDataRepository': ('.repositories', 'SlideDataRepository'), 'TodoBoardRepository': ('.repositories', 'TodoBoardRepository'), 'TodoStageRepository': ('.repositories', 'TodoStageRepository'), 'DatabaseService': ('.service', 'DatabaseService')}
+
+__all__ = ['engine', 'SessionLocal', 'get_db', 'get_async_db', 'init_db', 'db_manager', 'Project', 'TodoBoard', 'TodoStage', 'ProjectVersion', 'SlideData', 'PPTTemplate', 'migration_manager', 'health_checker', 'DatabaseService', 'ProjectRepository', 'TodoBoardRepository', 'TodoStageRepository', 'ProjectVersionRepository', 'SlideDataRepository', 'PPTTemplateRepository']
+
+def __getattr__(name):
+    if name not in _EXPORTS:
+        raise AttributeError(name)
+    module_name, attribute = _EXPORTS[name]
+    return getattr(import_module(module_name, __name__), attribute)

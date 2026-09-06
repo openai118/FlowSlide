@@ -7,6 +7,8 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import AsyncGenerator
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
@@ -17,7 +19,6 @@ from sqlalchemy.orm import sessionmaker
 from flowslide.auth.auth_service import AuthService
 from flowslide.database.database import get_async_db, get_db
 from flowslide.database.models import Base
-from flowslide.main import app
 @pytest.fixture(scope="session")
 def event_loop():
     """Create an instance of the default event loop for the test session."""
@@ -91,6 +92,7 @@ def override_get_async_db(test_async_session):
 @pytest.fixture
 def client(override_get_db, override_get_async_db):
     """Create a test client with database overrides"""
+    from flowslide.main import app
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_async_db] = override_get_async_db
     with TestClient(app) as test_client:
@@ -160,6 +162,7 @@ def temp_upload_dir():
 async def async_client():
     """Create an async test client"""
     from httpx import AsyncClient
+    from flowslide.main import app
     async with AsyncClient(app=app, base_url="http://test") as ac:
         yield ac
 # Performance testing fixtures

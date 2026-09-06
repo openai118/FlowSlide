@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Query, UploadFile, File
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Query, UploadFile, File, Form, Request
 import logging
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import text
 
-from ..auth.middleware import require_admin, require_auth
+from ..auth.middleware import require_admin, require_auth, get_current_admin_user
 # 旧 BackupManager (占位式) 已弃用并已移除；统一使用 backup_service
 # Backup service (zip-based) helpers for R2 and local zip backups
 from ..services.backup_service import (
@@ -29,7 +29,7 @@ except Exception:  # pragma: no cover - optional at runtime
     boto3 = None
     BotoConfig = None
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_admin_user)])
 logger = logging.getLogger(__name__)
 # ensure_schema()  # deprecated
 
@@ -181,9 +181,13 @@ async def create_external_backup(req: ExternalBackupCreate, user=Depends(require
 
 
 @router.post("/api/backup/local/restore")
-async def restore_local(backup_name: str, user=Depends(require_auth)):
+async def restore_local(
+    backup_name: str,
+    confirm_accounts: bool = Query(False),
+    user=Depends(require_auth),
+):
     try:
-        ok = await svc_restore_local_backup(backup_name)  # type: ignore[misc]
+        ok = await svc_restore_local_backup(backup_name, confirm_accounts=confirm_accounts)  # type: ignore[misc]
         mode_info = backup_service.get_env_mode()
         return {"success": bool(ok), "env_mode": mode_info}
     except Exception as e:
@@ -191,7 +195,11 @@ async def restore_local(backup_name: str, user=Depends(require_auth)):
 
 
 @router.post("/api/backup/local/upload-restore")
-async def upload_and_restore_backup(file: UploadFile = File(..., description="上传的备份.zip 文件"), user=Depends(require_auth)):
+async def upload_and_restore_backup(
+    file: UploadFile = File(..., description="上传的备份.zip 文件"),
+    confirm_accounts: bool = Form(False),
+    user=Depends(require_auth),
+):
     """直接上传一个备份压缩包并立即执行恢复。
 
     用途：前端“恢复”按钮旁新增“上传恢复”功能时调用。
@@ -253,7 +261,7 @@ async def upload_and_restore_backup(file: UploadFile = File(..., description="�
         logger.info(f"📥 Received backup upload for restore: name={backup_name} size={written} bytes")
 
         try:
-            ok = await svc_restore_local_backup(backup_name)  # type: ignore[misc]
+            ok = await svc_restore_local_backup(backup_name, confirm_accounts=confirm_accounts)  # type: ignore[misc]
             mode_info = backup_service.get_env_mode()
         except Exception as restore_err:
             logger.error(f"Restore failed for uploaded backup {backup_name}: {restore_err}")
@@ -409,7 +417,11 @@ def list_external_db_backups(type: Optional[str] = Query(None, description="(Ign
 
 
 @router.post("/api/backup/external/restore")
-async def restore_from_external_db(id: str = Query(..., description="External backup id"), user=Depends(require_auth)):
+async def restore_from_external_db(
+    id: str = Query(..., description="External backup id"),
+    confirm_accounts: bool = Query(False),
+    user=Depends(require_auth),
+):
     external_engine = getattr(db_manager, "external_engine", None)
     if not external_engine:
         raise HTTPException(status_code=400, detail="External database not configured")
@@ -430,7 +442,7 @@ async def restore_from_external_db(id: str = Query(..., description="External ba
         local_path = os.path.join("backups", name)
         with open(local_path, "wb") as f:
             f.write(data)
-        ok = await svc_restore_local_backup(name)  # type: ignore[misc]
+        ok = await svc_restore_local_backup(name, confirm_accounts=confirm_accounts)  # type: ignore[misc]
         return {"success": bool(ok)}
     except HTTPException:
         raise
@@ -606,9 +618,13 @@ async def sync_type_to_r2(req: SyncTypeRequest, user=Depends(require_auth)):
 
 
 @router.post("/api/backup/r2/restore")
-async def restore_from_r2(key: str, user=Depends(require_auth)):
+async def restore_from_r2(
+    key: str,
+    confirm_accounts: bool = Query(False),
+    user=Depends(require_auth),
+):
     try:
-        return await svc_restore_r2_key(key)  # type: ignore[misc]
+        return await svc_restore_r2_key(key, confirm_accounts=confirm_accounts)  # type: ignore[misc]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

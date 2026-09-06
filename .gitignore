@@ -141,6 +141,8 @@ rclone.conf
 # Additional cleanup patterns
 test_*.py
 *_test.py
+!tests/test_*.py
+!tests/**/test_*.py
 debug_*.py
 temp_*.py
 *.tmp

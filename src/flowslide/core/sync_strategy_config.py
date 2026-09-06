@@ -8,6 +8,7 @@ import logging
 import threading
 from typing import Dict, Any, List
 from enum import Enum
+from .storage_policy import configured_storage_policy
 
 logger = logging.getLogger(__name__)
 
@@ -24,76 +25,11 @@ class DataSyncStrategy:
     """数据同步策略配置"""
 
     def __init__(self):
-        # Fast path: respect FORCE_DEPLOYMENT_MODE or DEPLOYMENT_PINNED_MODE if set,
-        # otherwise default to LOCAL_ONLY to avoid blocking on import. Launch a
-        # background detection to update the deployment mode and strategies later.
-        pinned_mode = os.getenv("FORCE_DEPLOYMENT_MODE") or os.getenv("DEPLOYMENT_PINNED_MODE")
-        if pinned_mode:
-            try:
-                self.deployment_mode = DeploymentMode(pinned_mode.lower())
-            except Exception:
-                logging.getLogger(__name__).warning(f"Invalid pinned mode: {pinned_mode}, falling back to LOCAL_ONLY")
-                self.deployment_mode = DeploymentMode.LOCAL_ONLY
-        else:
-            self.deployment_mode = DeploymentMode.LOCAL_ONLY
-
+        self.deployment_mode = DeploymentMode(configured_storage_policy().mode)
         self.sync_strategies = self._load_sync_strategies()
 
-        # Run async auto-detection in background so import/initialization is non-blocking
-        try:
-            threading.Thread(target=self._run_detection_in_background, daemon=True).start()
-        except Exception:
-            pass
-
-    def _detect_deployment_mode(self) -> DeploymentMode:
-        """检测当前部署模式"""
-        # 首先检查强制模式
-        forced_mode = os.getenv("FORCE_DEPLOYMENT_MODE")
-        if forced_mode:
-            try:
-                return DeploymentMode(forced_mode.lower())
-            except ValueError:
-                logger.warning(f"环境变量中的无效强制模式: {forced_mode}")
-
-        # 使用自动检测服务进行智能检测
-        try:
-            from .auto_detection_service import auto_detection_service
-            import asyncio
-
-            # 在新的事件循环中运行异步检测
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # 如果事件循环已经在运行，创建新任务
-                    import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(asyncio.run, auto_detection_service.detect_deployment_mode())
-                        detected_mode = future.result(timeout=30)  # 30秒超时
-                else:
-                    detected_mode = loop.run_until_complete(auto_detection_service.detect_deployment_mode())
-            except RuntimeError:
-                # 没有事件循环，创建新的
-                detected_mode = asyncio.run(auto_detection_service.detect_deployment_mode())
-
-            logger.info(f"🔍 自动检测结果: {detected_mode.value}")
-            return detected_mode
-
-        except Exception as e:
-            logger.warning(f"自动检测失败，使用传统方法: {e}")
-
-            # 回退到传统检测方法（严格但不做连通性），仅用于最小可用判断
-            db_url = (os.getenv("DATABASE_URL") or "").strip()
-            has_external_db = db_url.startswith("postgresql://") or db_url.startswith("mysql://")
-            has_r2 = bool(os.getenv("R2_ACCESS_KEY_ID"))
-
-            if has_external_db and has_r2:
-                return DeploymentMode.LOCAL_EXTERNAL_R2
-            elif has_external_db:
-                return DeploymentMode.LOCAL_EXTERNAL
-            elif has_r2:
-                return DeploymentMode.LOCAL_R2
-            else:
-                return DeploymentMode.LOCAL_ONLY
+    def _detect_deployment_mode(self):
+        return DeploymentMode(configured_storage_policy().mode)
 
     def _load_sync_strategies(self) -> Dict[str, Any]:
         """根据部署模式加载同步策略"""

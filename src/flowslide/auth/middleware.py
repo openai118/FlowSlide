@@ -3,6 +3,7 @@ Authentication middleware for FlowSlide
 """
 
 import logging
+from contextlib import closing
 from typing import Callable, Optional
 
 from fastapi import Depends, HTTPException, Request, Response
@@ -13,6 +14,34 @@ from ..database.models import User
 from .auth_service import get_auth_service
 
 logger = logging.getLogger(__name__)
+
+
+def _lookup_session_user(request: Request) -> Optional[User]:
+    """Resolve cookies through the same identity store used by login and writes."""
+    if getattr(request.state, "auth_lookup_complete", False):
+        error = getattr(request.state, "auth_lookup_error", None)
+        if error is not None:
+            raise error
+        return getattr(request.state, "user", None)
+    request.state.auth_lookup_complete = True
+    request.state.user = None
+    session_id = request.cookies.get("session_id")
+    if not session_id:
+        return None
+    try:
+        from ..database.database import get_auth_db
+
+        with closing(get_auth_db()) as sessions:
+            db = next(sessions)
+            user = get_auth_service().get_user_by_session(db, session_id)
+            if user is not None and user.is_active:
+                request.state.user = user
+        return request.state.user
+    except Exception as exc:
+        error = HTTPException(status_code=503, detail="认证数据库暂不可用，请稍后重试")
+        request.state.auth_lookup_error = error
+        logger.error("Session verification unavailable (%s)", type(exc).__name__)
+        raise error from exc
 
 
 class AuthMiddleware:
@@ -88,18 +117,12 @@ class AuthMiddleware:
 
         # Always attempt to attach user to request if a valid session exists,
         # even for public paths, so templates can show correct login state.
-        session_id = request.cookies.get("session_id")
         user = None
-        if session_id:
-            try:
-                from ..database.database import SessionLocal
-                db = SessionLocal()
-                try:
-                    user = self.auth_service.get_user_by_session(db, session_id)
-                finally:
-                    db.close()
-            except Exception as e:
-                logger.debug(f"Optional user attach failed: {e}")
+        auth_error = None
+        try:
+            user = _lookup_session_user(request)
+        except HTTPException as exc:
+            auth_error = exc
 
         if user:
             request.state.user = user
@@ -114,6 +137,12 @@ class AuthMiddleware:
             logger.debug(f"Protected path requires auth: {path}")
 
         # For protected paths, enforce authentication
+        if auth_error is not None:
+            return Response(
+                content='{"detail": "Authentication database unavailable"}',
+                status_code=503,
+                media_type="application/json",
+            )
         if not user:
             # No valid session
             if path.startswith("/api/"):
@@ -164,20 +193,7 @@ def require_admin(request: Request) -> User:
 
 def get_current_user_optional(request: Request) -> Optional[User]:
     """Get current user if authenticated, None otherwise"""
-    session_id = request.cookies.get("session_id")
-    if not session_id:
-        return None
-
-    # Create database session
-    from ..database.database import SessionLocal
-    if SessionLocal is None:
-        return None
-    db = SessionLocal()
-    try:
-        auth_service = get_auth_service()
-        return auth_service.get_user_by_session(db, session_id)
-    finally:
-        db.close()
+    return _lookup_session_user(request)
 
 
 def get_current_user_required(request: Request) -> User:
