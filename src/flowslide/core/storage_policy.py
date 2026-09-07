@@ -5,9 +5,7 @@ from dataclasses import dataclass, field
 from typing import Mapping, Optional
 from urllib.parse import urlsplit
 
-DEPLOYMENT_MODES = frozenset(
-    {"local_only", "local_external", "local_r2", "local_external_r2"}
-)
+DEPLOYMENT_MODES = frozenset({"local_only", "local_external", "local_r2", "local_external_r2"})
 EXTERNAL_MODES = frozenset({"local_external", "local_external_r2"})
 R2_MODES = frozenset({"local_r2", "local_external_r2"})
 
@@ -39,14 +37,18 @@ def configured_storage_policy(
     a different SQLite administrator account or change a user's password store.
     """
     env = os.environ if environ is None else environ
-    external_url = (env.get("DATABASE_URL") or "").strip()
+    external_url = (env.get("EXTERNAL_DATABASE_URL") or env.get("DATABASE_URL") or "").strip()
     scheme = urlsplit(external_url).scheme.lower().split("+", 1)[0]
     has_external = scheme in {"postgres", "postgresql", "mysql"}
     has_r2 = all(
         env.get(key)
         for key in ("R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_ENDPOINT", "R2_BUCKET_NAME")
     )
-    pinned = (env.get("DEPLOYMENT_PINNED_MODE") or env.get("FORCE_DEPLOYMENT_MODE") or "").strip().lower()
+    pinned = (
+        (env.get("DEPLOYMENT_PINNED_MODE") or env.get("FORCE_DEPLOYMENT_MODE") or "")
+        .strip()
+        .lower()
+    )
     if pinned:
         if pinned not in DEPLOYMENT_MODES:
             raise ValueError("DEPLOYMENT_PINNED_MODE 不是有效的部署模式")

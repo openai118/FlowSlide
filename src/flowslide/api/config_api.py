@@ -196,6 +196,28 @@ async def get_all_config(
         raise HTTPException(status_code=500, detail="Failed to get configuration")
 
 
+@router.get("/api/config/ai_providers")
+async def get_ai_providers_config(
+    config_service: ConfigService = Depends(get_config_service),
+    user: User = Depends(get_current_admin_user),
+):
+    """Explicit endpoint to get AI providers configuration."""
+    try:
+        cfg = config_service.get_config_by_category("ai_providers") or {}
+        schema = config_service.get_config_schema() or {}
+        if getattr(user, "is_admin", False):
+            return {"success": True, "config": cfg, "category": "ai_providers"}
+        else:
+            return {
+                "success": True,
+                "config": _redact_with_schema(cfg, schema),
+                "category": "ai_providers",
+            }
+    except Exception as e:
+        logger.error("Failed to get AI providers config: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to get AI providers configuration")
+
+
 @router.get("/api/config/{category}")
 async def get_config_by_category(
     category: str,
@@ -209,7 +231,11 @@ async def get_config_by_category(
         if getattr(user, "is_admin", False):
             return {"success": True, "config": cfg, "category": category}
         else:
-            return {"success": True, "config": _redact_with_schema(cfg, schema), "category": category}
+            return {
+                "success": True,
+                "config": _redact_with_schema(cfg, schema),
+                "category": category,
+            }
     except Exception as e:
         logger.error("Failed to get configuration for category %s: %s", category, e)
         detail_msg = f"Failed to get configuration for category {category}"
@@ -257,10 +283,18 @@ async def update_config_by_category(
     try:
         # Filter incoming payload to keys that belong to this category per schema
         schema = config_service.get_config_schema() or {}
-        filtered = {k: v for k, v in (request.config or {}).items() if k in schema and schema[k].get("category") == category}
+        filtered = {
+            k: v
+            for k, v in (request.config or {}).items()
+            if k in schema and schema[k].get("category") == category
+        }
 
         # Remove masked placeholders for password fields
-        filtered = {k: v for k, v in filtered.items() if not (schema.get(k, {}).get("type") == "password" and v == MASKED_PLACEHOLDER)}
+        filtered = {
+            k: v
+            for k, v in filtered.items()
+            if not (schema.get(k, {}).get("type") == "password" and v == MASKED_PLACEHOLDER)
+        }
 
         # Validate only the filtered keys to avoid unknown-key errors for unrelated inputs
         errors = config_service.validate_config(filtered)
@@ -284,7 +318,6 @@ async def update_config_by_category(
         raise HTTPException(status_code=500, detail=detail_msg)
 
 
-
 @router.post("/api/config/ai_providers")
 async def update_ai_providers(
     request: ConfigUpdateRequest,
@@ -296,10 +329,18 @@ async def update_ai_providers(
         schema = config_service.get_config_schema() or {}
 
         # Keep only keys that belong to ai_providers category per schema
-        filtered = {k: v for k, v in (request.config or {}).items() if k in schema and schema[k].get("category") == "ai_providers"}
+        filtered = {
+            k: v
+            for k, v in (request.config or {}).items()
+            if k in schema and schema[k].get("category") == "ai_providers"
+        }
 
         # Remove masked placeholders for password fields
-        filtered = {k: v for k, v in filtered.items() if not (schema.get(k, {}).get("type") == "password" and v == MASKED_PLACEHOLDER)}
+        filtered = {
+            k: v
+            for k, v in filtered.items()
+            if not (schema.get(k, {}).get("type") == "password" and v == MASKED_PLACEHOLDER)
+        }
 
         errors = config_service.validate_config(filtered)
         if errors:
@@ -318,24 +359,29 @@ async def update_ai_providers(
         raise HTTPException(status_code=500, detail="Failed to update AI providers configuration")
 
 
-
 @router.post("/api/config/parse-and-apply")
-async def parse_and_apply_config(request: ConfigUpdateRequest, config_service: ConfigService = Depends(get_config_service), user: User = Depends(get_current_admin_user)):
+async def parse_and_apply_config(
+    request: ConfigUpdateRequest,
+    config_service: ConfigService = Depends(get_config_service),
+    user: User = Depends(get_current_admin_user),
+):
     """Parse bulk text containing KEY=VALUE lines (or semicolon separated) and apply to configuration."""
     try:
-        raw = request.config.get('raw', '') if isinstance(request.config, dict) else ''
+        raw = request.config.get("raw", "") if isinstance(request.config, dict) else ""
         if not raw:
-            raise HTTPException(status_code=400, detail="Missing raw configuration text under 'raw' key")
+            raise HTTPException(
+                status_code=400, detail="Missing raw configuration text under 'raw' key"
+            )
 
         # 简单解析：按行或分号拆分，忽略注释
         kv = {}
         parts = [p.strip() for p in re.split(r"[\r\n;]+", raw) if p.strip()]
         for part in parts:
-            if part.startswith('#'):
+            if part.startswith("#"):
                 continue
-            if '=' not in part:
+            if "=" not in part:
                 continue
-            k, v = part.split('=', 1)
+            k, v = part.split("=", 1)
             k = k.strip()
             v = v.strip()
             # Strip surrounding quotes
@@ -350,23 +396,23 @@ async def parse_and_apply_config(request: ConfigUpdateRequest, config_service: C
         normalized = {k.lower(): v for k, v in kv.items()}
 
         # Validate R2 completeness: require all four before marking configured
-        r2_keys = ['r2_access_key_id', 'r2_secret_access_key', 'r2_endpoint', 'r2_bucket_name']
+        r2_keys = ["r2_access_key_id", "r2_secret_access_key", "r2_endpoint", "r2_bucket_name"]
         has_all_r2 = all(normalized.get(k) for k in r2_keys)
 
         # Prepare update dict: map to config schema keys where applicable
         update_payload = {}
         # direct mappings
         direct_map = {
-            'r2_access_key_id': 'r2_access_key_id',
-            'r2_secret_access_key': 'r2_secret_access_key',
-            'r2_endpoint': 'r2_endpoint',
-            'r2_bucket_name': 'r2_bucket_name',
-            'storage_bucket': 'storage_bucket',
-            'storage_provider': 'storage_provider',
-            'database_url': 'database_url',
-            'api_url': 'api_url',
-            'api_anon_key': 'api_anon_key',
-            'api_service_key': 'api_service_key'
+            "r2_access_key_id": "r2_access_key_id",
+            "r2_secret_access_key": "r2_secret_access_key",
+            "r2_endpoint": "r2_endpoint",
+            "r2_bucket_name": "r2_bucket_name",
+            "storage_bucket": "storage_bucket",
+            "storage_provider": "storage_provider",
+            "database_url": "database_url",
+            "api_url": "api_url",
+            "api_anon_key": "api_anon_key",
+            "api_service_key": "api_service_key",
         }
 
         for k, v in normalized.items():
@@ -391,7 +437,11 @@ async def parse_and_apply_config(request: ConfigUpdateRequest, config_service: C
         if not ok:
             raise HTTPException(status_code=500, detail="Failed to update configuration")
 
-        return {"success": True, "applied": list(filtered_payload.keys()), "r2_configured": has_all_r2}
+        return {
+            "success": True,
+            "applied": list(filtered_payload.keys()),
+            "r2_configured": has_all_r2,
+        }
 
     except HTTPException:
         raise

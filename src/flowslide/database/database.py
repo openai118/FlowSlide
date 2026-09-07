@@ -24,7 +24,7 @@ from ..core.simple_config import (
     ASYNC_DATABASE_URL,
     LOCAL_DATABASE_URL,
     EXTERNAL_DATABASE_URL,
-    DATABASE_MODE
+    DATABASE_MODE,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,6 +43,7 @@ class DatabaseManager:
             # Accept schemes like 'postgresql', 'postgresql+asyncpg', 'mysql', 'mysql+aiomysql', etc.
             try:
                 from urllib.parse import urlparse
+
                 parsed = urlparse(_raw_ext)
                 scheme = (parsed.scheme or "").lower()
 
@@ -52,6 +53,7 @@ class DatabaseManager:
                     # compute async form using helper which also strips unsupported query params
                     try:
                         from ..core.simple_config import get_async_database_url
+
                         self.external_async_url = get_async_database_url(_raw_ext)
                     except Exception:
                         # fallback: attempt conservative replacements
@@ -59,16 +61,22 @@ class DatabaseManager:
                             if "asyncpg" in scheme:
                                 self.external_async_url = _raw_ext
                             else:
-                                self.external_async_url = _raw_ext.replace(scheme + "://", "postgresql+asyncpg://", 1)
+                                self.external_async_url = _raw_ext.replace(
+                                    scheme + "://", "postgresql+asyncpg://", 1
+                                )
                         elif scheme.startswith("mysql"):
                             if "aiomysql" in scheme:
                                 self.external_async_url = _raw_ext
                             else:
-                                self.external_async_url = _raw_ext.replace(scheme + "://", "mysql+aiomysql://", 1)
+                                self.external_async_url = _raw_ext.replace(
+                                    scheme + "://", "mysql+aiomysql://", 1
+                                )
                         else:
                             self.external_async_url = ""
                 else:
-                    logger.info("ℹ️ DATABASE_URL is not a supported external DB (postgresql/mysql). Ignoring for external engines.")
+                    logger.info(
+                        "ℹ️ DATABASE_URL is not a supported external DB (postgresql/mysql). Ignoring for external engines."
+                    )
                     self.external_url = ""
                     self.external_async_url = ""
             except Exception:
@@ -97,45 +105,50 @@ class DatabaseManager:
 
     def _create_local_engine(self):
         url = make_url(self.local_url)
-        if url.database and url.database != ':memory:':
+        if url.database and url.database != ":memory:":
             Path(url.database).parent.mkdir(parents=True, exist_ok=True)
         self.primary_engine = create_engine(
-            url, connect_args={'check_same_thread': False}, hide_parameters=True,
+            url,
+            connect_args={"check_same_thread": False},
+            hide_parameters=True,
         )
         self.primary_async_engine = create_async_engine_safe(
-            url.set(drivername='sqlite+aiosqlite').render_as_string(hide_password=False),
+            url.set(drivername="sqlite+aiosqlite").render_as_string(hide_password=False),
         )
         self.engine = self.primary_engine
-        self.database_type = 'sqlite'
-        logger.info('Local SQLite database selected as the authoritative store')
+        self.database_type = "sqlite"
+        logger.info("Local SQLite database selected as the authoritative store")
 
     def _create_external_engine(self):
         if not self.external_url:
-            raise ValueError('External database URL is required')
+            raise ValueError("External database URL is required")
         url = make_url(self.external_url)
-        options = dict(pool_size=5, max_overflow=5, pool_pre_ping=True, pool_recycle=300, pool_timeout=15)
+        options = dict(
+            pool_size=5, max_overflow=5, pool_pre_ping=True, pool_recycle=300, pool_timeout=15
+        )
         self.primary_engine = create_engine(url, hide_parameters=True, **options)
         try:
             self.primary_async_engine = create_async_engine_safe(self.external_async_url, **options)
             with self.primary_engine.connect() as conn:
-                conn.execute(text('SELECT 1'))
+                conn.execute(text("SELECT 1"))
         except Exception:
             self.primary_engine.dispose()
             raise
         self.engine = self.external_engine = self.primary_engine
         self.external_async_engine = self.primary_async_engine
         self.database_type = url.get_backend_name()
-        logger.info('External %s database selected as the authoritative store', self.database_type)
+        logger.info("External %s database selected as the authoritative store", self.database_type)
 
     def _create_backup_engine(self):
         """创建备份引擎（用于数据同步）"""
         if self.external_url:
             # 解析数据库URL以检测是否是Supabase
             from urllib.parse import urlparse
+
             parsed = urlparse(self.external_url)
 
             # 检查是否是Supabase
-            is_supabase = 'supabase' in parsed.hostname if parsed.hostname else False
+            is_supabase = "supabase" in parsed.hostname if parsed.hostname else False
 
             # For Supabase/pgbouncer we only need to adjust async driver options
             # Do NOT pass statement_cache_size into the sync create_engine (psycopg2)
@@ -161,7 +174,7 @@ class DatabaseManager:
                 pool_pre_ping=True,
                 pool_recycle=3600,
                 echo=False,
-                connect_args=async_connect_args
+                connect_args=async_connect_args,
             )
             logger.info("✅ Backup database engine ready")
 
@@ -171,24 +184,46 @@ class DatabaseManager:
             policy = configured_storage_policy()
             candidate = DatabaseManager()
             candidate.policy = policy
-            candidate.local_url = os.getenv('LOCAL_DATABASE_URL', LOCAL_DATABASE_URL)
+            candidate.local_url = os.getenv("LOCAL_DATABASE_URL", LOCAL_DATABASE_URL)
             if policy.uses_external:
                 raw_url = policy.external_url
-                if raw_url.startswith('postgres://'):
-                    raw_url = raw_url.replace('postgres://', 'postgresql://', 1)
+                if raw_url.startswith("postgres://"):
+                    raw_url = raw_url.replace("postgres://", "postgresql://", 1)
                 url = make_url(raw_url)
                 backend = url.get_backend_name()
                 query = dict(url.query)
-                query.pop('statement_cache_size', None)
-                query.pop('prepared_statement_cache_size', None)
-                sync_driver = 'postgresql+psycopg2' if backend == 'postgresql' else 'mysql+pymysql'
-                async_driver = 'postgresql+asyncpg' if backend == 'postgresql' else 'mysql+aiomysql'
-                candidate.external_url = url.set(drivername=sync_driver, query=query).render_as_string(hide_password=False)
-                candidate.external_async_url = url.set(drivername=async_driver, query=query).render_as_string(hide_password=False)
+                query.pop("statement_cache_size", None)
+                query.pop("prepared_statement_cache_size", None)
+                if "sslmode" in query:
+                    ssl_val = str(query["sslmode"]).lower()
+                    if ssl_val in ("no-verify", "unverified"):
+                        query["sslmode"] = "require"
+                sync_driver = "postgresql+psycopg2" if backend == "postgresql" else "mysql+pymysql"
+                async_driver = "postgresql+asyncpg" if backend == "postgresql" else "mysql+aiomysql"
+                candidate.external_url = url.set(
+                    drivername=sync_driver, query=query
+                ).render_as_string(hide_password=False)
+                candidate.external_async_url = url.set(
+                    drivername=async_driver, query=query
+                ).render_as_string(hide_password=False)
                 candidate._create_external_engine()
             else:
-                candidate.external_url = candidate.external_async_url = ''
+                candidate.external_url = candidate.external_async_url = ""
                 candidate._create_local_engine()
+
+            # Bootstrap schema and default administrator on the authoritative store
+            try:
+                from .models import Base
+                from ..auth.auth_service import init_default_admin
+
+                Base.metadata.create_all(bind=candidate.primary_engine)
+                with sessionmaker(
+                    autocommit=False, autoflush=False, bind=candidate.primary_engine
+                )() as init_session:
+                    init_default_admin(init_session)
+            except Exception as e:
+                logger.warning("Authoritative database bootstrap notice: %s", e)
+
             # Ordinary writes already reach the authoritative store. Background
             # bidirectional database sync must not replay stale local rows into it.
             candidate.sync_enabled = False
@@ -202,7 +237,11 @@ class DatabaseManager:
                     asyncio.get_running_loop().create_task(old_async.dispose())
                 except RuntimeError:
                     asyncio.run(old_async.dispose())
-            logger.info('Storage policy: mode=%s, authentication=%s, automatic user sync=disabled', policy.mode, policy.authentication_source)
+            logger.info(
+                "Storage policy: mode=%s, authentication=%s, automatic user sync=disabled",
+                policy.mode,
+                policy.authentication_source,
+            )
 
     async def sync_to_external(self):
         """同步本地数据到外部数据库"""
@@ -250,6 +289,7 @@ engine = None
 async_engine = None
 DATABASE_TYPE = "sqlite"
 
+
 # 初始化数据库管理器
 def initialize_database():
     """Initialize once and refresh the existing session factories in place."""
@@ -268,42 +308,76 @@ temp_engine = create_engine(
     connect_args={"check_same_thread": False},
     echo=False,
 )
+
+
 def create_async_engine_safe(url: str, **kwargs):
     """Normalize drivers and disable both asyncpg prepared-statement caches."""
-    if isinstance(url, str) and url.startswith('postgres://'):
-        url = url.replace('postgres://', 'postgresql://', 1)
+    if isinstance(url, str) and url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
     parsed = make_url(url)
     backend = parsed.get_backend_name()
-    if backend == 'postgresql':
-        parsed = parsed.set(drivername='postgresql+asyncpg')
+    if backend == "postgresql":
+        parsed = parsed.set(drivername="postgresql+asyncpg")
         query = dict(parsed.query)
-        sslmode = query.pop('sslmode', None)
-        query.pop('statement_cache_size', None)
-        query.pop('prepared_statement_cache_size', None)
+        sslmode = query.pop("sslmode", None)
+        query.pop("statement_cache_size", None)
+        query.pop("prepared_statement_cache_size", None)
         parsed = parsed.set(query=query)
-        connect_args = dict(kwargs.pop('connect_args', {}) or {})
+        connect_args = dict(kwargs.pop("connect_args", {}) or {})
         connect_args.update(statement_cache_size=0, prepared_statement_cache_size=0)
-        connect_args.setdefault('prepared_statement_name_func', lambda: '__flowslide_' + uuid.uuid4().hex + '__')
+        connect_args.setdefault(
+            "prepared_statement_name_func", lambda: "__flowslide_" + uuid.uuid4().hex + "__"
+        )
         if sslmode:
-            connect_args.setdefault('ssl', sslmode)
-        kwargs['connect_args'] = connect_args
-    elif backend == 'mysql':
-        parsed = parsed.set(drivername='mysql+aiomysql')
-    elif backend == 'sqlite':
-        parsed = parsed.set(drivername='sqlite+aiosqlite')
-    kwargs.setdefault('hide_parameters', True)
-    logger.debug('Creating async database engine for backend %s', backend)
+            normalized_ssl = str(sslmode).lower()
+            if normalized_ssl in ("no-verify", "unverified"):
+                connect_args.setdefault("ssl", "require")
+            elif normalized_ssl in (
+                "disable",
+                "allow",
+                "prefer",
+                "require",
+                "verify-ca",
+                "verify-full",
+            ):
+                connect_args.setdefault("ssl", normalized_ssl)
+            elif normalized_ssl in ("false", "0", "off"):
+                connect_args.setdefault("ssl", "disable")
+            elif normalized_ssl in ("true", "1", "on"):
+                connect_args.setdefault("ssl", "require")
+            else:
+                connect_args.setdefault("ssl", "require")
+        kwargs["connect_args"] = connect_args
+    elif backend == "mysql":
+        parsed = parsed.set(drivername="mysql+aiomysql")
+    elif backend == "sqlite":
+        parsed = parsed.set(drivername="sqlite+aiosqlite")
+    kwargs.setdefault("hide_parameters", True)
+    logger.debug("Creating async database engine for backend %s", backend)
     return create_async_engine(parsed, **kwargs)
+
 
 temp_async_engine = create_async_engine_safe("sqlite+aiosqlite:///./data/flowslide.db", echo=False)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=temp_engine)
-AsyncSessionLocal = async_sessionmaker(temp_async_engine, class_=AsyncSession, expire_on_commit=False)
+AsyncSessionLocal = async_sessionmaker(
+    temp_async_engine, class_=AsyncSession, expire_on_commit=False
+)
+
+
+def ensure_database_initialized():
+    """Ensure database manager is initialized and matches current storage policy."""
+    policy = configured_storage_policy()
+    active = getattr(db_manager, "policy", None)
+    if db_manager.primary_engine is None or active != policy:
+        with _initialization_lock:
+            active = getattr(db_manager, "policy", None)
+            if db_manager.primary_engine is None or active != policy:
+                initialize_database()
 
 
 def get_db():
-    if db_manager.primary_engine is None:
-        initialize_database()
+    ensure_database_initialized()
     db = SessionLocal()
     try:
         yield db
@@ -312,8 +386,7 @@ def get_db():
 
 
 async def get_async_db():
-    if db_manager.primary_async_engine is None:
-        initialize_database()
+    ensure_database_initialized()
     async with AsyncSessionLocal() as session:
         yield session
 
@@ -322,13 +395,17 @@ async def init_db():
     """Initialize schema and bootstrap in the same store used by authentication."""
     from .models import Base
     from ..auth.auth_service import init_default_admin
-    if db_manager.primary_async_engine is None:
-        initialize_database()
-    async with db_manager.primary_async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+
+    ensure_database_initialized()
+    if db_manager.primary_async_engine is not None:
+        async with db_manager.primary_async_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
     with SessionLocal() as db:
         created = init_default_admin(db)
-    logger.info('Authentication bootstrap complete (%s)', 'created administrator' if created else 'existing accounts preserved')
+    logger.info(
+        "Authentication bootstrap complete (%s)",
+        "created administrator" if created else "existing accounts preserved",
+    )
 
 
 async def close_db():
@@ -344,36 +421,32 @@ async def close_db():
             logger.warning(f"Warning: exception during async_engine.dispose(): {e}")
 
 
-
-
 def get_auth_db():
     """Authentication shares the authoritative store and fails closed on outages."""
     try:
-        policy = configured_storage_policy()
-        if db_manager.primary_engine is None:
-            initialize_database()
-        active = getattr(db_manager, 'policy', None)
-        if active is None or active != policy:
-            raise RuntimeError('Storage policy changed; database reinitialization is required')
+        ensure_database_initialized()
         yield from get_db()
-    except (SQLAlchemyError, RuntimeError, ValueError) as exc:
-        logger.error('Authentication database unavailable (%s); no local fallback performed', type(exc).__name__)
-        raise HTTPException(status_code=503, detail='认证数据库暂不可用，请检查部署模式和数据库连接') from exc
+    except (SQLAlchemyError, RuntimeError, ValueError, OSError) as exc:
+        logger.error(
+            "Authentication database unavailable (%s); no local fallback performed: %s",
+            type(exc).__name__,
+            exc,
+        )
+        raise HTTPException(
+            status_code=503, detail="认证数据库暂不可用，请检查部署模式和数据库连接"
+        ) from exc
 
 
 async def get_auth_async_db():
     try:
-        policy = configured_storage_policy()
-        if db_manager.primary_async_engine is None:
-            initialize_database()
-        active = getattr(db_manager, 'policy', None)
-        if active is None or active != policy:
-            raise RuntimeError('Storage policy changed; database reinitialization is required')
+        ensure_database_initialized()
         async with AsyncSessionLocal() as session:
             yield session
-    except (SQLAlchemyError, RuntimeError, ValueError) as exc:
-        logger.error('Async authentication database unavailable (%s)', type(exc).__name__)
-        raise HTTPException(status_code=503, detail='认证数据库暂不可用，请检查部署模式和数据库连接') from exc
+    except (SQLAlchemyError, RuntimeError, ValueError, OSError) as exc:
+        logger.error("Async authentication database unavailable (%s): %s", type(exc).__name__, exc)
+        raise HTTPException(
+            status_code=503, detail="认证数据库暂不可用，请检查部署模式和数据库连接"
+        ) from exc
 
 
 def update_session_makers():

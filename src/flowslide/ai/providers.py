@@ -13,6 +13,89 @@ from .base import AIMessage, AIProvider, AIResponse, MessageRole
 logger = logging.getLogger(__name__)
 
 
+def normalize_base_url(base_url: Optional[str]) -> str:
+    """Clean and normalize AI provider base URL by stripping trailing slashes and common endpoint suffixes."""
+    if not base_url:
+        return ""
+    url = str(base_url).strip().rstrip("/")
+    for suffix in ("/chat/completions", "/completions", "/models"):
+        if url.endswith(suffix):
+            url = url[: -len(suffix)].rstrip("/")
+    return url
+
+
+def build_api_url(base_url: str, *parts: str, ensure_v1: bool = False) -> str:
+    """Safe join of base_url and parts for AI provider endpoints."""
+    if not base_url:
+        return "/" + "/".join(p.strip("/") for p in parts if p)
+    base = normalize_base_url(base_url)
+    if ensure_v1 and not base.endswith("/v1"):
+        base = base + "/v1"
+    suffix = "/".join(p.strip("/") for p in parts if p)
+    return f"{base}/{suffix}" if suffix else base
+
+
+def is_reasoning_model(model_name: Optional[str]) -> bool:
+    """Check if model is an OpenAI or compatible reasoning model (o1, o3, deepseek-reasoner, etc.)."""
+    if not model_name:
+        return False
+    name = model_name.lower()
+    if any(p in name for p in ["reasoner", "qwq"]):
+        return True
+    if any(
+        part in ("o1", "o3", "o4", "r1")
+        for part in name.replace("-", " ").replace("_", " ").replace("/", " ").split()
+    ):
+        return True
+    if name.startswith(("o1", "o3", "o4", "deepseek-r1", "qwq")):
+        return True
+    return False
+
+
+def build_openai_completion_kwargs(
+    model: str,
+    openai_messages: List[Dict[str, str]],
+    config: Dict[str, Any],
+    is_retry: bool = False,
+) -> Dict[str, Any]:
+    """Build kwargs for OpenAI completions, adapting parameters for reasoning models."""
+    kwargs: Dict[str, Any] = {
+        "model": model,
+        "messages": openai_messages,
+    }
+    is_reasoning = is_retry or is_reasoning_model(model)
+
+    max_tokens = config.get("max_tokens") or config.get("max_completion_tokens")
+    if max_tokens is not None:
+        try:
+            tokens_val = int(max_tokens)
+            if is_reasoning:
+                kwargs["max_completion_tokens"] = tokens_val
+            else:
+                kwargs["max_tokens"] = tokens_val
+        except (ValueError, TypeError):
+            pass
+
+    if not is_reasoning:
+        if "temperature" in config and config["temperature"] is not None:
+            try:
+                kwargs["temperature"] = float(config["temperature"])
+            except (ValueError, TypeError):
+                kwargs["temperature"] = 0.7
+        else:
+            kwargs["temperature"] = 0.7
+
+        if "top_p" in config and config["top_p"] is not None:
+            try:
+                kwargs["top_p"] = float(config["top_p"])
+            except (ValueError, TypeError):
+                kwargs["top_p"] = 1.0
+        else:
+            kwargs["top_p"] = 1.0
+
+    return kwargs
+
+
 class OpenAIProvider(AIProvider):
     """OpenAI API provider"""
 
@@ -21,9 +104,18 @@ class OpenAIProvider(AIProvider):
         try:
             import openai
 
-            self.client = openai.AsyncOpenAI(
-                api_key=config.get("api_key"), base_url=config.get("base_url")
+            raw_base_url = config.get("base_url")
+            base_url = (
+                raw_base_url.strip()
+                if isinstance(raw_base_url, str) and raw_base_url.strip()
+                else None
             )
+            if base_url:
+                base_url = base_url.rstrip("/")
+                for suffix in ("/chat/completions", "/completions", "/models"):
+                    if base_url.endswith(suffix):
+                        base_url = base_url[: -len(suffix)].rstrip("/")
+            self.client = openai.AsyncOpenAI(api_key=config.get("api_key"), base_url=base_url)
         except ImportError:
             logger.warning("OpenAI library not installed. Install with: pip install openai")
             self.client = None
@@ -54,16 +146,23 @@ class OpenAIProvider(AIProvider):
                 # Pydantic-like object
                 try:
                     normalized.append(
-                        AIMessage(role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content")))
+                        AIMessage(
+                            role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content"))
+                        )
                     )
                 except Exception:
-                    normalized.append(AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", ""))))
+                    normalized.append(
+                        AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", "")))
+                    )
             else:
                 normalized.append(AIMessage(role=MessageRole.USER, content=str(m)))
         messages = normalized
 
         # Convert messages to OpenAI format
         openai_messages = [{"role": msg.role.value, "content": msg.content} for msg in messages]
+
+        model_name = config.get("model", self.model)
+        openai_kwargs = build_openai_completion_kwargs(model_name, openai_messages, config)
 
         # Apply configurable timeout and retry logic to mitigate transient network/API issues.
         request_timeout = config.get("request_timeout", 30)
@@ -72,13 +171,7 @@ class OpenAIProvider(AIProvider):
         last_exc: Optional[BaseException] = None
         for attempt in range(1, max_retries + 1):
             try:
-                coro = self.client.chat.completions.create(
-                    model=config.get("model", self.model),
-                    messages=openai_messages,
-                    # max_tokens=config.get("max_tokens", 2000),
-                    temperature=config.get("temperature", 0.7),
-                    top_p=config.get("top_p", 1.0),
-                )
+                coro = self.client.chat.completions.create(**openai_kwargs)
 
                 response = await asyncio.wait_for(coro, timeout=request_timeout)
 
@@ -98,20 +191,46 @@ class OpenAIProvider(AIProvider):
 
             except asyncio.TimeoutError as te:
                 last_exc = te
-                logger.error("OpenAI request timed out (attempt %d/%d) after %s seconds", attempt, max_retries, request_timeout)
+                logger.error(
+                    "OpenAI request timed out (attempt %d/%d) after %s seconds",
+                    attempt,
+                    max_retries,
+                    request_timeout,
+                )
                 # If final attempt, raise the timeout so caller can handle it
                 if attempt >= max_retries:
                     raise
                 # Exponential backoff with jitter
-                await asyncio.sleep(min(2 ** attempt + random.random(), 10))
+                await asyncio.sleep(min(2**attempt + random.random(), 10))
                 continue
             except Exception as e:
                 last_exc = e
-                # For other errors, log and retry unless it's the last attempt
-                logger.error("OpenAI API error on attempt %d/%d: %s", attempt, max_retries, e)
+                err_str = str(e).lower()
+                if any(
+                    param_kw in err_str
+                    for param_kw in (
+                        "temperature",
+                        "top_p",
+                        "max_tokens",
+                        "max_completion_tokens",
+                        "unsupported_parameter",
+                        "param",
+                    )
+                ):
+                    logger.warning(
+                        "OpenAI API parameter error on attempt %d/%d: %s; retrying with reasoning kwargs",
+                        attempt,
+                        max_retries,
+                        e,
+                    )
+                    openai_kwargs = build_openai_completion_kwargs(
+                        model_name, openai_messages, config, is_retry=True
+                    )
+                else:
+                    logger.error("OpenAI API error on attempt %d/%d: %s", attempt, max_retries, e)
                 if attempt >= max_retries:
                     raise
-                await asyncio.sleep(min(2 ** attempt + random.random(), 10))
+                await asyncio.sleep(min(2**attempt + random.random(), 10))
 
         # If we exit loop without returning, raise the last seen exception
         if last_exc:
@@ -149,10 +268,14 @@ class OpenAIProvider(AIProvider):
             elif hasattr(m, "role") and hasattr(m, "content"):
                 try:
                     normalized.append(
-                        AIMessage(role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content")))
+                        AIMessage(
+                            role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content"))
+                        )
                     )
                 except Exception:
-                    normalized.append(AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", ""))))
+                    normalized.append(
+                        AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", "")))
+                    )
             else:
                 normalized.append(AIMessage(role=MessageRole.USER, content=str(m)))
         messages = normalized
@@ -160,32 +283,47 @@ class OpenAIProvider(AIProvider):
         # Convert messages to OpenAI format
         openai_messages = [{"role": msg.role.value, "content": msg.content} for msg in messages]
 
+        model_name = config.get("model", self.model)
+        openai_kwargs = build_openai_completion_kwargs(model_name, openai_messages, config)
+        openai_kwargs["stream"] = True
+
         try:
-            # Stream with a guarded create call. Streaming producers may still block,
-            # so we set a generous request timeout and avoid aggressive retries here.
             request_timeout = config.get("request_timeout", 60)
             try:
-                coro = self.client.chat.completions.create(
-                    model=config.get("model", self.model),
-                    messages=openai_messages,
-                    # max_tokens=config.get("max_tokens", 2000),
-                    temperature=config.get("temperature", 0.7),
-                    top_p=config.get("top_p", 1.0),
-                    stream=True,
-                )
-
+                coro = self.client.chat.completions.create(**openai_kwargs)
                 stream = await asyncio.wait_for(coro, timeout=request_timeout)
+            except Exception as first_err:
+                err_str = str(first_err).lower()
+                if any(
+                    param_kw in err_str
+                    for param_kw in (
+                        "temperature",
+                        "top_p",
+                        "max_tokens",
+                        "max_completion_tokens",
+                        "unsupported_parameter",
+                        "param",
+                    )
+                ):
+                    logger.warning(
+                        "OpenAI streaming parameter error: %s; retrying with reasoning kwargs",
+                        first_err,
+                    )
+                    retry_kwargs = build_openai_completion_kwargs(
+                        model_name, openai_messages, config, is_retry=True
+                    )
+                    retry_kwargs["stream"] = True
+                    coro = self.client.chat.completions.create(**retry_kwargs)
+                    stream = await asyncio.wait_for(coro, timeout=request_timeout)
+                else:
+                    raise first_err
 
-                async for chunk in stream:
-                    if chunk.choices and chunk.choices[0].delta.content:
-                        yield chunk.choices[0].delta.content
-            except asyncio.TimeoutError:
-                logger.error("OpenAI streaming request timed out after %s seconds", request_timeout)
-                raise
-            except Exception as e:
-                logger.error(f"OpenAI streaming error: {e}")
-                raise
-
+            async for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+        except asyncio.TimeoutError:
+            logger.error("OpenAI streaming request timed out after %s seconds", request_timeout)
+            raise
         except Exception as e:
             logger.error(f"OpenAI streaming error: {e}")
             raise
@@ -237,10 +375,14 @@ class AnthropicProvider(AIProvider):
             elif hasattr(m, "role") and hasattr(m, "content"):
                 try:
                     normalized.append(
-                        AIMessage(role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content")))
+                        AIMessage(
+                            role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content"))
+                        )
                     )
                 except Exception:
-                    normalized.append(AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", ""))))
+                    normalized.append(
+                        AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", "")))
+                    )
             else:
                 normalized.append(AIMessage(role=MessageRole.USER, content=str(m)))
         messages = normalized
@@ -299,14 +441,14 @@ class AnthropicProvider(AIProvider):
                 )
                 if attempt >= max_retries:
                     raise
-                await asyncio.sleep(min(2 ** attempt + random.random(), 10))
+                await asyncio.sleep(min(2**attempt + random.random(), 10))
                 continue
             except Exception as e:
                 last_exc = e
                 logger.error("Anthropic API error on attempt %d/%d: %s", attempt, max_retries, e)
                 if attempt >= max_retries:
                     raise
-                await asyncio.sleep(min(2 ** attempt + random.random(), 10))
+                await asyncio.sleep(min(2**attempt + random.random(), 10))
 
         if last_exc:
             raise last_exc
@@ -374,10 +516,15 @@ class GoogleProvider(AIProvider):
                 elif hasattr(m, "role") and hasattr(m, "content"):
                     try:
                         normalized.append(
-                            AIMessage(role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content")))
+                            AIMessage(
+                                role=MessageRole(getattr(m, "role")),
+                                content=str(getattr(m, "content")),
+                            )
                         )
                     except Exception:
-                        normalized.append(AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", ""))))
+                        normalized.append(
+                            AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", "")))
+                        )
                 else:
                     normalized.append(AIMessage(role=MessageRole.USER, content=str(m)))
             messages = normalized
@@ -418,10 +565,14 @@ class GoogleProvider(AIProvider):
             elif hasattr(m, "role") and hasattr(m, "content"):
                 try:
                     normalized.append(
-                        AIMessage(role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content")))
+                        AIMessage(
+                            role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content"))
+                        )
                     )
                 except Exception:
-                    normalized.append(AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", ""))))
+                    normalized.append(
+                        AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", "")))
+                    )
             else:
                 normalized.append(AIMessage(role=MessageRole.USER, content=str(m)))
         messages = normalized
@@ -487,16 +638,16 @@ class GoogleProvider(AIProvider):
                     )
                     if attempt >= max_retries:
                         raise
-                    await asyncio.sleep(min(2 ** attempt + random.random(), 10))
+                    await asyncio.sleep(min(2**attempt + random.random(), 10))
                     continue
                 except Exception as e:
                     last_exc = e
                     logger.error("Google SDK error on attempt %d/%d: %s", attempt, max_retries, e)
                     if attempt >= max_retries:
                         raise
-                    await asyncio.sleep(min(2 ** attempt + random.random(), 10))
+                    await asyncio.sleep(min(2**attempt + random.random(), 10))
 
-            if last_exc and not (hasattr(last_exc, '__traceback__')):
+            if last_exc and not (hasattr(last_exc, "__traceback__")):
                 # ensure response variable exists; if we exhausted retries the exception will have been raised
                 pass
             logger.debug(f"Google Gemini API response: {response}")
@@ -641,17 +792,17 @@ class GoogleProvider(AIProvider):
                 )
                 if attempt >= max_retries:
                     raise
-                await asyncio.sleep(min(2 ** attempt + random.random(), 10))
+                await asyncio.sleep(min(2**attempt + random.random(), 10))
                 continue
             except Exception as e:
                 last_exc = e
                 logger.error("Google REST error on attempt %d/%d: %s", attempt, max_retries, e)
                 if attempt >= max_retries:
                     raise
-                await asyncio.sleep(min(2 ** attempt + random.random(), 10))
+                await asyncio.sleep(min(2**attempt + random.random(), 10))
 
         # If data wasn't set because all retries failed, raise the last exception
-        if last_exc and 'data' not in locals():
+        if last_exc and "data" not in locals():
             raise last_exc
 
         # Extract text
@@ -733,10 +884,14 @@ class OllamaProvider(AIProvider):
             elif hasattr(m, "role") and hasattr(m, "content"):
                 try:
                     normalized.append(
-                        AIMessage(role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content")))
+                        AIMessage(
+                            role=MessageRole(getattr(m, "role")), content=str(getattr(m, "content"))
+                        )
                     )
                 except Exception:
-                    normalized.append(AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", ""))))
+                    normalized.append(
+                        AIMessage(role=MessageRole.USER, content=str(getattr(m, "content", "")))
+                    )
             else:
                 normalized.append(AIMessage(role=MessageRole.USER, content=str(m)))
         messages = normalized

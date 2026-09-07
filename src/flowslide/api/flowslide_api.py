@@ -3,6 +3,7 @@ FlowSlide specific API endpoints
 """
 
 import logging
+import json
 from typing import List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
@@ -22,17 +23,21 @@ from .models import (
     PPTProject,
     PPTScenario,
     ProjectListResponse,
-    
     TemplateSelectionRequest,
     TemplateSelectionResponse,
     TodoBoard,
 )
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 file_processor = FileProcessor()
+
+
 # Use getter to avoid circular import resolution issues
 def _ppt_service():
     return get_ppt_service()
+
+
 # Research services (lazy initialization)
 _research_service = None
 _report_generator = None
@@ -119,10 +124,21 @@ def get_enhanced_report_generator():
 
 
 # Local helper: safe join of base_url and parts (mirrors web.routes.build_api_url)
+def normalize_base_url(base_url: Optional[str]) -> str:
+    """Clean and normalize AI provider base URL by stripping trailing slashes and common endpoint suffixes."""
+    if not base_url:
+        return ""
+    url = str(base_url).strip().rstrip("/")
+    for suffix in ("/chat/completions", "/completions", "/models"):
+        if url.endswith(suffix):
+            url = url[: -len(suffix)].rstrip("/")
+    return url
+
+
 def build_api_url(base_url: str, *parts: str, ensure_v1: bool = False) -> str:
     if not base_url:
         return "/" + "/".join(p.strip("/") for p in parts)
-    base = base_url.rstrip("/")
+    base = normalize_base_url(base_url)
     if ensure_v1 and not base.endswith("/v1"):
         base = base + "/v1"
     suffix = "/".join(p.strip("/") for p in parts if p)
@@ -169,26 +185,78 @@ async def test_ai_provider(provider_name: str, request: Request):
         except Exception:
             body = None  # No JSON body, use backend config
 
-    # Special handling for OpenAI provider with frontend config
+        # Special handling for OpenAI provider with frontend config
         if provider_name == "openai" and body:
-            base_url = body.get("base_url")
+            from ..ai.providers import is_reasoning_model
+
+            raw_base_url = body.get("base_url")
             api_key = body.get("api_key")
-            model = body.get("model", "gpt-4o")
+            model = body.get("model")
 
-            if base_url and api_key:
-                # Use frontend provided config for OpenAI
-                logger.info(f"Testing OpenAI with frontend config: {base_url}")
+            # Fallback to backend config if api_key is missing or masked placeholder
+            if not api_key or "••••" in api_key:
+                from ..core.config import ai_config
 
-                # Build chat URL safely (ensure /v1)
-                chat_url = build_api_url(base_url, "chat/completions", ensure_v1=True)
+                api_key = ai_config.openai_api_key or ""
+                if not api_key:
+                    from ..services.config_service import get_config_service
 
-                async with aiohttp.ClientSession() as session:
-                    headers = {
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
+                    cfg_service = get_config_service()
+                    ai_cfg = cfg_service.get_config_by_category("ai_providers") or {}
+                    api_key = ai_cfg.get("openai_api_key", "")
+
+            if not raw_base_url:
+                from ..core.config import ai_config
+
+                raw_base_url = ai_config.openai_base_url or "https://api.openai.com/v1"
+
+            if not model:
+                from ..core.config import ai_config
+
+                model = ai_config.openai_model or "gpt-4o"
+
+            clean_base = normalize_base_url(raw_base_url) or "https://api.openai.com/v1"
+            logger.info("Testing OpenAI with config: %s, model: %s", clean_base, model)
+
+            if not api_key:
+                return JSONResponse(
+                    {
+                        "provider": provider_name,
+                        "status": "error",
+                        "success": False,
+                        "error": "API Key is required",
+                    },
+                    status_code=200,
+                )
+
+            # Candidate chat URLs
+            candidate_chat_urls = []
+            if clean_base.endswith("/v1"):
+                candidate_chat_urls.append(f"{clean_base}/chat/completions")
+                candidate_chat_urls.append(f"{clean_base[:-3].rstrip('/')}/chat/completions")
+            else:
+                candidate_chat_urls.append(f"{clean_base}/v1/chat/completions")
+                candidate_chat_urls.append(f"{clean_base}/chat/completions")
+
+            unique_urls = []
+            for u in candidate_chat_urls:
+                if u and u not in unique_urls:
+                    unique_urls.append(u)
+
+            def _get_payload(force_reasoning: bool = False):
+                if force_reasoning or is_reasoning_model(model):
+                    return {
+                        "model": model,
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": "Say 'Hello, I am working!' in exactly 5 words.",
+                            }
+                        ],
+                        "max_completion_tokens": 50,
                     }
-
-                    payload = {
+                else:
+                    return {
                         "model": model,
                         "messages": [
                             {
@@ -200,27 +268,110 @@ async def test_ai_provider(provider_name: str, request: Request):
                         "temperature": 0,
                     }
 
-                    async with session.post(
-                        chat_url,
-                        headers=headers,
-                        json=payload,
-                        timeout=aiohttp.ClientTimeout(total=30),
-                    ) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            return {
-                                "provider": provider_name,
-                                "status": "success",
-                                "model": model,
-                                "response_preview": data["choices"][0]["message"]["content"],
-                                "usage": data.get("usage", {}),
-                            }
-                        else:
-                            error_text = await response.text()
-                            raise HTTPException(
-                                status_code=response.status,
-                                detail=f"API error: {error_text}",
-                            )
+            payload = _get_payload()
+
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "X-Api-Key": api_key,
+            }
+
+            async with aiohttp.ClientSession() as session:
+                last_error_text = ""
+                last_status = 404
+
+                for chat_url in unique_urls:
+                    try:
+                        async with session.post(
+                            chat_url,
+                            headers=headers,
+                            json=payload,
+                            timeout=aiohttp.ClientTimeout(total=30),
+                        ) as response:
+                            resp_text = await response.text()
+                            last_status = response.status
+                            if response.status == 200:
+                                try:
+                                    data = json.loads(resp_text)
+                                except Exception:
+                                    data = {}
+                                preview = ""
+                                if isinstance(data, dict) and data.get("choices"):
+                                    first = data["choices"][0]
+                                    if isinstance(first, dict) and first.get("message"):
+                                        preview = first["message"].get("content") or ""
+                                return {
+                                    "success": True,
+                                    "provider": provider_name,
+                                    "status": "success",
+                                    "model": model,
+                                    "response_preview": preview or resp_text[:500],
+                                    "usage": (
+                                        data.get("usage", {}) if isinstance(data, dict) else {}
+                                    ),
+                                }
+
+                            if response.status == 400 and any(
+                                kw in resp_text.lower()
+                                for kw in (
+                                    "temperature",
+                                    "top_p",
+                                    "max_tokens",
+                                    "max_completion_tokens",
+                                    "unsupported_parameter",
+                                    "param",
+                                )
+                            ):
+                                retry_payload = _get_payload(force_reasoning=True)
+                                async with session.post(
+                                    chat_url,
+                                    headers=headers,
+                                    json=retry_payload,
+                                    timeout=aiohttp.ClientTimeout(total=30),
+                                ) as retry_resp:
+                                    retry_text = await retry_resp.text()
+                                    if retry_resp.status == 200:
+                                        try:
+                                            data = json.loads(retry_text)
+                                        except Exception:
+                                            data = {}
+                                        preview = ""
+                                        if isinstance(data, dict) and data.get("choices"):
+                                            first = data["choices"][0]
+                                            if isinstance(first, dict) and first.get("message"):
+                                                preview = first["message"].get("content") or ""
+                                        return {
+                                            "success": True,
+                                            "provider": provider_name,
+                                            "status": "success",
+                                            "model": model,
+                                            "response_preview": preview or retry_text[:500],
+                                            "usage": (
+                                                data.get("usage", {})
+                                                if isinstance(data, dict)
+                                                else {}
+                                            ),
+                                        }
+                                    else:
+                                        resp_text = retry_text
+                                        last_status = retry_resp.status
+
+                            last_error_text = resp_text
+                            if response.status not in (404, 405):
+                                break
+                    except Exception as req_err:
+                        last_error_text = str(req_err)
+                        continue
+
+                return JSONResponse(
+                    {
+                        "provider": provider_name,
+                        "status": "error",
+                        "success": False,
+                        "error": f"API error ({last_status}): {last_error_text[:500]}",
+                    },
+                    status_code=200,
+                )
 
         # Special handling for Ollama: perform direct HTTP checks and return 200 JSON on errors
         if provider_name == "ollama":
@@ -247,41 +398,56 @@ async def test_ai_provider(provider_name: str, request: Request):
             try:
                 async with aiohttp.ClientSession() as session:
                     try:
-                        async with session.get(tags_url, headers=headers or None, timeout=10) as ping:
+                        async with session.get(
+                            tags_url, headers=headers or None, timeout=10
+                        ) as ping:
                             ping_text = await ping.text()
                             if ping.status != 200:
-                                return JSONResponse({
-                                    "success": False,
-                                    "status": "error",
-                                    "provider": "ollama",
-                                    "error": f"无法连接到 Ollama ({ping.status})",
-                                    "detail": ping_text[:500],
-                                }, status_code=200)
+                                return JSONResponse(
+                                    {
+                                        "success": False,
+                                        "status": "error",
+                                        "provider": "ollama",
+                                        "error": f"无法连接到 Ollama ({ping.status})",
+                                        "detail": ping_text[:500],
+                                    },
+                                    status_code=200,
+                                )
 
                             # Optional: validate model presence if parsable
                             try:
                                 import json as _json
+
                                 tags_json = _json.loads(ping_text)
                                 if isinstance(tags_json, dict) and model:
-                                    names = [m.get("name") or m.get("model") for m in tags_json.get("models", [])]
+                                    names = [
+                                        m.get("name") or m.get("model")
+                                        for m in tags_json.get("models", [])
+                                    ]
                                     if names and model not in names:
-                                        return JSONResponse({
-                                            "success": False,
-                                            "status": "error",
-                                            "provider": "ollama",
-                                            "error": f"模型未找到: {model}",
-                                            "detail": f"已安装模型: {', '.join([n for n in names if n])}",
-                                        }, status_code=200)
+                                        return JSONResponse(
+                                            {
+                                                "success": False,
+                                                "status": "error",
+                                                "provider": "ollama",
+                                                "error": f"模型未找到: {model}",
+                                                "detail": f"已安装模型: {', '.join([n for n in names if n])}",
+                                            },
+                                            status_code=200,
+                                        )
                             except Exception:
                                 pass
                     except Exception:
-                        return JSONResponse({
-                            "success": False,
-                            "status": "error",
-                            "provider": "ollama",
-                            "error": "Ollama 服务未运行或无法连接",
-                            "detail": f"请确保服务可通过 {base_url} 访问，并已拉取模型 {model}",
-                        }, status_code=200)
+                        return JSONResponse(
+                            {
+                                "success": False,
+                                "status": "error",
+                                "provider": "ollama",
+                                "error": "Ollama 服务未运行或无法连接",
+                                "detail": f"请确保服务可通过 {base_url} 访问，并已拉取模型 {model}",
+                            },
+                            status_code=200,
+                        )
 
                     # 2) Try a tiny generate
                     payload = {
@@ -292,52 +458,69 @@ async def test_ai_provider(provider_name: str, request: Request):
                     }
 
                     try:
-                        async with session.post(gen_url, json=payload, headers=headers or None, timeout=30) as resp:
+                        async with session.post(
+                            gen_url, json=payload, headers=headers or None, timeout=30
+                        ) as resp:
                             text = await resp.text()
                             if resp.status == 200:
                                 try:
                                     import json as _json
+
                                     resp_json = _json.loads(text)
                                 except Exception:
                                     resp_json = None
                                 response_preview = None
                                 if isinstance(resp_json, dict):
-                                    response_preview = resp_json.get("response") or resp_json.get("output")
+                                    response_preview = resp_json.get("response") or resp_json.get(
+                                        "output"
+                                    )
                                 if not response_preview:
                                     response_preview = text[:500]
-                                return JSONResponse({
-                                    "success": True,
-                                    "status": "success",
-                                    "provider": "ollama",
-                                    "model": model,
-                                    "response_preview": response_preview,
-                                }, status_code=200)
+                                return JSONResponse(
+                                    {
+                                        "success": True,
+                                        "status": "success",
+                                        "provider": "ollama",
+                                        "model": model,
+                                        "response_preview": response_preview,
+                                    },
+                                    status_code=200,
+                                )
                             else:
-                                return JSONResponse({
-                                    "success": False,
-                                    "status": "error",
-                                    "provider": "ollama",
-                                    "error": f"HTTP {resp.status}",
-                                    "detail": text[:500],
-                                }, status_code=200)
+                                return JSONResponse(
+                                    {
+                                        "success": False,
+                                        "status": "error",
+                                        "provider": "ollama",
+                                        "error": f"HTTP {resp.status}",
+                                        "detail": text[:500],
+                                    },
+                                    status_code=200,
+                                )
                     except Exception as gen_err:
-                        return JSONResponse({
-                            "success": False,
-                            "status": "error",
-                            "provider": "ollama",
-                            "error": "生成请求异常",
-                            "detail": str(gen_err)[:500],
-                        }, status_code=200)
+                        return JSONResponse(
+                            {
+                                "success": False,
+                                "status": "error",
+                                "provider": "ollama",
+                                "error": "生成请求异常",
+                                "detail": str(gen_err)[:500],
+                            },
+                            status_code=200,
+                        )
 
             except Exception as outer_err:
                 # Any unexpected error: still return 200 JSON
-                return JSONResponse({
-                    "success": False,
-                    "status": "error",
-                    "provider": "ollama",
-                    "error": "测试时发生异常",
-                    "detail": str(outer_err)[:500],
-                }, status_code=200)
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "status": "error",
+                        "provider": "ollama",
+                        "error": "测试时发生异常",
+                        "detail": str(outer_err)[:500],
+                    },
+                    status_code=200,
+                )
 
         # Fallback to backend config for other providers or when no frontend config
         from ..ai import AIMessage, AIProviderFactory, MessageRole
@@ -359,6 +542,7 @@ async def test_ai_provider(provider_name: str, request: Request):
         response = await provider.chat_completion([test_message])
 
         return {
+            "success": True,
             "provider": provider_name,
             "status": "success",
             "model": response.model,
@@ -670,7 +854,9 @@ async def restore_project_version(project_id: str, version: int):
         mgr = _ppt_service().project_manager
         restore_fn = getattr(mgr, "restore_project_version", None)
         if not callable(restore_fn):
-            raise HTTPException(status_code=500, detail="Project manager does not support restore_project_version")
+            raise HTTPException(
+                status_code=500, detail="Project manager does not support restore_project_version"
+            )
         import asyncio
 
         result = restore_fn(project_id, version)

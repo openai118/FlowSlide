@@ -17,7 +17,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import hashlib
 
-from bs4 import BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -72,10 +75,13 @@ def get_aspect_ratio_settings() -> dict:
 
 
 router = APIRouter()
+
+
 @router.get("/api/research/reports")
 async def list_research_reports(user: User = Depends(get_current_user_required)):
     """列出本地 research_reports 下的已生成研究报告（Markdown/Txt）。"""
     from pathlib import Path
+
     reports_dir = Path("research_reports")
     items = []
     try:
@@ -114,6 +120,7 @@ async def list_research_reports(user: User = Depends(get_current_user_required))
         return {"success": False, "error": str(e), "reports": []}
     return {"success": True, "reports": items}
 
+
 @router.get("/api/research/reports/{filename}")
 async def get_research_report(filename: str, user: User = Depends(get_current_user_required)):
     """获取指定研究报告全文内容(安全限制)。"""
@@ -122,6 +129,7 @@ async def get_research_report(filename: str, user: User = Depends(get_current_us
         if not safe or safe != filename:
             raise HTTPException(status_code=400, detail="非法文件名")
         from pathlib import Path
+
         reports_dir = Path("research_reports")
         target = reports_dir / safe
         if not (target.exists() and target.is_file()):
@@ -147,29 +155,33 @@ async def get_research_report(filename: str, user: User = Depends(get_current_us
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+
 def _sanitize_report_filename(name: str) -> str:
-    base = name.replace('..','').replace('\r','').replace('\n','').strip().strip('/\\')
+    base = name.replace("..", "").replace("\r", "").replace("\n", "").strip().strip("/\\")
     if not base:
         base = f"report_{int(time.time())}.md"
     # 只允许字母数字下划线中划线点和中文
     import re
+
     base = re.sub(r"[^A-Za-z0-9_.\-\u4e00-\u9fa5]", "_", base)
     # 强制后缀
-    if not base.lower().endswith(('.md','.txt')):
-        base += '.md'
+    if not base.lower().endswith((".md", ".txt")):
+        base += ".md"
     return base[:120]
+
 
 @router.get("/api/research/reports/{filename}/chunk")
 async def get_research_report_chunk(
     filename: str,
     offset: int = 0,
     limit: int = 20000,
-    user: User = Depends(get_current_user_required)
+    user: User = Depends(get_current_user_required),
 ):
     """分页获取报告内容，便于前端懒加载。"""
     try:
         safe = filename.replace("..", "").strip("/\\")
         from pathlib import Path
+
         reports_dir = Path("research_reports")
         target = reports_dir / safe
         if not (target.exists() and target.is_file()):
@@ -178,22 +190,33 @@ async def get_research_report_chunk(
             raise HTTPException(status_code=400, detail="不支持的文件类型")
         data = target.read_text(encoding="utf-8", errors="ignore")
         size = len(data)
-        if offset < 0: offset = 0
-        if limit <= 0: limit = 20000
-        if limit > 50000: limit = 50000
-        chunk = data[offset: offset+limit]
+        if offset < 0:
+            offset = 0
+        if limit <= 0:
+            limit = 20000
+        if limit > 50000:
+            limit = 50000
+        chunk = data[offset : offset + limit]
         next_offset = offset + len(chunk)
         has_more = next_offset < size
-        return {"success": True, "filename": safe, "offset": offset, "next_offset": next_offset, "has_more": has_more, "size": size, "content": chunk}
+        return {
+            "success": True,
+            "filename": safe,
+            "offset": offset,
+            "next_offset": next_offset,
+            "has_more": has_more,
+            "size": size,
+            "content": chunk,
+        }
     except HTTPException:
         raise
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+
 @router.post("/api/research/reports/upload")
 async def upload_research_report(
-    file: UploadFile = File(...),
-    user: User = Depends(get_current_user_required)
+    file: UploadFile = File(...), user: User = Depends(get_current_user_required)
 ):
     """单独上传并缓存研究报告到 research_reports 目录，供后续复用。"""
     try:
@@ -204,6 +227,7 @@ async def upload_research_report(
         text = raw.decode("utf-8", errors="ignore")
         stored_name = _sanitize_report_filename(fname)
         from pathlib import Path
+
         reports_dir = Path("research_reports")
         reports_dir.mkdir(exist_ok=True)
         # 若存在则加时间戳避免覆盖
@@ -219,7 +243,13 @@ async def upload_research_report(
             truncated = True
         path.write_text(text, encoding="utf-8")
         preview = "\n".join(text.splitlines()[:8])
-        return {"success": True, "filename": candidate, "size": len(text), "truncated": truncated, "preview": preview}
+        return {
+            "success": True,
+            "filename": candidate,
+            "size": len(text),
+            "truncated": truncated,
+            "preview": preview,
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -239,6 +269,8 @@ def _build_provider_status(ai_config_obj) -> dict:
         return status
     except Exception:
         return {}
+
+
 # Templates directory - use absolute path for better reliability
 
 
@@ -246,6 +278,8 @@ def _build_provider_status(ai_config_obj) -> dict:
 
 template_dir = os.path.join(os.path.dirname(__file__), "templates")
 templates = Jinja2Templates(directory=template_dir)
+
+
 def _redact_key(value: str, keep: int = 4) -> str:
     try:
         s = str(value or "")
@@ -272,9 +306,24 @@ def _sanitize_text(text: str) -> str:
         import re
 
         t = re.sub(r"(key=)([^&\s]{8,})", lambda m: m.group(1) + _redact_key(m.group(2)), t)
-        t = re.sub(r"(api[_-]?key[\"']?[:=]\s*)([A-Za-z0-9._-]{8,})", lambda m: m.group(1) + _redact_key(m.group(2)), t, flags=re.IGNORECASE)
-        t = re.sub(r"(Authorization:\s*Bearer\s+)([A-Za-z0-9._-]{8,})", lambda m: m.group(1) + _redact_key(m.group(2)), t, flags=re.IGNORECASE)
-        t = re.sub(r"(X-Api-Key:\s*)([A-Za-z0-9._-]{8,})", lambda m: m.group(1) + _redact_key(m.group(2)), t, flags=re.IGNORECASE)
+        t = re.sub(
+            r"(api[_-]?key[\"']?[:=]\s*)([A-Za-z0-9._-]{8,})",
+            lambda m: m.group(1) + _redact_key(m.group(2)),
+            t,
+            flags=re.IGNORECASE,
+        )
+        t = re.sub(
+            r"(Authorization:\s*Bearer\s+)([A-Za-z0-9._-]{8,})",
+            lambda m: m.group(1) + _redact_key(m.group(2)),
+            t,
+            flags=re.IGNORECASE,
+        )
+        t = re.sub(
+            r"(X-Api-Key:\s*)([A-Za-z0-9._-]{8,})",
+            lambda m: m.group(1) + _redact_key(m.group(2)),
+            t,
+            flags=re.IGNORECASE,
+        )
 
         # Trim output to avoid dumping entire HTML/JSON
         if len(t) > 800:
@@ -291,7 +340,10 @@ def _sanitize_dict(d: dict) -> dict:
         redacted = {}
         for k, v in d.items():
             key_l = str(k).lower()
-            if any(s in key_l for s in ["api_key", "apikey", "x-api-key", "authorization", "token", "secret"]):
+            if any(
+                s in key_l
+                for s in ["api_key", "apikey", "x-api-key", "authorization", "token", "secret"]
+            ):
                 redacted[k] = _redact_key(str(v))
             else:
                 redacted[k] = v
@@ -300,18 +352,29 @@ def _sanitize_dict(d: dict) -> dict:
         return {"info": "(payload hidden)"}
 
 
-
 # Helper to join base URL and endpoint paths safely
+def normalize_base_url(base_url: Optional[str]) -> str:
+    """Clean and normalize AI provider base URL by stripping trailing slashes and common endpoint suffixes."""
+    if not base_url:
+        return ""
+    url = str(base_url).strip().rstrip("/")
+    for suffix in ("/chat/completions", "/completions", "/models"):
+        if url.endswith(suffix):
+            url = url[: -len(suffix)].rstrip("/")
+    return url
+
+
 def build_api_url(base_url: str, *parts: str, ensure_v1: bool = False) -> str:
     """Return a safely-joined URL.
 
+    - Strips unintended trailing endpoint paths from base_url.
     - If ensure_v1 is True, ensures base_url ends with '/v1' before joining.
     - parts are appended without duplicate slashes.
     """
     if not base_url:
         return "/" + "/".join(p.strip("/") for p in parts)
 
-    base = base_url.rstrip("/")
+    base = normalize_base_url(base_url)
     if ensure_v1 and not base.endswith("/v1"):
         base = base + "/v1"
 
@@ -579,8 +642,8 @@ async def web_ai_config(request: Request, user: User = Depends(get_current_user_
                 # build provider status separately to avoid long inline comprehension
                 "provider_status": _build_provider_status(ai_config),
                 "current_config": current_config,
-                        "user": user.to_dict(),
-                        "is_admin": getattr(user, "is_admin", False),
+                "user": user.to_dict(),
+                "is_admin": getattr(user, "is_admin", False),
             },
         )
     finally:
@@ -594,71 +657,133 @@ async def web_ai_config(request: Request, user: User = Depends(get_current_user_
 async def get_openai_models(request: Request):
     """Proxy endpoint to get OpenAI models list, avoiding CORS issues - uses frontend provided config"""
     try:
-
         import aiohttp
 
         # Get configuration from frontend request
         data = await request.json()
-        base_url = data.get("base_url", "https://api.openai.com/v1")
-        api_key = data.get("api_key", "")
+        raw_base_url = data.get("base_url")
+        api_key = data.get("api_key")
 
-        base_info = f"Frontend requested models from: {base_url}"
+        # Fallback to backend config if api_key is missing or masked placeholder
+        if not api_key or "••••" in api_key:
+            from ..core.config import ai_config
+
+            api_key = ai_config.openai_api_key or ""
+            if not api_key:
+                from ..services.config_service import get_config_service
+
+                cfg_service = get_config_service()
+                ai_cfg = cfg_service.get_config_by_category("ai_providers") or {}
+                api_key = ai_cfg.get("openai_api_key", "")
+
+        if not raw_base_url:
+            from ..core.config import ai_config
+
+            raw_base_url = ai_config.openai_base_url or "https://api.openai.com/v1"
+
+        clean_base = normalize_base_url(raw_base_url) or "https://api.openai.com/v1"
+        base_info = f"Frontend requested models from: {clean_base}"
         logger.info(base_info)
 
         if not api_key:
             return {"success": False, "error": "API Key is required"}
 
-        # Build models URL safely (ensure /v1)
-        models_url = build_api_url(base_url, "models", ensure_v1=True)
-        logger.info(f"Fetching models from: {models_url}")
+        # Candidate URLs to handle standard OpenAI (/v1/models), DeepSeek (/models), and proxies
+        candidate_urls = []
+        if clean_base.endswith("/v1"):
+            candidate_urls.append(f"{clean_base}/models")
+            candidate_urls.append(f"{clean_base[:-3].rstrip('/')}/models")
+        else:
+            candidate_urls.append(f"{clean_base}/v1/models")
+            candidate_urls.append(f"{clean_base}/models")
 
-        # Make request to OpenAI API using frontend provided credentials
+        unique_urls = []
+        for u in candidate_urls:
+            if u and u not in unique_urls:
+                unique_urls.append(u)
+
         async with aiohttp.ClientSession() as session:
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
+                "X-Api-Key": api_key,
             }
-            # Some upstream proxies expect an X-Api-Key header instead of or in addition to Bearer
-            headers["X-Api-Key"] = api_key
 
-            async with session.get(models_url, headers=headers, timeout=30) as response:
-                if response.status == 200:
-                    data = await response.json()
+            last_status = 404
+            last_error_text = ""
+            success_data = None
 
-                    # Filter and sort models
-                    models = []
-                    if "data" in data and isinstance(data["data"], list):
-                        for model in data["data"]:
-                            if model.get("id"):
-                                models.append(
-                                    {
-                                        "id": model["id"],
-                                        "created": model.get("created", 0),
-                                        "owned_by": model.get("owned_by", "unknown"),
-                                    }
-                                )
+            for models_url in unique_urls:
+                logger.info(f"Fetching models from candidate: {models_url}")
+                try:
+                    async with session.get(
+                        models_url, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
+                    ) as response:
+                        last_status = response.status
+                        if response.status == 200:
+                            try:
+                                success_data = await response.json()
+                                break
+                            except Exception as json_err:
+                                last_error_text = f"JSON parse error: {json_err}"
+                        else:
+                            last_error_text = await response.text()
+                            if response.status not in (404, 405):
+                                break
+                except Exception as req_err:
+                    last_error_text = str(req_err)
+                    continue
 
-                        # Sort models with GPT-4 first, then GPT-3.5, then others
-                        def get_priority(model_id):
-                            if "gpt-4" in model_id:
-                                return 0
-                            elif "gpt-3.5" in model_id:
-                                return 1
-                            else:
-                                return 2
+            if success_data is not None:
+                models = []
+                raw_list = []
+                if isinstance(success_data, dict):
+                    if "data" in success_data and isinstance(success_data["data"], list):
+                        raw_list = success_data["data"]
+                    elif "models" in success_data and isinstance(success_data["models"], list):
+                        raw_list = success_data["models"]
+                elif isinstance(success_data, list):
+                    raw_list = success_data
 
-                        models.sort(key=lambda x: (get_priority(x["id"]), x["id"]))
-                    logger.info(f"Successfully fetched {len(models)} models from {base_url}")
-                    return {"success": True, "models": models}
-                else:
-                    error_text = await response.text()
-                    logger.error(
-                        f"Failed to fetch models from {base_url}: {response.status} - {error_text}"
-                    )
-                    return {
-                        "success": False,
-                        "error": f"API returned status {response.status}: {error_text}",
-                    }
+                for item in raw_list:
+                    if isinstance(item, dict):
+                        m_id = item.get("id") or item.get("name") or item.get("model")
+                        if m_id:
+                            models.append(
+                                {
+                                    "id": str(m_id),
+                                    "created": item.get("created", 0),
+                                    "owned_by": item.get("owned_by", "unknown"),
+                                }
+                            )
+                    elif isinstance(item, str) and item.strip():
+                        models.append(
+                            {
+                                "id": item.strip(),
+                                "created": 0,
+                                "owned_by": "unknown",
+                            }
+                        )
+
+                def get_priority(model_id: str) -> int:
+                    m = model_id.lower()
+                    if "gpt-4" in m or m.startswith("o1") or m.startswith("o3") or "deepseek" in m:
+                        return 0
+                    elif "gpt-3.5" in m:
+                        return 1
+                    return 2
+
+                models.sort(key=lambda x: (get_priority(x["id"]), x["id"]))
+                logger.info(f"Successfully fetched {len(models)} models from {clean_base}")
+                return {"success": True, "models": models}
+            else:
+                logger.error(
+                    f"Failed to fetch models from {clean_base}: {last_status} - {last_error_text}"
+                )
+                return {
+                    "success": False,
+                    "error": f"API returned status {last_status}: {last_error_text}",
+                }
 
     except Exception as e:
         logger.error(f"Error fetching OpenAI models from frontend config: {e}")
@@ -778,11 +903,15 @@ async def test_anthropic_provider_proxy(request: Request):
         }
 
         async with aiohttp.ClientSession() as session:
-            async with session.post(messages_url, headers=headers, json=payload, timeout=30) as response:
+            async with session.post(
+                messages_url, headers=headers, json=payload, timeout=30
+            ) as response:
                 response_text = await response.text()
                 if response.status < 200 or response.status >= 300:
                     safe_text = _sanitize_text(response_text)
-                    logger.warning("Anthropic provider test failed %s: %s", response.status, safe_text)
+                    logger.warning(
+                        "Anthropic provider test failed %s: %s", response.status, safe_text
+                    )
                     error_message = safe_text or f"API returned status {response.status}"
                     try:
                         error_data = json.loads(response_text)
@@ -854,7 +983,9 @@ async def get_google_models(request: Request):
         models_endpoint = build_api_url(base_url, "v1beta/models")
         url = models_endpoint + "?key=" + api_key
 
-        logger.info("Calling Google v1beta API: %s", models_endpoint + "?key=" + _redact_key(api_key))
+        logger.info(
+            "Calling Google v1beta API: %s", models_endpoint + "?key=" + _redact_key(api_key)
+        )
 
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=30) as resp:
@@ -899,9 +1030,7 @@ async def get_google_models(request: Request):
 
 
 @router.post("/api/ai/providers/azure_openai/models")
-async def get_azure_openai_deployments(
-    request: Request
-):
+async def get_azure_openai_deployments(request: Request):
     """Proxy endpoint to list Azure OpenAI deployments (used as model names)."""
     try:
         import aiohttp
@@ -965,7 +1094,10 @@ async def get_ollama_models(request: Request):
             async with session.get(url, headers=headers or None, timeout=15) as resp:
                 text = await resp.text()
                 if resp.status != 200:
-                    return {"success": False, "error": f"HTTP {resp.status}: {_sanitize_text(text)}"}
+                    return {
+                        "success": False,
+                        "error": f"HTTP {resp.status}: {_sanitize_text(text)}",
+                    }
                 try:
                     data = await resp.json()
                 except Exception:
@@ -1050,93 +1182,220 @@ async def test_openai_provider_proxy(request: Request):
     """Proxy endpoint to test OpenAI provider, avoiding CORS issues - uses frontend provided config"""
     try:
         import aiohttp
+        from ..ai.providers import is_reasoning_model
 
         # Get configuration from frontend request
         data = await request.json()
-        base_url = data.get("base_url", "https://api.openai.com/v1")
-        api_key = data.get("api_key", "")
-        model = data.get("model", "gpt-4o")
+        raw_base_url = data.get("base_url")
+        api_key = data.get("api_key")
+        model = data.get("model")
 
-        logger.info("Frontend requested test with base_url=%s model=%s", base_url, model)
+        # Fallback to backend config if api_key is missing or masked placeholder
+        if not api_key or "••••" in api_key:
+            from ..core.config import ai_config
+
+            api_key = ai_config.openai_api_key or ""
+            if not api_key:
+                from ..services.config_service import get_config_service
+
+                cfg_service = get_config_service()
+                ai_cfg = cfg_service.get_config_by_category("ai_providers") or {}
+                api_key = ai_cfg.get("openai_api_key", "")
+
+        if not raw_base_url:
+            from ..core.config import ai_config
+
+            raw_base_url = ai_config.openai_base_url or "https://api.openai.com/v1"
+
+        if not model:
+            from ..core.config import ai_config
+
+            model = ai_config.openai_model or "gpt-4o"
+
+        clean_base = normalize_base_url(raw_base_url) or "https://api.openai.com/v1"
+        logger.info("Frontend requested test with base_url=%s model=%s", clean_base, model)
 
         if not api_key:
-            return {"success": False, "error": "API Key is required"}
-        # Build chat URL safely (ensure /v1)
-        chat_url = build_api_url(base_url, "chat/completions", ensure_v1=True)
-        logger.info(f"Testing OpenAI provider at: {chat_url}")
+            return {"success": False, "status": "error", "error": "API Key is required"}
 
-        # Make test request to OpenAI API using frontend provided credentials
-        async with aiohttp.ClientSession() as session:
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            }
-            # Some proxies require X-Api-Key header as well
-            headers["X-Api-Key"] = api_key
+        # Candidate endpoints for chat completions
+        candidate_chat_urls = []
+        if clean_base.endswith("/v1"):
+            candidate_chat_urls.append(f"{clean_base}/chat/completions")
+            candidate_chat_urls.append(f"{clean_base[:-3].rstrip('/')}/chat/completions")
+        else:
+            candidate_chat_urls.append(f"{clean_base}/v1/chat/completions")
+            candidate_chat_urls.append(f"{clean_base}/chat/completions")
 
-            payload = {
-                "model": model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": "Say 'Hello, I am working!' in exactly 5 words.",
-                    }
-                ],
-                "max_tokens": 20,
-                "temperature": 0,
-            }
+        unique_urls = []
+        for u in candidate_chat_urls:
+            if u and u not in unique_urls:
+                unique_urls.append(u)
 
-            try:
-                async with session.post(chat_url, headers=headers, json=payload, timeout=30) as response:
-                    resp_text = await response.text()
-                    if response.status == 200:
-                        try:
-                            data = json.loads(resp_text)
-                        except Exception:
-                            data = None
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "X-Api-Key": api_key,
+        }
 
-                        logger.info(f"Test successful for {base_url} with model {model}")
-
-                        response_preview = None
-                        try:
-                            if isinstance(data, dict):
-                                choices = data.get("choices")
-                                if isinstance(choices, list) and len(choices) > 0:
-                                    first = choices[0]
-                                    if isinstance(first, dict):
-                                        message = first.get("message")
-                                        if isinstance(message, dict):
-                                            response_preview = message.get("content")
-                        except Exception:
-                            response_preview = None
-
-                        if not response_preview:
-                            response_preview = str(data)[:500] if data is not None else resp_text[:500]
-
-                        usage = data.get("usage") if isinstance(data, dict) else None
-                        if not usage:
-                            usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-
-                        return {
-                            "success": True,
-                            "status": "success",
-                            "provider": "openai",
-                            "model": model,
-                            "response_preview": response_preview,
-                            "usage": usage,
+        # Build initial test payload based on model reasoning capabilities
+        def _get_payload(force_reasoning: bool = False):
+            if force_reasoning or is_reasoning_model(model):
+                return {
+                    "model": model,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "Say 'Hello, I am working!' in exactly 5 words.",
                         }
-                    else:
+                    ],
+                    "max_completion_tokens": 50,
+                }
+            else:
+                return {
+                    "model": model,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "Say 'Hello, I am working!' in exactly 5 words.",
+                        }
+                    ],
+                    "max_tokens": 20,
+                    "temperature": 0,
+                }
+
+        payload = _get_payload()
+
+        async with aiohttp.ClientSession() as session:
+            last_status = 404
+            last_error_message = ""
+
+            for chat_url in unique_urls:
+                logger.info(f"Testing OpenAI provider at: {chat_url}")
+                try:
+                    async with session.post(
+                        chat_url,
+                        headers=headers,
+                        json=payload,
+                        timeout=aiohttp.ClientTimeout(total=30),
+                    ) as response:
+                        resp_text = await response.text()
+                        last_status = response.status
+
+                        if response.status == 200:
+                            try:
+                                data = json.loads(resp_text)
+                            except Exception:
+                                data = None
+
+                            logger.info(f"Test successful for {chat_url} with model {model}")
+
+                            response_preview = None
+                            try:
+                                if isinstance(data, dict):
+                                    choices = data.get("choices")
+                                    if isinstance(choices, list) and len(choices) > 0:
+                                        first = choices[0]
+                                        if isinstance(first, dict):
+                                            message = first.get("message")
+                                            if isinstance(message, dict):
+                                                response_preview = message.get("content")
+                            except Exception:
+                                response_preview = None
+
+                            if not response_preview:
+                                response_preview = (
+                                    str(data)[:500] if data is not None else resp_text[:500]
+                                )
+
+                            usage = data.get("usage") if isinstance(data, dict) else None
+                            if not usage:
+                                usage = {
+                                    "prompt_tokens": 0,
+                                    "completion_tokens": 0,
+                                    "total_tokens": 0,
+                                }
+
+                            return {
+                                "success": True,
+                                "status": "success",
+                                "provider": "openai",
+                                "model": model,
+                                "response_preview": response_preview,
+                                "usage": usage,
+                            }
+
+                        # Check if status 400 is due to parameter incompatibility (e.g. temperature/max_tokens on reasoning model)
+                        if response.status == 400 and any(
+                            kw in resp_text.lower()
+                            for kw in (
+                                "temperature",
+                                "top_p",
+                                "max_tokens",
+                                "max_completion_tokens",
+                                "unsupported_parameter",
+                                "param",
+                            )
+                        ):
+                            logger.info(
+                                "Retrying test with reasoning-compatible payload on %s", chat_url
+                            )
+                            retry_payload = _get_payload(force_reasoning=True)
+                            async with session.post(
+                                chat_url,
+                                headers=headers,
+                                json=retry_payload,
+                                timeout=aiohttp.ClientTimeout(total=30),
+                            ) as retry_resp:
+                                retry_text = await retry_resp.text()
+                                if retry_resp.status == 200:
+                                    try:
+                                        data = json.loads(retry_text)
+                                    except Exception:
+                                        data = None
+                                    response_preview = None
+                                    if isinstance(data, dict) and data.get("choices"):
+                                        first = data["choices"][0]
+                                        if isinstance(first, dict) and first.get("message"):
+                                            response_preview = first["message"].get("content")
+                                    return {
+                                        "success": True,
+                                        "status": "success",
+                                        "provider": "openai",
+                                        "model": model,
+                                        "response_preview": response_preview or retry_text[:500],
+                                        "usage": (
+                                            data.get("usage") if isinstance(data, dict) else None
+                                        )
+                                        or {
+                                            "prompt_tokens": 0,
+                                            "completion_tokens": 0,
+                                            "total_tokens": 0,
+                                        },
+                                    }
+                                else:
+                                    resp_text = retry_text
+                                    last_status = retry_resp.status
+
                         try:
                             error_data = json.loads(resp_text)
-                            error_message = error_data.get("error", {}).get("message") or str(error_data)
+                            last_error_message = error_data.get("error", {}).get("message") or str(
+                                error_data
+                            )
                         except Exception:
-                            error_message = f"API returned status {response.status}: {resp_text}"
+                            last_error_message = (
+                                f"API returned status {response.status}: {resp_text}"
+                            )
 
-                        logger.error(f"Test failed for {base_url}: {error_message}")
-                        return {"success": False, "status": "error", "error": error_message}
-            except Exception as aio_err:
-                logger.error(f"Exception during OpenAI test request: {aio_err}")
-                return {"success": False, "status": "error", "error": str(aio_err)}
+                        if response.status not in (404, 405):
+                            break
+
+                except Exception as aio_err:
+                    last_error_message = str(aio_err)
+                    continue
+
+            logger.error(f"Test failed for {clean_base}: {last_error_message}")
+            return {"success": False, "status": "error", "error": last_error_message}
 
     except Exception as e:
         logger.error(f"Error testing OpenAI provider with frontend config: {e}")
@@ -1189,13 +1448,7 @@ async def test_google_provider_proxy(request: Request):
             gen_url = f"{gen_url}?key={api_key}"
 
         payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {"text": 'Say "Hello, I am working!" in exactly 5 words.'}
-                    ]
-                }
-            ],
+            "contents": [{"parts": [{"text": 'Say "Hello, I am working!" in exactly 5 words.'}]}],
             "generationConfig": {"maxOutputTokens": 20, "temperature": 0},
         }
 
@@ -1225,7 +1478,11 @@ async def test_google_provider_proxy(request: Request):
                                 content = (
                                     (c0 or {}).get("content") if isinstance(c0, dict) else None
                                 )
-                                parts = (content or {}).get("parts") if isinstance(content, dict) else None
+                                parts = (
+                                    (content or {}).get("parts")
+                                    if isinstance(content, dict)
+                                    else None
+                                )
                                 if isinstance(parts, list) and parts:
                                     preview = (parts[0] or {}).get("text")
                     except Exception:
@@ -1267,17 +1524,23 @@ async def test_google_provider_proxy(request: Request):
                         )
                     except Exception:
                         pass
-                    return {"success": False, "status": "error", "error": f"HTTP {resp.status}: {err_msg}"}
+                    return {
+                        "success": False,
+                        "status": "error",
+                        "error": f"HTTP {resp.status}: {err_msg}",
+                    }
 
     except Exception as e:
         logger.error(f"Error testing Google provider with frontend config: {e}")
         return {"success": False, "status": "error", "error": str(e)}
+
 
 @router.post("/api/ai/providers/ollama/test")
 async def test_ollama_provider_proxy(request: Request):
     """Backend proxy to test Ollama provider (validates base_url and shields credentials/CORS)."""
     try:
         import aiohttp
+
         # Parse body defensively
         try:
             data = await request.json()
@@ -1285,14 +1548,19 @@ async def test_ollama_provider_proxy(request: Request):
                 data = {}
         except Exception:
             data = {}
-        logger.info(f"Ollama test payload: {_sanitize_dict(data) if isinstance(data, dict) else '(invalid payload)'}")
+        logger.info(
+            f"Ollama test payload: {_sanitize_dict(data) if isinstance(data, dict) else '(invalid payload)'}"
+        )
         base_url = (data.get("base_url") or "http://localhost:11434").rstrip("/")
         model = (data.get("model") or "llama2").strip()
 
         # Basic validation of URL scheme
         parsed = urllib.parse.urlparse(base_url)
         if parsed.scheme not in ("http", "https"):
-            return JSONResponse({"success": False, "status": "error", "error": "Invalid base_url scheme"}, status_code=200)
+            return JSONResponse(
+                {"success": False, "status": "error", "error": "Invalid base_url scheme"},
+                status_code=200,
+            )
         gen_url = build_api_url(base_url, "api/generate")
 
         payload = {
@@ -1317,44 +1585,57 @@ async def test_ollama_provider_proxy(request: Request):
                 async with session.get(tags_url, headers=headers or None, timeout=10) as ping:
                     ping_text = await ping.text()
                     if ping.status != 200:
-                        return JSONResponse({
-                            "success": False,
-                            "status": "error",
-                            "provider": "ollama",
-                            "error": f"无法连接到 Ollama ({ping.status})",
-                            "detail": ping_text[:500]
-                        }, status_code=200)
+                        return JSONResponse(
+                            {
+                                "success": False,
+                                "status": "error",
+                                "provider": "ollama",
+                                "error": f"无法连接到 Ollama ({ping.status})",
+                                "detail": ping_text[:500],
+                            },
+                            status_code=200,
+                        )
 
                     # Validate model presence if parsable
                     try:
                         tags_json = json.loads(ping_text)
                         if isinstance(tags_json, dict) and model:
-                            names = [m.get("name") or m.get("model") for m in tags_json.get("models", [])]
+                            names = [
+                                m.get("name") or m.get("model") for m in tags_json.get("models", [])
+                            ]
                             if names and model not in names:
-                                return JSONResponse({
-                                    "success": False,
-                                    "status": "error",
-                                    "provider": "ollama",
-                                    "error": f"模型未找到: {model}",
-                                    "detail": f"已安装模型: {', '.join([n for n in names if n])}"
-                                }, status_code=200)
+                                return JSONResponse(
+                                    {
+                                        "success": False,
+                                        "status": "error",
+                                        "provider": "ollama",
+                                        "error": f"模型未找到: {model}",
+                                        "detail": f"已安装模型: {', '.join([n for n in names if n])}",
+                                    },
+                                    status_code=200,
+                                )
                     except Exception:
                         pass
             except Exception as ping_err:
                 logger.info(f"Ollama ping failed: {ping_err}")
-                return JSONResponse({
-                    "success": False,
-                    "status": "error",
-                    "provider": "ollama",
-                    "error": "Ollama 服务未运行或无法连接",
-                    "detail": f"请确保服务可通过 {base_url} 访问，并已拉取模型 {model}"
-                }, status_code=200)
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "status": "error",
+                        "provider": "ollama",
+                        "error": "Ollama 服务未运行或无法连接",
+                        "detail": f"请确保服务可通过 {base_url} 访问，并已拉取模型 {model}",
+                    },
+                    status_code=200,
+                )
 
             # 2) Generate test
             try:
                 safe_url = gen_url  # URL contains only local host/port and path
                 logger.info(f"Calling Ollama generate URL: {safe_url} with model={model}")
-                async with session.post(gen_url, json=payload, headers=headers or None, timeout=30) as resp:
+                async with session.post(
+                    gen_url, json=payload, headers=headers or None, timeout=30
+                ) as resp:
                     text = await resp.text()
                     if resp.status == 200:
                         try:
@@ -1369,28 +1650,41 @@ async def test_ollama_provider_proxy(request: Request):
                         if not response_preview:
                             response_preview = text[:500]
 
-                        return JSONResponse({
-                            "success": True,
-                            "status": "success",
-                            "provider": "ollama",
-                            "model": model,
-                            "response_preview": response_preview,
-                        }, status_code=200)
+                        return JSONResponse(
+                            {
+                                "success": True,
+                                "status": "success",
+                                "provider": "ollama",
+                                "model": model,
+                                "response_preview": response_preview,
+                            },
+                            status_code=200,
+                        )
                     else:
                         try:
                             err = json.loads(text)
                             err_msg = err.get("error") or str(err)
                         except Exception:
                             err_msg = f"HTTP {resp.status}: {_sanitize_text(text)}"
-                        logger.error(f"Ollama test failed for {safe_url}: {_sanitize_text(err_msg)}")
-                        return JSONResponse({"success": False, "status": "error", "error": _sanitize_text(err_msg)}, status_code=200)
+                        logger.error(
+                            f"Ollama test failed for {safe_url}: {_sanitize_text(err_msg)}"
+                        )
+                        return JSONResponse(
+                            {"success": False, "status": "error", "error": _sanitize_text(err_msg)},
+                            status_code=200,
+                        )
             except Exception as aio_err:
                 logger.exception(f"Exception during Ollama test request: {aio_err}")
-                return JSONResponse({"success": False, "status": "error", "error": _sanitize_text(str(aio_err))}, status_code=200)
+                return JSONResponse(
+                    {"success": False, "status": "error", "error": _sanitize_text(str(aio_err))},
+                    status_code=200,
+                )
 
     except Exception as e:
         logger.exception(f"Error testing Ollama provider: {e}")
-        return JSONResponse({"success": False, "status": "error", "error": _sanitize_text(str(e))}, status_code=200)
+        return JSONResponse(
+            {"success": False, "status": "error", "error": _sanitize_text(str(e))}, status_code=200
+        )
 
 
 @router.get("/scenarios", response_class=HTMLResponse)
@@ -1837,13 +2131,15 @@ async def get_project_slides_data(project_id: str, user: User = Depends(get_curr
         try:
             slides_meta = []
             for i, s in enumerate(project.slides_data):
-                content = (s.get('html_content') or '')
-                h = hashlib.sha256(content.encode('utf-8')).hexdigest()
-                slides_meta.append({
-                    'index': i,
-                    'hash': h,
-                    'page_number': s.get('page_number', i + 1),
-                })
+                content = s.get("html_content") or ""
+                h = hashlib.sha256(content.encode("utf-8")).hexdigest()
+                slides_meta.append(
+                    {
+                        "index": i,
+                        "hash": h,
+                        "page_number": s.get("page_number", i + 1),
+                    }
+                )
         except Exception:
             slides_meta = []
 
@@ -1935,15 +2231,19 @@ async def web_create_project(
                 # 将上传内容持久化写入 research_reports 目录（不覆盖已有，同 upload API 规则简化版）
                 try:
                     from pathlib import Path
-                    reports_dir = Path("research_reports"); reports_dir.mkdir(exist_ok=True)
+
+                    reports_dir = Path("research_reports")
+                    reports_dir.mkdir(exist_ok=True)
                     import re, os, time as _t
+
                     safe = re.sub(r"[^A-Za-z0-9_.\-\u4e00-\u9fa5]", "_", fname)[:100]
-                    if not safe.lower().endswith(('.md','.txt')): safe += '.md'
+                    if not safe.lower().endswith((".md", ".txt")):
+                        safe += ".md"
                     candidate = safe
                     if (reports_dir / candidate).exists():
                         stem, ext = os.path.splitext(candidate)
                         candidate = f"{stem}_{int(_t.time())}{ext}"
-                    (reports_dir / candidate).write_text(text, encoding='utf-8')
+                    (reports_dir / candidate).write_text(text, encoding="utf-8")
                 except Exception as _se:
                     logger.warning(f"保存上传研究报告副本失败: {_se}")
             except Exception as e:
@@ -1951,6 +2251,7 @@ async def web_create_project(
         # 2. 否则如果选择已有本地报告
         elif existing_report:
             from pathlib import Path
+
             reports_dir = Path("research_reports")
             safe_name = existing_report.replace("..", "").strip("/\\")
             target = reports_dir / safe_name
@@ -2161,7 +2462,11 @@ async def generate_outline(project_id: str, user: User = Depends(get_current_use
         db_service = await dbm._get_db_service()
         try:
             task_repo = GenerationTaskRepository(db_service.session)
-            payload = {"project_id": project_id, "request": project_request.__dict__, "page_count_settings": page_count_settings}
+            payload = {
+                "project_id": project_id,
+                "request": project_request.__dict__,
+                "page_count_settings": page_count_settings,
+            }
             task_id = await task_repo.enqueue(project_id, "outline_generation", payload)
             return {"status": "enqueued", "task_id": task_id}
         finally:
@@ -2235,7 +2540,6 @@ async def regenerate_outline(project_id: str, user: User = Depends(get_current_u
                 ),
             )
 
-
             # Enqueue a file-based outline generation task
             from ..services.db_project_manager import DatabaseProjectManager
             from ..database.repositories import GenerationTaskRepository
@@ -2261,7 +2565,11 @@ async def regenerate_outline(project_id: str, user: User = Depends(get_current_u
             db_service = await dbm._get_db_service()
             try:
                 task_repo = GenerationTaskRepository(db_service.session)
-                payload = {"project_id": project_id, "request": project_request.__dict__, "page_count_settings": page_count_settings}
+                payload = {
+                    "project_id": project_id,
+                    "request": project_request.__dict__,
+                    "page_count_settings": page_count_settings,
+                }
                 task_id = await task_repo.enqueue(project_id, "outline_generation", payload)
                 return {"status": "enqueued", "task_id": task_id}
             finally:
@@ -2793,7 +3101,9 @@ async def stream_stage_response(
                 # For outline generation, ensure outline exists in DB
                 if stage_id == "outline_generation":
                     has_outline = bool(
-                        project_after and project_after.outline and project_after.outline.get("slides")
+                        project_after
+                        and project_after.outline
+                        and project_after.outline.get("slides")
                     )
                     if has_outline:
                         await ppt_service.project_manager.update_stage_status(
@@ -2811,7 +3121,8 @@ async def stream_stage_response(
                 # For ppt creation, ensure slides data or html is saved
                 elif stage_id == "ppt_creation":
                     has_slides = bool(
-                        project_after and (
+                        project_after
+                        and (
                             (project_after.slides_data and len(project_after.slides_data) > 0)
                             or (project_after.slides_html and len(project_after.slides_html) > 0)
                         )
@@ -3865,7 +4176,7 @@ async def ai_auto_generate_slide_images(
         if not enable_image_service:
             return {"success": False, "message": "图片生成服务未启用，请在配置中启用"}
 
-    # 获取启用的图像来源（使用与重新生成图片相同的逻辑）
+        # 获取启用的图像来源（使用与重新生成图片相同的逻辑）
 
         enabled_sources = []
         if image_config.get("enable_local_images", True):
@@ -4634,7 +4945,11 @@ async def _get_user_optional_unless_direct_download(request: Request):
         client_host = None
 
     # If direct_download and from localhost, bypass user dependency (return None)
-    if direct and str(direct).lower() in ("1", "true", "yes") and client_host in ("127.0.0.1", "::1", "localhost"):
+    if (
+        direct
+        and str(direct).lower() in ("1", "true", "yes")
+        and client_host in ("127.0.0.1", "::1", "localhost")
+    ):
         return None
 
     # Otherwise fall back to original optional user dependency
@@ -4651,8 +4966,12 @@ async def export_project_pdf(
     user: User = Depends(_get_user_optional_unless_direct_download),
 ):
     """Export project as PDF using Pyppeteer"""
-    print(f"🔥 PDF EXPORT REQUEST RECEIVED: project_id={project_id} direct_download={direct_download} individual={individual}")
-    logging.info(f"🔥 PDF EXPORT REQUEST RECEIVED: project_id={project_id} direct_download={direct_download} individual={individual}")
+    print(
+        f"🔥 PDF EXPORT REQUEST RECEIVED: project_id={project_id} direct_download={direct_download} individual={individual}"
+    )
+    logging.info(
+        f"🔥 PDF EXPORT REQUEST RECEIVED: project_id={project_id} direct_download={direct_download} individual={individual}"
+    )
     try:
         project = await ppt_service.project_manager.get_project(project_id)
         if not project:
@@ -4660,7 +4979,7 @@ async def export_project_pdf(
 
         # If direct_download is requested from localhost, allow bypassing auth checks
         try:
-            client_host = (request.client.host if request and request.client else None)
+            client_host = request.client.host if request and request.client else None
         except Exception:
             client_host = None
 
@@ -4741,7 +5060,9 @@ async def export_project_pdf_individual(
 ):
     """Export project as individual PDF files for each slide"""
     # Forward to the main export handler, preserving the request object
-    return await export_project_pdf(request=request, project_id=project_id, individual=True, user=user)
+    return await export_project_pdf(
+        request=request, project_id=project_id, individual=True, user=user
+    )
 
 
 @router.post("/__client_trace")
@@ -4831,6 +5152,7 @@ async def export_project_pptx(project_id: str, user: User = Depends(get_current_
         logging.info("Step 1: Generating PDF for PPTX conversion")
         # Use centralized PDF export service so logic is consistent with export_project_pdf
         from ..services.pdf_export import generate_pdf_file
+
         try:
             generated_pdf = await generate_pdf_file(project, individual=False)
             # Move generated PDF to the reserved temp path for the PPTX flow
@@ -5186,8 +5508,7 @@ async def _generate_combined_html_for_export(project, export_type: str) -> str:
         html_parts = []
 
         # HTML document header
-        html_parts.append(
-            f"""<!DOCTYPE html>
+        html_parts.append(f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -5239,8 +5560,7 @@ async def _generate_combined_html_for_export(project, export_type: str) -> str:
         }}
     </style>
 </head>
-<body>"""
-        )
+<body>""")
 
         # Add each slide preserving original styles
         for i, slide in enumerate(project.slides_data):
@@ -5275,8 +5595,7 @@ async def _generate_combined_html_for_export(project, export_type: str) -> str:
                     slide_styles = ""
                     slide_content = slide_html
 
-                html_parts.append(
-                    f"""
+                html_parts.append(f"""
     <div class="slide-container">
         <style>
             {slide_styles}
@@ -5285,15 +5604,12 @@ async def _generate_combined_html_for_export(project, export_type: str) -> str:
             {slide_content}
         </div>
         <div class="slide-number">{i + 1} / {len(project.slides_data)}</div>
-    </div>"""
-                )
+    </div>""")
 
         # Close HTML document
-        html_parts.append(
-            """
+        html_parts.append("""
 </body>
-</html>"""
-        )
+</html>""")
 
         return "".join(html_parts)
 
@@ -5802,7 +6118,7 @@ def _remove_external_dependencies(html: str) -> str:
         r'<script[^>]*src=["\'][^"\']*twitter[^"\']*["\'][^>]*>\s*</script>',
     ]
     for pat in patterns:
-        cleaned = re.sub(pat, '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(pat, "", cleaned, flags=re.IGNORECASE)
 
     # 替换 jsdelivr CDN 为国内镜像
     cleaned = re.sub(
@@ -5847,8 +6163,14 @@ async def get_scripts_task_status(task_id: str, user: User = Depends(get_current
         raise HTTPException(status_code=404, detail="Task not found")
     return JSONResponse({"success": True, **task, "task_id": task_id})
 
+
 @router.put("/api/projects/{project_id}/slides/{slide_number}/speaker_notes")
-async def update_single_speaker_notes(project_id: str, slide_number: int, payload: dict, user: User = Depends(get_current_user_required)):
+async def update_single_speaker_notes(
+    project_id: str,
+    slide_number: int,
+    payload: dict,
+    user: User = Depends(get_current_user_required),
+):
     """Update speaker notes for one slide (slide_number 1-based)."""
     project = await ppt_service.project_manager.get_project(project_id)
     if not project:
@@ -5858,15 +6180,17 @@ async def update_single_speaker_notes(project_id: str, slide_number: int, payloa
     idx = slide_number - 1
     if idx < 0 or idx >= len(project.slides_data or []):
         raise HTTPException(status_code=400, detail="Invalid slide number")
-    notes = (payload.get('notes') or '').strip()
+    notes = (payload.get("notes") or "").strip()
     slide = project.slides_data[idx] or {}
-    meta = slide.get('metadata') or {}
-    meta['speaker_notes'] = notes
-    slide['metadata'] = meta
-    slide['speaker_notes'] = notes
+    meta = slide.get("metadata") or {}
+    meta["speaker_notes"] = notes
+    slide["metadata"] = meta
+    slide["speaker_notes"] = notes
     project.slides_data[idx] = slide
     await ppt_service.project_manager.save_single_slide(project_id, idx, slide)
-    await ppt_service.project_manager.update_project_data(project_id, {"slides_data": project.slides_data})
+    await ppt_service.project_manager.update_project_data(
+        project_id, {"slides_data": project.slides_data}
+    )
     return JSONResponse({"success": True, "index": slide_number, "length": len(notes)})
 
 
@@ -5933,8 +6257,10 @@ async def export_speaker_notes_markdown(
             total_slides = len(project.slides_data or [])
             # 统计已有演讲稿页数
             notes_count = 0
-            for s in (project.slides_data or []):
-                note_txt = (s.get("metadata", {}).get("speaker_notes") or s.get("speaker_notes") or "").strip()
+            for s in project.slides_data or []:
+                note_txt = (
+                    s.get("metadata", {}).get("speaker_notes") or s.get("speaker_notes") or ""
+                ).strip()
                 if note_txt:
                     notes_count += 1
             # 可扩展的统计：如果后续任务结构里存储了生成策略，可在这里补充
@@ -6026,7 +6352,9 @@ async def export_speaker_notes_docx(
             total_slides = len(slides)
             notes_count = 0
             for s in slides:
-                txt = (s.get("metadata", {}).get("speaker_notes") or s.get("speaker_notes") or "").strip()
+                txt = (
+                    s.get("metadata", {}).get("speaker_notes") or s.get("speaker_notes") or ""
+                ).strip()
                 if txt:
                     notes_count += 1
             meta_para = document.add_paragraph()

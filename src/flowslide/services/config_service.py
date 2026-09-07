@@ -282,6 +282,17 @@ class ConfigService:
                 "category": "app_config",
                 "default": "sqlite:///./flowslide.db",
             },
+            "external_database_url": {
+                "type": "password",
+                "category": "app_config",
+                "default": "",
+            },
+            "database_mode": {
+                "type": "select",
+                "category": "app_config",
+                "options": ["local", "external", "hybrid"],
+                "default": "local",
+            },
             "api_url": {"type": "url", "category": "app_config", "default": ""},
             "api_anon_key": {"type": "password", "category": "app_config", "default": ""},
             "api_service_key": {"type": "password", "category": "app_config", "default": ""},
@@ -457,6 +468,7 @@ class ConfigService:
         # 注：应用运行时的数据库仍使用 simple_config 中的 LOCAL_DATABASE_URL，不受这里影响
         always_empty_when_unset = {
             "database_url",  # 不预填 sqlite://...，仅作 placeholder 提示
+            "external_database_url",
             # 下面这些默认本就为空，这里列出以示明确
             "api_anon_key",
             "api_service_key",
@@ -499,6 +511,7 @@ class ConfigService:
         # 与 get_all_config 一致：这些键在未设置时返回空字符串
         always_empty_when_unset = {
             "database_url",
+            "external_database_url",
             "api_anon_key",
             "api_service_key",
             "r2_access_key_id",
@@ -601,12 +614,38 @@ class ConfigService:
             if image_related_keys:
                 self._reload_image_config()
 
+            # Reload database configuration if database/storage policy related keys were updated
+            db_related_keys = {
+                "database_url",
+                "external_database_url",
+                "database_mode",
+                "deployment_pinned_mode",
+                "force_deployment_mode",
+                "r2_access_key_id",
+                "r2_secret_access_key",
+                "r2_endpoint",
+                "r2_bucket_name",
+            }
+            if any(k.lower() in db_related_keys for k in config.keys()):
+                self._reload_database_config()
+
             logger.info(f"Updated {len(config)} configuration values")
             return True
 
         except Exception as e:
             logger.error(f"Failed to update configuration: {e}")
             return False
+
+    def _reload_database_config(self):
+        """Reinitialize database to match the newly configured storage policy and bootstrap schema."""
+        try:
+            from ..database.database import initialize_database
+
+            logger.info("Reinitializing database with updated storage configuration...")
+            initialize_database()
+            logger.info("Database reinitialization completed successfully")
+        except Exception as e:
+            logger.error(f"Failed to reinitialize database after config update: {e}")
 
     def _reload_ai_config(self):
         """Reload AI configuration"""

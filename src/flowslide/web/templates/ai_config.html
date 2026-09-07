@@ -3339,6 +3339,23 @@ async function testProvider(providerName) {
     }
 }
 
+// 规范化 OpenAI 及兼容提供者的 Base URL，去除多余后缀与斜杠
+function normalizeOpenAIBaseUrl(url) {
+    if (!url || typeof url !== 'string') return 'https://api.openai.com/v1';
+    let clean = url.trim().replace(/\/+$/, '');
+    for (const suffix of ['/chat/completions', '/completions', '/models']) {
+        if (clean.endsWith(suffix)) {
+            clean = clean.slice(0, -suffix.length).replace(/\/+$/, '');
+        }
+    }
+    if (!clean) return 'https://api.openai.com/v1';
+    if (clean.endsWith('/v1')) return clean;
+    if (clean === 'https://api.openai.com' || clean === 'http://api.openai.com') {
+        return clean + '/v1';
+    }
+    return clean;
+}
+
 // 测试 OpenAI 提供者（仅通过后端代理）
 async function testOpenAIProvider(config) {
     try {
@@ -3347,14 +3364,18 @@ async function testOpenAIProvider(config) {
         let baseUrl = config.openai_base_url;
         let model = config.openai_model;
 
-        // 如果前端没有填写API Key，尝试从后端获取
-        if (!apiKey) {
-            const configResponse = await fetch('/api/config/ai_providers');
-            if (configResponse.ok) {
-                const configResult = await configResponse.json();
-                if (configResult.success && configResult.config.openai_api_key) {
-                    apiKey = configResult.config.openai_api_key;
+        // 如果前端没有填写API Key或为掩码，尝试从后端获取
+        if (!apiKey || apiKey === '••••••••' || apiKey.includes('••••')) {
+            try {
+                const configResponse = await fetch('/api/config/ai_providers');
+                if (configResponse.ok) {
+                    const configResult = await configResponse.json();
+                    if (configResult.success && configResult.config && configResult.config.openai_api_key && !configResult.config.openai_api_key.includes('••••')) {
+                        apiKey = configResult.config.openai_api_key;
+                    }
                 }
+            } catch (cfgErr) {
+                console.warn('获取后端配置失败:', cfgErr);
             }
         }
 
@@ -3363,19 +3384,12 @@ async function testOpenAIProvider(config) {
             throw new Error('请先配置 OpenAI API Key');
         }
 
-        // 如果没有填写 Base URL，使用默认值
-        if (!baseUrl) {
-            baseUrl = 'https://api.openai.com/v1';
-        }
+        // 规范化 Base URL
+        baseUrl = normalizeOpenAIBaseUrl(baseUrl);
 
         // 如果没有填写模型，使用默认值
         if (!model) {
             model = 'gpt-4o';
-        }
-
-        // 确保 Base URL 格式正确
-        if (!baseUrl.endsWith('/v1')) {
-            baseUrl = baseUrl.endsWith('/') ? baseUrl + 'v1' : baseUrl + '/v1';
         }
 
         // 只通过后端代理测试，避免CORS问题
@@ -3831,7 +3845,8 @@ async function testCurrentProvider() {
     }
 
     // 测试提供者
-    const testSuccess = await testProviderSilently(currentProvider);
+    const testResult = await testProviderSilently(currentProvider);
+    const testSuccess = Boolean(testResult && (testResult.success === true || testResult.status === 'success'));
 
     if (testSuccess) {
         const modelInfo = selectedModel ? ` (模型: ${selectedModel})` : '';
@@ -3841,7 +3856,8 @@ async function testCurrentProvider() {
         updateProviderStatusDisplay(currentProvider, true);
     } else {
         const modelInfo = selectedModel ? ` (模型: ${selectedModel})` : '';
-        showNotification(`${currentProvider} 测试失败${modelInfo}`, 'error');
+        const errMsg = testResult && (testResult.error || testResult.detail || testResult.message) ? `: ${testResult.error || testResult.detail || testResult.message}` : '';
+        showNotification(`${currentProvider} 测试失败${modelInfo}${errMsg}`, 'error');
     }
 
     } catch (error) {
@@ -5608,29 +5624,17 @@ async function fetchAndShowModels(provider = 'openai') {
         if (provider === 'openai') {
             // OpenAI 模型获取逻辑
             const baseUrlInput = document.querySelector('input[name="openai_base_url"]');
-            let baseUrl = baseUrlInput ? baseUrlInput.value.trim() : '';
-
-            if (!baseUrl) {
-                baseUrl = 'https://api.openai.com/v1';
-            }
-
-            if (!baseUrl.endsWith('/v1')) {
-                if (baseUrl.endsWith('/')) {
-                    baseUrl += 'v1';
-                } else {
-                    baseUrl += '/v1';
-                }
-            }
+            let baseUrl = normalizeOpenAIBaseUrl(baseUrlInput ? baseUrlInput.value.trim() : '');
 
             const apiKeyInput = document.querySelector('input[name="openai_api_key"]');
             let apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
 
-            if (!apiKey) {
+            if (!apiKey || apiKey === '••••••••' || apiKey.includes('••••')) {
                 try {
                     const configResponse = await fetch('/api/config/ai_providers');
                     if (configResponse.ok) {
                         const configResult = await configResponse.json();
-                        if (configResult.success && configResult.config.openai_api_key) {
+                        if (configResult.success && configResult.config && configResult.config.openai_api_key && !configResult.config.openai_api_key.includes('••••')) {
                             apiKey = configResult.config.openai_api_key;
                         }
                     }
@@ -5882,7 +5886,7 @@ async function validateApiKey() {
             },
             body: JSON.stringify({
                 api_key: apiKey,
-                base_url: baseUrl || 'https://api.openai.com/v1'
+                base_url: normalizeOpenAIBaseUrl(baseUrl)
             })
         });
 
@@ -6030,21 +6034,16 @@ async function loadCurrentProviderModels(provider) {
             const baseUrlInput = document.querySelector('input[name="openai_base_url"]');
             const apiKeyInput = document.querySelector('input[name="openai_api_key"]');
 
-            let baseUrl = baseUrlInput ? baseUrlInput.value.trim() : '';
+            let baseUrl = normalizeOpenAIBaseUrl(baseUrlInput ? baseUrlInput.value.trim() : '');
             let apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
 
-            if (!baseUrl) baseUrl = 'https://api.openai.com/v1';
-            if (!baseUrl.endsWith('/v1')) {
-                baseUrl = baseUrl.endsWith('/') ? baseUrl + 'v1' : baseUrl + '/v1';
-            }
-
-            // 如果没有API Key，尝试从后端获取
-            if (!apiKey) {
+            // 如果没有API Key或为掩码，尝试从后端获取
+            if (!apiKey || apiKey === '••••••••' || apiKey.includes('••••')) {
                 try {
                     const configResponse = await fetch('/api/config/ai_providers');
                     if (configResponse.ok) {
                         const configResult = await configResponse.json();
-                        if (configResult.success && configResult.config.openai_api_key) {
+                        if (configResult.success && configResult.config && configResult.config.openai_api_key && !configResult.config.openai_api_key.includes('••••')) {
                             apiKey = configResult.config.openai_api_key;
                         }
                     }
@@ -6224,7 +6223,8 @@ async function saveAndTestCurrentModel() {
     window.__ai_log.info('模型配置保存成功');
 
         // 保存成功后，测试该提供者和模型
-        const testSuccess = await testProviderSilently(currentProvider);
+        const testResult = await testProviderSilently(currentProvider);
+        const testSuccess = Boolean(testResult && (testResult.success === true || testResult.status === 'success'));
 
         if (testSuccess) {
             showNotification(`模型 ${selectedModel} 保存并测试成功！`, 'success');
