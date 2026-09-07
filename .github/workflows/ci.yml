@@ -78,7 +78,7 @@ jobs:
           EXTERNAL_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flowslide_test
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flowslide_test
         run: |
-          python -m pytest -q --junitxml=test-results.xml --cov=src/flowslide --cov-report=xml
+          python -m pytest -q --junitxml=test-results.xml --cov=src/flowslide --cov-report=xml --cov-report=html:htmlcov
 
       - name: Upload test artifacts
         if: always()
@@ -94,16 +94,24 @@ jobs:
     name: Build and (optionally) Push Docker Image
     runs-on: ubuntu-latest
     needs: test
+    env:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Clean up disk space safely
+        run: |
+          echo "Cleaning up disk space..."
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          docker system prune -f || true
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker (if configured)
-        if: github.event_name != 'pull_request' && secrets.DOCKER_USERNAME != ''
+        if: github.event_name != 'pull_request' && env.DOCKER_USERNAME != ''
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -119,13 +127,16 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' && secrets.DOCKER_USERNAME != '' }}
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' && env.DOCKER_USERNAME != '' }}
           tags: ${{ steps.meta.outputs.tags }}
 
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     needs: test
 
     steps:
@@ -143,6 +154,7 @@ jobs:
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@v3
         if: always()
+        continue-on-error: true
         with:
           sarif_file: 'trivy-results.sarif'
 
