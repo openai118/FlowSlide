@@ -38,6 +38,10 @@ def configured_storage_policy(
     """
     env = os.environ if environ is None else environ
     external_url = (env.get("EXTERNAL_DATABASE_URL") or env.get("DATABASE_URL") or "").strip()
+    if external_url.startswith("postgres://"):
+        external_url = "postgresql://" + external_url[len("postgres://") :]
+    elif external_url.startswith("postgres+"):
+        external_url = "postgresql+" + external_url[len("postgres+") :]
     scheme = urlsplit(external_url).scheme.lower().split("+", 1)[0]
     has_external = scheme in {"postgres", "postgresql", "mysql"}
     has_r2 = all(

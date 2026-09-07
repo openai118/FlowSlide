@@ -27,6 +27,17 @@ def test_normalize_base_url():
         assert normalize_base_url(raw) == expected
 
 
+def test_normalize_base_url_extended_suffixes():
+    cases = [
+        ("https://api.anthropic.com/v1/messages", "https://api.anthropic.com/v1"),
+        ("https://generativelanguage.googleapis.com/v1beta/generateContent", "https://generativelanguage.googleapis.com/v1beta"),
+        ("https://api.openai.com/v1/embeddings", "https://api.openai.com/v1"),
+        ("https://api.anthropic.com/messages/", "https://api.anthropic.com"),
+    ]
+    for raw, expected in cases:
+        assert normalize_base_url(raw) == expected
+
+
 def test_build_api_url():
     # Adding ensure_v1
     assert (
@@ -43,6 +54,13 @@ def test_build_api_url():
         build_api_url("https://api.deepseek.com/", "v1", "chat/completions")
         == "https://api.deepseek.com/v1/chat/completions"
     )
+
+
+def test_build_api_url_deduplication_and_empty():
+    assert build_api_url("https://api.openai.com/v1", "v1/models") == "https://api.openai.com/v1/models"
+    assert build_api_url("https://api.openai.com/v1", "v1") == "https://api.openai.com/v1"
+    assert build_api_url("", "v1/models") == "/v1/models"
+    assert build_api_url("", "models") == "/models"
 
 
 def test_is_reasoning_model():
@@ -126,3 +144,45 @@ def test_create_async_engine_safe_ssl():
 def test_ensure_database_initialized_idempotent():
     ensure_database_initialized()
     assert db_manager.primary_engine is not None
+
+
+def test_storage_policy_postgres_normalization():
+    from flowslide.core.storage_policy import configured_storage_policy
+
+    p1 = configured_storage_policy({"DATABASE_URL": "postgres://usr:pwd@render-db:5432/appdb"})
+    assert p1.uses_external is True
+    assert p1.external_url == "postgresql://usr:pwd@render-db:5432/appdb"
+
+    p2 = configured_storage_policy({"EXTERNAL_DATABASE_URL": "postgres+psycopg2://usr:pwd@render-db:5432/appdb"})
+    assert p2.uses_external is True
+    assert p2.external_url == "postgresql+psycopg2://usr:pwd@render-db:5432/appdb"
+
+
+def test_get_async_database_url_normalization():
+    from flowslide.core.simple_config import get_async_database_url
+
+    assert get_async_database_url("postgres://u:p@db/test") == "postgresql+asyncpg://u:p@db/test"
+    assert get_async_database_url("postgresql+psycopg2://u:p@db/test") == "postgresql+asyncpg://u:p@db/test"
+    assert get_async_database_url("mysql+pymysql://u:p@db/test") == "mysql+aiomysql://u:p@db/test"
+    assert get_async_database_url("sqlite:///./test.db") == "sqlite+aiosqlite:///./test.db"
+
+
+def test_provider_bearer_key_stripping():
+    import sys
+    from unittest.mock import MagicMock
+    from flowslide.ai.providers import OpenAIProvider, AnthropicProvider
+
+    mock_openai = MagicMock()
+    mock_anthropic = MagicMock()
+    sys.modules["openai"] = mock_openai
+    sys.modules["anthropic"] = mock_anthropic
+
+    try:
+        p_oa = OpenAIProvider({"api_key": "Bearer sk-mock-token", "base_url": "https://api.openai.com/v1/"})
+        mock_openai.AsyncOpenAI.assert_called_once_with(api_key="sk-mock-token", base_url="https://api.openai.com/v1")
+
+        p_ant = AnthropicProvider({"api_key": "Bearer sk-ant-token", "base_url": "https://api.anthropic.com/v1/messages"})
+        mock_anthropic.AsyncAnthropic.assert_called_once_with(api_key="sk-ant-token", base_url="https://api.anthropic.com/v1")
+    finally:
+        sys.modules.pop("openai", None)
+        sys.modules.pop("anthropic", None)

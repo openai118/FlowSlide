@@ -129,19 +129,32 @@ def normalize_base_url(base_url: Optional[str]) -> str:
     if not base_url:
         return ""
     url = str(base_url).strip().rstrip("/")
-    for suffix in ("/chat/completions", "/completions", "/models"):
+    for suffix in (
+        "/chat/completions",
+        "/completions",
+        "/models",
+        "/messages",
+        "/generateContent",
+        "/embeddings",
+    ):
         if url.endswith(suffix):
             url = url[: -len(suffix)].rstrip("/")
     return url
 
 
 def build_api_url(base_url: str, *parts: str, ensure_v1: bool = False) -> str:
-    if not base_url:
-        return "/" + "/".join(p.strip("/") for p in parts)
-    base = normalize_base_url(base_url)
-    if ensure_v1 and not base.endswith("/v1"):
+    base = normalize_base_url(base_url) if base_url else ""
+    if ensure_v1 and base and not base.endswith("/v1"):
         base = base + "/v1"
-    suffix = "/".join(p.strip("/") for p in parts if p)
+    clean_parts = [p.strip("/") for p in parts if p and p.strip("/")]
+    suffix = "/".join(clean_parts)
+    if base.endswith("/v1"):
+        if suffix == "v1":
+            suffix = ""
+        elif suffix.startswith("v1/"):
+            suffix = suffix[3:]
+    if not base:
+        return f"/{suffix}" if suffix else "/"
     return f"{base}/{suffix}" if suffix else base
 
 

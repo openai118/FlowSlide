@@ -18,7 +18,14 @@ def normalize_base_url(base_url: Optional[str]) -> str:
     if not base_url:
         return ""
     url = str(base_url).strip().rstrip("/")
-    for suffix in ("/chat/completions", "/completions", "/models"):
+    for suffix in (
+        "/chat/completions",
+        "/completions",
+        "/models",
+        "/messages",
+        "/generateContent",
+        "/embeddings",
+    ):
         if url.endswith(suffix):
             url = url[: -len(suffix)].rstrip("/")
     return url
@@ -26,12 +33,18 @@ def normalize_base_url(base_url: Optional[str]) -> str:
 
 def build_api_url(base_url: str, *parts: str, ensure_v1: bool = False) -> str:
     """Safe join of base_url and parts for AI provider endpoints."""
-    if not base_url:
-        return "/" + "/".join(p.strip("/") for p in parts if p)
-    base = normalize_base_url(base_url)
-    if ensure_v1 and not base.endswith("/v1"):
+    base = normalize_base_url(base_url) if base_url else ""
+    if ensure_v1 and base and not base.endswith("/v1"):
         base = base + "/v1"
-    suffix = "/".join(p.strip("/") for p in parts if p)
+    clean_parts = [p.strip("/") for p in parts if p and p.strip("/")]
+    suffix = "/".join(clean_parts)
+    if base.endswith("/v1"):
+        if suffix == "v1":
+            suffix = ""
+        elif suffix.startswith("v1/"):
+            suffix = suffix[3:]
+    if not base:
+        return f"/{suffix}" if suffix else "/"
     return f"{base}/{suffix}" if suffix else base
 
 
@@ -115,7 +128,12 @@ class OpenAIProvider(AIProvider):
                 for suffix in ("/chat/completions", "/completions", "/models"):
                     if base_url.endswith(suffix):
                         base_url = base_url[: -len(suffix)].rstrip("/")
-            self.client = openai.AsyncOpenAI(api_key=config.get("api_key"), base_url=base_url)
+            api_key = config.get("api_key")
+            if isinstance(api_key, str):
+                api_key = api_key.strip()
+                if api_key.lower().startswith("bearer "):
+                    api_key = api_key[7:].strip()
+            self.client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url)
         except ImportError:
             logger.warning("OpenAI library not installed. Install with: pip install openai")
             self.client = None
@@ -343,8 +361,18 @@ class AnthropicProvider(AIProvider):
         try:
             import anthropic
 
+            api_key = config.get("api_key")
+            if isinstance(api_key, str):
+                api_key = api_key.strip()
+                if api_key.lower().startswith("bearer "):
+                    api_key = api_key[7:].strip()
+            raw_base = config.get("base_url")
+            base_url = normalize_base_url(raw_base) if raw_base else None
+            if not base_url:
+                base_url = None
+
             self.client = anthropic.AsyncAnthropic(
-                api_key=config.get("api_key"), base_url=config.get("base_url")
+                api_key=api_key or None, base_url=base_url
             )
         except ImportError:
             logger.warning("Anthropic library not installed. Install with: pip install anthropic")
@@ -406,7 +434,7 @@ class AnthropicProvider(AIProvider):
             try:
                 coro = self.client.messages.create(
                     model=config.get("model", self.model),
-                    # max_tokens=config.get("max_tokens", 2000),
+                    max_tokens=int(config.get("max_tokens", 4096)),
                     temperature=config.get("temperature", 0.7),
                     system=system_message,
                     messages=claude_messages,

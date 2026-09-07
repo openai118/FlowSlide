@@ -3289,6 +3289,44 @@ async function testProviderWithProgress(providerName) {
 }
 
 // AI提供者测试功能（保留原版本，用于兼容）
+// 获取卡片内的配置项，自动处理重名 input / select（优先采用可见控件的值）
+function getCardConfig(card, includeEmpty = true) {
+    if (!card) return {};
+    const config = {};
+    const elements = Array.from(card.querySelectorAll('input, select'))
+        .filter(el => el.name && el.name !== 'default_provider');
+
+    const byName = new Map();
+    for (const el of elements) {
+        if (!byName.has(el.name)) {
+            byName.set(el.name, []);
+        }
+        byName.get(el.name).push(el);
+    }
+
+    for (const [name, list] of byName.entries()) {
+        let chosenEl = list[0];
+        if (list.length > 1) {
+            const visibleEl = list.find(el => {
+                const isHidden = el.style.display === 'none' ||
+                    (el.classList && el.classList.contains('model-select') && el.style.display === 'none');
+                return !isHidden;
+            });
+            if (visibleEl) {
+                chosenEl = visibleEl;
+            } else {
+                const withVal = list.find(el => el.value && el.value.trim() !== '');
+                if (withVal) chosenEl = withVal;
+            }
+        }
+        const val = chosenEl.value !== undefined ? chosenEl.value.trim() : '';
+        if (includeEmpty || val !== '') {
+            config[name] = val;
+        }
+    }
+    return config;
+}
+
 async function testProvider(providerName) {
     showLoading(`正在测试 ${providerName} 提供者...`);
 
@@ -3299,17 +3337,7 @@ async function testProvider(providerName) {
             throw new Error('找不到提供者配置卡片');
         }
 
-        const config = {};
-        const inputs = card.querySelectorAll('input, select');
-        inputs.forEach(input => {
-            if (input.name && input.name !== 'default_provider') {
-                // 获取输入的值，不管是否为空
-                const value = input.value.trim();
-                if (value) {
-                    config[input.name] = value;
-                }
-            }
-        });
+        const config = getCardConfig(card, false);
 
         // 根据不同的提供者进行测试
         let testResult;
@@ -3497,12 +3525,12 @@ async function testAnthropicProvider(config) {
         const baseUrl = (config.anthropic_base_url || '').trim() || 'https://api.anthropic.com';
         const model = config.anthropic_model || 'claude-3-5-sonnet-20241022';
 
-        // 如果前端没有输入 API Key，尝试从后端获取
-        if (!apiKey) {
+        // 如果前端没有输入 API Key 或为掩码，尝试从后端获取真实配置
+        if (!apiKey || apiKey === '••••••••' || apiKey.includes('••••')) {
             const configResponse = await fetch('/api/config/ai_providers');
             if (configResponse.ok) {
                 const configResult = await configResponse.json();
-                if (configResult.success && configResult.config.anthropic_api_key) {
+                if (configResult.success && configResult.config && configResult.config.anthropic_api_key && !configResult.config.anthropic_api_key.includes('••••')) {
                     apiKey = configResult.config.anthropic_api_key;
                 }
             }
@@ -3559,12 +3587,12 @@ async function testGoogleProvider(config) {
         let baseUrl = (config.google_base_url || '').trim() || 'https://generativelanguage.googleapis.com';
         let model = config.google_model || 'gemini-1.5-flash';
 
-        // 如果前端没有输入API Key，尝试从后端获取
-        if (!apiKey) {
+        // 如果前端没有输入API Key或为掩码，尝试从后端获取
+        if (!apiKey || apiKey === '••••••••' || apiKey.includes('••••')) {
             const configResponse = await fetch('/api/config/ai_providers');
             if (configResponse.ok) {
                 const configResult = await configResponse.json();
-                if (configResult.success && configResult.config.google_api_key) {
+                if (configResult.success && configResult.config && configResult.config.google_api_key && !configResult.config.google_api_key.includes('••••')) {
                     apiKey = configResult.config.google_api_key;
                 }
             }
@@ -4032,16 +4060,7 @@ async function testProviderSilently(providerName) {
             throw new Error('找不到提供者配置卡片');
         }
 
-        const config = {};
-        const inputs = card.querySelectorAll('input, select');
-        inputs.forEach(input => {
-            if (input.name && input.name !== 'default_provider') {
-                const value = input.value.trim();
-                if (value) {
-                    config[input.name] = value;
-                }
-            }
-        });
+        const config = getCardConfig(card, false);
 
         // 根据不同的提供者进行测试
         let testResult;
@@ -4440,18 +4459,7 @@ async function saveProviderConfig(provider) {
     const card = document.querySelector(`[data-provider="${provider}"]`);
     if (!card) return;
 
-    const config = {};
-    const inputs = card.querySelectorAll('input, select');
-
-    inputs.forEach(input => {
-        if (input.name && input.value) {
-            // 跳过 default_provider radio 按钮，因为它通过专门的 API 处理
-            if (input.name === 'default_provider') {
-                return;
-            }
-            config[input.name] = input.value;
-        }
-    });
+    const config = getCardConfig(card, false);
 
     try {
         showLoading(`正在保存 ${provider} 配置...`);
@@ -5031,13 +5039,7 @@ async function saveProviderConfigSilently(provider) {
         throw new Error('找不到提供者配置卡片');
     }
 
-    const config = {};
-    const inputs = card.querySelectorAll('input, select');
-    inputs.forEach(input => {
-        if (input.name && input.name !== 'default_provider') {
-            config[input.name] = input.value;
-        }
-    });
+    const config = getCardConfig(card, true);
 
     const result = await ApiUtils.saveConfig(API_ENDPOINTS.config_ai_providers, config);
     if (!result) {
@@ -5052,11 +5054,8 @@ async function saveProviderConfigSilently(provider) {
 function getProviderConfigFingerprint(provider) {
     const card = document.querySelector(`[data-provider="${provider}"]`);
     if (!card) return '';
-    const values = Array.from(card.querySelectorAll('input, select'))
-        .filter(input => input.name && input.name !== 'default_provider')
-        .map(input => `${input.name}=${input.value || ''}`)
-        .join('&');
-    // A short non-secret fingerprint is enough to invalidate stale status.
+    const config = getCardConfig(card, true);
+    const values = Object.keys(config).sort().map(k => `${k}=${config[k]}`).join('&');
     let hash = 0;
     for (let i = 0; i < values.length; i++) {
         hash = ((hash << 5) - hash) + values.charCodeAt(i);
@@ -5525,8 +5524,21 @@ async function fetchProviderModels(provider) {
     try {
         // 获取提供者配置
         const config = getProviderConfig(provider);
-        if (provider !== 'ollama' && !config.api_key) {
-            throw new Error(`请先配置 ${provider} 的 API Key`);
+
+        // 如果前端 API Key 为空或包含掩码，尝试从后端获取真实配置
+        if (provider !== 'ollama' && (!config.api_key || config.api_key.includes('••••'))) {
+            try {
+                const configResponse = await fetch('/api/config/ai_providers');
+                if (configResponse.ok) {
+                    const configResult = await configResponse.json();
+                    const keyName = `${provider}_api_key`;
+                    if (configResult.success && configResult.config && configResult.config[keyName] && !configResult.config[keyName].includes('••••')) {
+                        config.api_key = configResult.config[keyName];
+                    }
+                }
+            } catch (e) {
+                console.warn('尝试获取后端配置失败:', e);
+            }
         }
 
         const response = await fetch(`/api/ai/providers/${provider}/models`, {
@@ -5546,15 +5558,19 @@ async function fetchProviderModels(provider) {
 
             // 处理认证错误
             if (response.status === 401) {
-                throw new Error('请先登录后再获取模型列表');
+                throw new Error('请检查 API Key 或登录状态');
             }
 
             throw new Error(errMsg);
         }
 
         const result = await response.json();
-        if (!result.success) {
+        if (!result.success && !result.models) {
             throw new Error(result.error || '获取模型列表失败');
+        }
+
+        if (result.warning) {
+            showNotification(result.warning, 'info');
         }
 
         return result.models || [];
@@ -5567,27 +5583,38 @@ async function fetchProviderModels(provider) {
 
 // 获取提供者配置
 function getProviderConfig(provider) {
+    const card = document.querySelector(`[data-provider="${provider}"]`);
+    const cardConfig = card ? getCardConfig(card, false) : {};
     const config = {};
 
     switch (provider) {
+        case 'openai':
+            config.api_key = cardConfig.openai_api_key || getInputValue('openai_api_key');
+            config.base_url = cardConfig.openai_base_url || getInputValue('openai_base_url') || 'https://api.openai.com/v1';
+            config.model = cardConfig.openai_model || getInputValue('openai_model') || 'gpt-4o';
+            break;
         case 'anthropic':
-            config.api_key = getInputValue('anthropic_api_key');
-            config.base_url = getInputValue('anthropic_base_url') || 'https://api.anthropic.com';
-            config.api_version = getInputValue('anthropic_api_version') || '2023-06-01';
+            config.api_key = cardConfig.anthropic_api_key || getInputValue('anthropic_api_key');
+            config.base_url = cardConfig.anthropic_base_url || getInputValue('anthropic_base_url') || 'https://api.anthropic.com';
+            config.model = cardConfig.anthropic_model || getInputValue('anthropic_model') || 'claude-3-5-sonnet-20241022';
+            config.api_version = cardConfig.anthropic_api_version || getInputValue('anthropic_api_version') || '2023-06-01';
             break;
         case 'google':
-            config.api_key = getInputValue('google_api_key');
-            config.base_url = getInputValue('google_base_url') || 'https://generativelanguage.googleapis.com';
+            config.api_key = cardConfig.google_api_key || getInputValue('google_api_key');
+            config.base_url = cardConfig.google_base_url || getInputValue('google_base_url') || 'https://generativelanguage.googleapis.com';
+            config.model = cardConfig.google_model || getInputValue('google_model') || 'gemini-1.5-flash';
             break;
         case 'azure_openai':
-            config.api_key = getInputValue('azure_openai_api_key');
-            config.endpoint = getInputValue('azure_openai_endpoint');
+            config.api_key = cardConfig.azure_openai_api_key || getInputValue('azure_openai_api_key');
+            config.endpoint = cardConfig.azure_openai_endpoint || getInputValue('azure_openai_endpoint');
             config.base_url = config.endpoint; // alias
-            config.api_version = getInputValue('azure_openai_api_version') || '2024-02-15-preview';
+            config.model = cardConfig.azure_openai_deployment_name || getInputValue('azure_openai_deployment_name');
+            config.deployment_name = config.model;
+            config.api_version = cardConfig.azure_openai_api_version || getInputValue('azure_openai_api_version') || '2024-02-15-preview';
             break;
         case 'ollama':
-            config.base_url = getInputValue('ollama_base_url') || 'http://localhost:11434';
-            // Ollama doesn't need API key
+            config.base_url = cardConfig.ollama_base_url || getInputValue('ollama_base_url') || 'http://localhost:11434';
+            config.model = cardConfig.ollama_model || getInputValue('ollama_model') || 'llama3';
             break;
         default:
             throw new Error(`未知的提供者: ${provider}`);

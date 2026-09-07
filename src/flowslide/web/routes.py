@@ -688,6 +688,12 @@ async def get_openai_models(request: Request):
         if not api_key:
             return {"success": False, "error": "API Key is required"}
 
+        api_key_str = str(api_key).strip()
+        if api_key_str.lower().startswith("bearer "):
+            bearer_token = api_key_str[7:].strip()
+        else:
+            bearer_token = api_key_str
+
         # Candidate URLs to handle standard OpenAI (/v1/models), DeepSeek (/models), and proxies
         candidate_urls = []
         if clean_base.endswith("/v1"):
@@ -704,9 +710,9 @@ async def get_openai_models(request: Request):
 
         async with aiohttp.ClientSession() as session:
             headers = {
-                "Authorization": f"Bearer {api_key}",
+                "Authorization": f"Bearer {bearer_token}",
                 "Content-Type": "application/json",
-                "X-Api-Key": api_key,
+                "User-Agent": "FlowSlide/1.0 (OpenAI Client)",
             }
 
             last_status = 404
@@ -734,8 +740,8 @@ async def get_openai_models(request: Request):
                     last_error_text = str(req_err)
                     continue
 
+            models = []
             if success_data is not None:
-                models = []
                 raw_list = []
                 if isinstance(success_data, dict):
                     if "data" in success_data and isinstance(success_data["data"], list):
@@ -765,24 +771,38 @@ async def get_openai_models(request: Request):
                             }
                         )
 
-                def get_priority(model_id: str) -> int:
-                    m = model_id.lower()
-                    if "gpt-4" in m or m.startswith("o1") or m.startswith("o3") or "deepseek" in m:
-                        return 0
-                    elif "gpt-3.5" in m:
-                        return 1
-                    return 2
+            def get_priority(model_id: str) -> int:
+                m = model_id.lower()
+                if "gpt-4" in m or m.startswith("o1") or m.startswith("o3") or "deepseek" in m:
+                    return 0
+                elif "gpt-3.5" in m:
+                    return 1
+                return 2
 
+            if models:
                 models.sort(key=lambda x: (get_priority(x["id"]), x["id"]))
                 logger.info(f"Successfully fetched {len(models)} models from {clean_base}")
                 return {"success": True, "models": models}
             else:
-                logger.error(
-                    f"Failed to fetch models from {clean_base}: {last_status} - {last_error_text}"
+                curated_fallbacks = [
+                    {"id": "gpt-4o", "created": 0, "owned_by": "openai"},
+                    {"id": "gpt-4o-mini", "created": 0, "owned_by": "openai"},
+                    {"id": "o1", "created": 0, "owned_by": "openai"},
+                    {"id": "o1-mini", "created": 0, "owned_by": "openai"},
+                    {"id": "o3-mini", "created": 0, "owned_by": "openai"},
+                    {"id": "gpt-4-turbo", "created": 0, "owned_by": "openai"},
+                    {"id": "gpt-3.5-turbo", "created": 0, "owned_by": "openai"},
+                    {"id": "deepseek-chat", "created": 0, "owned_by": "deepseek"},
+                    {"id": "deepseek-reasoner", "created": 0, "owned_by": "deepseek"},
+                    {"id": "claude-3-5-sonnet-20241022", "created": 0, "owned_by": "anthropic"},
+                ]
+                logger.warning(
+                    f"Failed to fetch models from {clean_base}: {last_status} - {last_error_text}; returning fallback curated models"
                 )
                 return {
-                    "success": False,
-                    "error": f"API returned status {last_status}: {last_error_text}",
+                    "success": True,
+                    "models": curated_fallbacks,
+                    "warning": f"上游接口未返回模型列表 (HTTP {last_status})，已自动提供常用推荐模型",
                 }
 
     except Exception as e:
@@ -802,54 +822,126 @@ async def get_anthropic_models(request: Request):
             if not isinstance(data, dict):
                 data = {}
         except Exception as parse_err:
-            # Attempt to read raw body for logging, but continue with empty payload
             try:
                 raw = await request.body()
                 raw_text = raw.decode("utf-8", errors="ignore")
             except Exception:
                 raw_text = None
             logger.debug(
-                "Google provider test: failed to parse JSON body: %s; raw=%s",
+                "Anthropic models: failed to parse JSON body: %s; raw=%s",
                 str(parse_err),
                 _sanitize_text(raw_text) if raw_text else "(no body)",
             )
             data = {}
-        base_url = data.get("base_url", "https://api.anthropic.com").rstrip("/")
-        api_key = data.get("api_key", "")
+
+        raw_base_url = data.get("base_url")
+        api_key = data.get("api_key")
         version = data.get("api_version", "2023-06-01")
+
+        # Fallback to backend config if api_key is missing or masked placeholder
+        if not api_key or "••••" in api_key:
+            from ..core.config import ai_config
+
+            api_key = ai_config.anthropic_api_key or ""
+            if not api_key:
+                from ..services.config_service import get_config_service
+
+                cfg_service = get_config_service()
+                ai_cfg = cfg_service.get_config_by_category("ai_providers") or {}
+                api_key = ai_cfg.get("anthropic_api_key", "")
+
+        if not raw_base_url:
+            from ..core.config import ai_config
+
+            raw_base_url = ai_config.anthropic_base_url or "https://api.anthropic.com"
 
         if not api_key:
             return {"success": False, "error": "API Key is required"}
-        # Anthropic models API endpoint (append v1/models)
-        url = build_api_url(base_url, "v1/models")
+
+        clean_base = normalize_base_url(raw_base_url) or "https://api.anthropic.com"
+
+        # Candidate endpoints: Anthropic official is /v1/models, some proxies use /models
+        candidate_urls = []
+        u1 = build_api_url(clean_base, "v1/models")
+        u2 = build_api_url(clean_base, "models")
+        for u in (u1, u2):
+            if u not in candidate_urls:
+                candidate_urls.append(u)
+
+        api_key_str = str(api_key or "").strip()
+        if api_key_str.lower().startswith("bearer "):
+            token = api_key_str[7:].strip()
+            auth_variants = [{"Authorization": f"Bearer {token}"}, {"x-api-key": token}]
+        else:
+            token = api_key_str
+            auth_variants = [{"x-api-key": token}, {"Authorization": f"Bearer {token}"}]
+
+        curated_fallbacks = [
+            {"id": "claude-3-7-sonnet-20250219"},
+            {"id": "claude-3-5-sonnet-20241022"},
+            {"id": "claude-3-5-haiku-20241022"},
+            {"id": "claude-3-opus-20240229"},
+            {"id": "claude-3-sonnet-20240229"},
+            {"id": "claude-3-haiku-20240307"},
+        ]
 
         async with aiohttp.ClientSession() as session:
-            headers = {
-                "x-api-key": api_key,
-                "anthropic-version": version,
-                "content-type": "application/json",
-            }
-            async with session.get(url, headers=headers, timeout=30) as resp:
-                text = await resp.text()
-                if resp.status != 200:
-                    logger.error("Anthropic models fetch failed %s: %s", resp.status, text)
-                    err = f"HTTP {resp.status}: {text}"
-                    return {"success": False, "error": err}
-                try:
-                    data = await resp.json()
-                except Exception:
-                    return {"success": False, "error": text}
+            last_status = 404
+            last_error_text = ""
+            success_data = None
 
-                models = []
-                # Anthropic API returns { "data": [ {"id": "claude-3-5-sonnet-20241022", ...}, ... ] }
-                if isinstance(data, dict):
-                    items = data.get("data", [])
-                    for item in items:
-                        model_id = item.get("id")
-                        if model_id:
-                            models.append({"id": model_id})
+            for auth_hdr in auth_variants:
+                headers = {
+                    "anthropic-version": version,
+                    "content-type": "application/json",
+                    "User-Agent": "FlowSlide/1.0 (Anthropic Client)",
+                    **auth_hdr,
+                }
+                for url in candidate_urls:
+                    try:
+                        async with session.get(url, headers=headers, timeout=15) as resp:
+                            last_status = resp.status
+                            if resp.status == 200:
+                                try:
+                                    success_data = await resp.json()
+                                    break
+                                except Exception as json_err:
+                                    last_error_text = str(json_err)
+                            else:
+                                last_error_text = await resp.text()
+                    except Exception as req_err:
+                        last_error_text = str(req_err)
+                        continue
+                if success_data is not None:
+                    break
 
+            models = []
+            if success_data is not None:
+                if isinstance(success_data, dict):
+                    items = success_data.get("data", [])
+                    if isinstance(items, list):
+                        for item in items:
+                            if isinstance(item, dict) and item.get("id"):
+                                models.append({"id": item["id"]})
+                elif isinstance(success_data, list):
+                    for item in success_data:
+                        if isinstance(item, dict) and item.get("id"):
+                            models.append({"id": item["id"]})
+
+            if models:
+                logger.info("Successfully fetched %d Anthropic models from %s", len(models), clean_base)
                 return {"success": True, "models": models}
+            else:
+                logger.warning(
+                    "Failed to fetch Anthropic models from %s: %s - %s; returning fallback curated models",
+                    clean_base, last_status, last_error_text
+                )
+                return {
+                    "success": True,
+                    "models": curated_fallbacks,
+                    "warning": f"上游接口未返回模型列表 (HTTP {last_status})，已自动提供常用推荐模型",
+                }
+
     except Exception as e:
         logger.error(f"Error fetching Anthropic models: {e}")
         return {"success": False, "error": str(e)}
@@ -872,25 +964,55 @@ async def test_anthropic_provider_proxy(request: Request):
         except Exception:
             data = {}
 
-        base_url = str(data.get("base_url") or "https://api.anthropic.com").strip()
+        raw_base_url = str(data.get("base_url") or "").strip()
         api_key = str(data.get("api_key") or "").strip()
-        model = str(data.get("model") or "claude-3-5-sonnet-20241022").strip()
+        model = str(data.get("model") or "").strip()
         api_version = str(data.get("api_version") or "2023-06-01").strip()
+
+        # Fallback to backend config if api_key is missing or masked placeholder
+        if not api_key or "••••" in api_key:
+            from ..core.config import ai_config
+
+            api_key = ai_config.anthropic_api_key or ""
+            if not api_key:
+                from ..services.config_service import get_config_service
+
+                cfg_service = get_config_service()
+                ai_cfg = cfg_service.get_config_by_category("ai_providers") or {}
+                api_key = ai_cfg.get("anthropic_api_key", "")
+
+        if not raw_base_url:
+            from ..core.config import ai_config
+
+            raw_base_url = ai_config.anthropic_base_url or "https://api.anthropic.com"
+
+        if not model:
+            from ..core.config import ai_config
+
+            model = ai_config.anthropic_model or "claude-3-5-sonnet-20241022"
 
         if not api_key:
             return {"success": False, "status": "error", "error": "API Key is required"}
         if not model:
             return {"success": False, "status": "error", "error": "Model is required"}
 
-        messages_url = build_api_url(base_url, "messages", ensure_v1=True)
-        headers = {
-            "x-api-key": api_key,
-            "anthropic-version": api_version,
-            "content-type": "application/json",
-            # Some Anthropic-compatible gateways accept Bearer only. Sending it
-            # in addition to x-api-key is harmless for the official endpoint.
-            "Authorization": f"Bearer {api_key}",
-        }
+        clean_base = normalize_base_url(raw_base_url) or "https://api.anthropic.com"
+
+        candidate_urls = []
+        u1 = build_api_url(clean_base, "v1/messages")
+        u2 = build_api_url(clean_base, "messages")
+        for u in (u1, u2):
+            if u not in candidate_urls:
+                candidate_urls.append(u)
+
+        api_key_str = str(api_key or "").strip()
+        if api_key_str.lower().startswith("bearer "):
+            token = api_key_str[7:].strip()
+            auth_variants = [{"Authorization": f"Bearer {token}"}, {"x-api-key": token}]
+        else:
+            token = api_key_str
+            auth_variants = [{"x-api-key": token}, {"Authorization": f"Bearer {token}"}]
+
         payload = {
             "model": model,
             "messages": [
@@ -903,65 +1025,87 @@ async def test_anthropic_provider_proxy(request: Request):
         }
 
         async with aiohttp.ClientSession() as session:
-            async with session.post(
-                messages_url, headers=headers, json=payload, timeout=30
-            ) as response:
-                response_text = await response.text()
-                if response.status < 200 or response.status >= 300:
-                    safe_text = _sanitize_text(response_text)
-                    logger.warning(
-                        "Anthropic provider test failed %s: %s", response.status, safe_text
-                    )
-                    error_message = safe_text or f"API returned status {response.status}"
-                    try:
-                        error_data = json.loads(response_text)
-                        if isinstance(error_data, dict):
-                            error_obj = error_data.get("error")
-                            if isinstance(error_obj, dict):
-                                error_message = error_obj.get("message") or error_message
-                            elif isinstance(error_obj, str):
-                                error_message = error_obj
-                    except Exception:
-                        pass
-                    return {
-                        "success": False,
-                        "status": "error",
-                        "provider": "anthropic",
-                        "error": error_message,
-                    }
+            last_status = 500
+            last_error_message = "No response"
+            success_resp_data = None
+            raw_success_text = ""
 
-                try:
-                    response_data = json.loads(response_text)
-                except Exception:
-                    response_data = {}
-
-                preview = ""
-                if isinstance(response_data, dict):
-                    content = response_data.get("content")
-                    if isinstance(content, list) and content:
-                        first = content[0]
-                        if isinstance(first, dict):
-                            preview = str(first.get("text") or "")
-                if not preview:
-                    preview = _sanitize_text(response_text)[:500]
-
-                usage = response_data.get("usage") if isinstance(response_data, dict) else None
-                usage = usage if isinstance(usage, dict) else {}
-                input_tokens = usage.get("input_tokens", 0) or 0
-                output_tokens = usage.get("output_tokens", 0) or 0
-
-                return {
-                    "success": True,
-                    "status": "success",
-                    "provider": "anthropic",
-                    "model": model,
-                    "response_preview": preview,
-                    "usage": {
-                        "prompt_tokens": input_tokens,
-                        "completion_tokens": output_tokens,
-                        "total_tokens": input_tokens + output_tokens,
-                    },
+            for auth_hdr in auth_variants:
+                headers = {
+                    "anthropic-version": api_version,
+                    "content-type": "application/json",
+                    "User-Agent": "FlowSlide/1.0 (Anthropic Client)",
+                    **auth_hdr,
                 }
+                for messages_url in candidate_urls:
+                    try:
+                        async with session.post(
+                            messages_url, headers=headers, json=payload, timeout=25
+                        ) as response:
+                            response_text = await response.text()
+                            last_status = response.status
+                            if 200 <= response.status < 300:
+                                raw_success_text = response_text
+                                try:
+                                    success_resp_data = json.loads(response_text)
+                                except Exception:
+                                    success_resp_data = {}
+                                break
+                            else:
+                                safe_text = _sanitize_text(response_text)
+                                err_msg = safe_text or f"API returned status {response.status}"
+                                try:
+                                    err_json = json.loads(response_text)
+                                    if isinstance(err_json, dict):
+                                        err_obj = err_json.get("error")
+                                        if isinstance(err_obj, dict):
+                                            err_msg = err_obj.get("message") or err_msg
+                                        elif isinstance(err_obj, str):
+                                            err_msg = err_obj
+                                except Exception:
+                                    pass
+                                last_error_message = err_msg
+                    except Exception as net_err:
+                        last_error_message = str(net_err)
+                        continue
+                if success_resp_data is not None:
+                    break
+
+            if success_resp_data is None:
+                return {
+                    "success": False,
+                    "status": "error",
+                    "provider": "anthropic",
+                    "error": last_error_message,
+                }
+
+            preview = ""
+            if isinstance(success_resp_data, dict):
+                content = success_resp_data.get("content")
+                if isinstance(content, list) and content:
+                    first = content[0]
+                    if isinstance(first, dict):
+                        preview = str(first.get("text") or "")
+            if not preview:
+                preview = _sanitize_text(raw_success_text)[:500]
+
+            usage = success_resp_data.get("usage") if isinstance(success_resp_data, dict) else {}
+            usage = usage if isinstance(usage, dict) else {}
+            input_tokens = usage.get("input_tokens", 0) or 0
+            output_tokens = usage.get("output_tokens", 0) or 0
+
+            return {
+                "success": True,
+                "status": "success",
+                "provider": "anthropic",
+                "model": model,
+                "response_preview": preview,
+                "usage": {
+                    "prompt_tokens": input_tokens,
+                    "completion_tokens": output_tokens,
+                    "total_tokens": input_tokens + output_tokens,
+                },
+            }
     except Exception as e:
         logger.exception("Error testing Anthropic provider")
         return {"success": False, "status": "error", "provider": "anthropic", "error": str(e)}
@@ -1135,13 +1279,18 @@ async def validate_openai_api_key(
         # Build models URL safely (ensure /v1)
         models_url = build_api_url(base_url, "models", ensure_v1=True)
 
+        api_key_str = str(api_key or "").strip()
+        if api_key_str.lower().startswith("bearer "):
+            bearer_token = api_key_str[7:].strip()
+        else:
+            bearer_token = api_key_str
+
         async with aiohttp.ClientSession() as session:
             headers = {
-                "Authorization": f"Bearer {api_key}",
+                "Authorization": f"Bearer {bearer_token}",
                 "Content-Type": "application/json",
+                "User-Agent": "FlowSlide/1.0 (OpenAI Client)",
             }
-            # Some proxies require X-Api-Key header as well
-            headers["X-Api-Key"] = api_key
 
             async with session.get(models_url, headers=headers, timeout=10) as response:
                 if response.status == 200:
@@ -1232,10 +1381,16 @@ async def test_openai_provider_proxy(request: Request):
             if u and u not in unique_urls:
                 unique_urls.append(u)
 
+        api_key_str = str(api_key or "").strip()
+        if api_key_str.lower().startswith("bearer "):
+            bearer_token = api_key_str[7:].strip()
+        else:
+            bearer_token = api_key_str
+
         headers = {
-            "Authorization": f"Bearer {api_key}",
+            "Authorization": f"Bearer {bearer_token}",
             "Content-Type": "application/json",
-            "X-Api-Key": api_key,
+            "User-Agent": "FlowSlide/1.0 (OpenAI Client)",
         }
 
         # Build initial test payload based on model reasoning capabilities

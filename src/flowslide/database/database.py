@@ -40,6 +40,10 @@ class DatabaseManager:
         # 仅接受真正的外部数据库URL（postgresql/mysql），否则视为未配置
         _raw_ext = (EXTERNAL_DATABASE_URL or "").strip()
         if _raw_ext:
+            if _raw_ext.startswith("postgres://"):
+                _raw_ext = "postgresql://" + _raw_ext[len("postgres://") :]
+            elif _raw_ext.startswith("postgres+"):
+                _raw_ext = "postgresql+" + _raw_ext[len("postgres+") :]
             # Accept schemes like 'postgresql', 'postgresql+asyncpg', 'mysql', 'mysql+aiomysql', etc.
             try:
                 from urllib.parse import urlparse
@@ -47,7 +51,7 @@ class DatabaseManager:
                 parsed = urlparse(_raw_ext)
                 scheme = (parsed.scheme or "").lower()
 
-                if scheme.startswith("postgresql") or scheme.startswith("mysql"):
+                if scheme.startswith("postgres") or scheme.startswith("mysql"):
                     # keep the original URL as external_url (may already include +driver)
                     self.external_url = _raw_ext
                     # compute async form using helper which also strips unsupported query params
@@ -142,10 +146,15 @@ class DatabaseManager:
     def _create_backup_engine(self):
         """创建备份引擎（用于数据同步）"""
         if self.external_url:
+            raw_url = self.external_url
+            if raw_url.startswith("postgres://"):
+                raw_url = "postgresql://" + raw_url[len("postgres://") :]
+            elif raw_url.startswith("postgres+"):
+                raw_url = "postgresql+" + raw_url[len("postgres+") :]
             # 解析数据库URL以检测是否是Supabase
             from urllib.parse import urlparse
 
-            parsed = urlparse(self.external_url)
+            parsed = urlparse(raw_url)
 
             # 检查是否是Supabase
             is_supabase = "supabase" in parsed.hostname if parsed.hostname else False
@@ -188,18 +197,23 @@ class DatabaseManager:
             if policy.uses_external:
                 raw_url = policy.external_url
                 if raw_url.startswith("postgres://"):
-                    raw_url = raw_url.replace("postgres://", "postgresql://", 1)
+                    raw_url = "postgresql://" + raw_url[len("postgres://") :]
+                elif raw_url.startswith("postgres+"):
+                    raw_url = "postgresql+" + raw_url[len("postgres+") :]
                 url = make_url(raw_url)
                 backend = url.get_backend_name()
                 query = dict(url.query)
                 query.pop("statement_cache_size", None)
                 query.pop("prepared_statement_cache_size", None)
-                if "sslmode" in query:
-                    ssl_val = str(query["sslmode"]).lower()
-                    if ssl_val in ("no-verify", "unverified"):
+                if backend in ("postgresql", "postgres"):
+                    if "sslmode" in query:
+                        ssl_val = str(query["sslmode"]).lower()
+                        if ssl_val in ("no-verify", "unverified"):
+                            query["sslmode"] = "require"
+                    elif url.host and url.host not in ("localhost", "127.0.0.1", "::1"):
                         query["sslmode"] = "require"
-                sync_driver = "postgresql+psycopg2" if backend == "postgresql" else "mysql+pymysql"
-                async_driver = "postgresql+asyncpg" if backend == "postgresql" else "mysql+aiomysql"
+                sync_driver = "postgresql+psycopg2" if backend in ("postgresql", "postgres") else "mysql+pymysql"
+                async_driver = "postgresql+asyncpg" if backend in ("postgresql", "postgres") else "mysql+aiomysql"
                 candidate.external_url = url.set(
                     drivername=sync_driver, query=query
                 ).render_as_string(hide_password=False)
@@ -231,12 +245,27 @@ class DatabaseManager:
             old_async = self.primary_async_engine
             self.__dict__.update(candidate.__dict__)
             if old_sync is not None and old_sync is not self.primary_engine:
-                old_sync.dispose()
+                try:
+                    old_sync.dispose()
+                except Exception:
+                    pass
             if old_async is not None and old_async is not self.primary_async_engine:
                 try:
-                    asyncio.get_running_loop().create_task(old_async.dispose())
-                except RuntimeError:
-                    asyncio.run(old_async.dispose())
+                    try:
+                        loop = asyncio.get_running_loop()
+                    except RuntimeError:
+                        loop = None
+                    if loop is not None and loop.is_running():
+                        loop.create_task(old_async.dispose())
+                    else:
+                        try:
+                            temp_loop = asyncio.new_event_loop()
+                            temp_loop.run_until_complete(old_async.dispose())
+                            temp_loop.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
             logger.info(
                 "Storage policy: mode=%s, authentication=%s, automatic user sync=disabled",
                 policy.mode,
@@ -312,11 +341,14 @@ temp_engine = create_engine(
 
 def create_async_engine_safe(url: str, **kwargs):
     """Normalize drivers and disable both asyncpg prepared-statement caches."""
-    if isinstance(url, str) and url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql://", 1)
+    if isinstance(url, str):
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url[len("postgres://") :]
+        elif url.startswith("postgres+"):
+            url = "postgresql+" + url[len("postgres+") :]
     parsed = make_url(url)
     backend = parsed.get_backend_name()
-    if backend == "postgresql":
+    if backend in ("postgresql", "postgres"):
         parsed = parsed.set(drivername="postgresql+asyncpg")
         query = dict(parsed.query)
         sslmode = query.pop("sslmode", None)
@@ -347,6 +379,8 @@ def create_async_engine_safe(url: str, **kwargs):
                 connect_args.setdefault("ssl", "require")
             else:
                 connect_args.setdefault("ssl", "require")
+        elif parsed.host and parsed.host not in ("localhost", "127.0.0.1", "::1"):
+            connect_args.setdefault("ssl", "require")
         kwargs["connect_args"] = connect_args
     elif backend == "mysql":
         parsed = parsed.set(drivername="mysql+aiomysql")

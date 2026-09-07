@@ -76,6 +76,10 @@ class AutoDetectionService:
 
             # If an explicit EXTERNAL_DATABASE_URL is configured in env, prefer it for detection
             database_url = (EXTERNAL_DATABASE_URL or DATABASE_URL or "").strip()
+            if database_url.startswith("postgres://"):
+                database_url = "postgresql://" + database_url[len("postgres://"):]
+            elif database_url.startswith("postgres+"):
+                database_url = "postgresql+" + database_url[len("postgres+"):]
             database_mode = DATABASE_MODE
             
             # 如果使用的是本地数据库URL，则认为是本地模式
@@ -103,7 +107,7 @@ class AutoDetectionService:
             # only provides an accurate detection of external DB accessibility.
 
             # 检查是否是有效的外部数据库URL
-            if not (database_url.startswith("postgresql://") or database_url.startswith("mysql://")):
+            if not (database_url.startswith("postgresql") or database_url.startswith("mysql")):
                 result = ServiceCheckResult(
                     status=ServiceStatus.UNAVAILABLE,
                     message="不是有效的外部数据库URL格式"
@@ -184,7 +188,12 @@ class AutoDetectionService:
                             # Use a short timeout to avoid long blocking
                             sync_start = time.time()
                             # psycopg2 accepts a libpq connection string / URI
-                            conn = psycopg2.connect(database_url, connect_timeout=5)
+                            sync_db_url = database_url
+                            for prefix in ("postgresql+asyncpg://", "postgresql+psycopg2://", "postgres://"):
+                                if sync_db_url.startswith(prefix):
+                                    sync_db_url = "postgresql://" + sync_db_url[len(prefix):]
+                                    break
+                            conn = psycopg2.connect(sync_db_url, connect_timeout=5)
                             cur = conn.cursor()
                             cur.execute("SELECT 1")
                             row = cur.fetchone()

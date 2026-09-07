@@ -23,13 +23,18 @@ LOCAL_DATABASE_URL = "sqlite:///./data/flowslide.db"
 
 # 外部数据库（可选，用于备份/同步）
 # 支持两种环境变量：显式的 EXTERNAL_DATABASE_URL 优先，其次兼容老的 DATABASE_URL
-EXTERNAL_DATABASE_URL = os.getenv("EXTERNAL_DATABASE_URL", os.getenv("DATABASE_URL", ""))
+_env_ext = (os.getenv("EXTERNAL_DATABASE_URL") or os.getenv("DATABASE_URL") or "").strip()
+if _env_ext.startswith("postgres://"):
+    _env_ext = "postgresql://" + _env_ext[len("postgres://") :]
+elif _env_ext.startswith("postgres+"):
+    _env_ext = "postgresql+" + _env_ext[len("postgres+") :]
+EXTERNAL_DATABASE_URL = _env_ext
 
 # 数据库模式选择
-DATABASE_MODE = os.getenv("DATABASE_MODE", "local")  # local, external, hybrid
+DATABASE_MODE = os.getenv("DATABASE_MODE", "").strip().lower()  # local, external, hybrid
 
 # 最终使用的数据库URL：如果部署模式为 external 且配置了外部 DB，则使用外部 DB，否则使用本地
-if DATABASE_MODE == "external" and EXTERNAL_DATABASE_URL:
+if DATABASE_MODE in ("external", "hybrid") or (not DATABASE_MODE and EXTERNAL_DATABASE_URL):
     DATABASE_URL = EXTERNAL_DATABASE_URL
 else:
     DATABASE_URL = LOCAL_DATABASE_URL
@@ -49,10 +54,18 @@ def get_async_database_url(sync_url: str) -> str:
         url = urllib.parse.urlunparse(
             (parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment)
         )
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://") :]
+    elif url.startswith("postgres+"):
+        url = "postgresql+" + url[len("postgres+") :]
     if url.startswith("sqlite:///"):
         return url.replace("sqlite:///", "sqlite+aiosqlite:///")
+    if url.startswith("postgresql+psycopg2://"):
+        return url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
     if url.startswith("postgresql://"):
-        return url.replace("postgresql://", "postgresql+asyncpg://")
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if url.startswith("mysql+pymysql://"):
+        return url.replace("mysql+pymysql://", "mysql+aiomysql://", 1)
     if url.startswith("mysql://"):
         return url.replace("mysql://", "mysql+aiomysql://")
     return url
